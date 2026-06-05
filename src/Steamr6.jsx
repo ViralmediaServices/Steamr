@@ -954,7 +954,8 @@ function SignupScreen({ role, onNavigate }) {
 
   const handleContinue = () => {
     const age = calcAge(form.dob);
-    if (age === null || age < 18) { setBlocked(true); return; }
+    if (age === null) { setAgeError(true); return; }   // no DOB entered
+    if (age < 18)     { setBlocked(true); return; }    // confirmed under 18
     if (!agreedToS || !agreedAge) { setAgeError(true); return; }
     setAgeError(false); setStep(2);
   };
@@ -981,7 +982,6 @@ function SignupScreen({ role, onNavigate }) {
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", marginBottom: 6, fontSize: 13, color: COLORS.muted, fontWeight: 600 }}>Date of Birth <span style={{ color: COLORS.accent }}>*</span></label>
             <input type="date" value={form.dob} onChange={e => update("dob")(e.target.value)}
-              max={new Date(new Date().setFullYear(new Date().getFullYear()-18)).toISOString().split("T")[0]}
               style={{ width:"100%", background:COLORS.surface, border:`1px solid ${form.dob && calcAge(form.dob)<18?"#ff4444":COLORS.border}`, borderRadius:10, padding:"11px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box", colorScheme:"dark" }}
             />
             {form.dob && calcAge(form.dob) !== null && (
@@ -1001,7 +1001,7 @@ function SignupScreen({ role, onNavigate }) {
               </label>
             ))}
           </div>
-          {ageError && <div style={{ marginTop:12,padding:"10px 14px",background:"#ff444422",border:"1px solid #ff444444",borderRadius:8,fontSize:13,color:"#ff6666" }}>⚠️ Please confirm your date of birth and tick both boxes to continue.</div>}
+          {ageError && <div style={{ marginTop:12,padding:"10px 14px",background:"#ff444422",border:"1px solid #ff444444",borderRadius:8,fontSize:13,color:"#ff6666" }}>⚠️ Please enter your date of birth and tick both boxes to continue.</div>}
           <Btn onClick={handleContinue} style={{ width:"100%",marginTop:16 }}>Continue →</Btn>
         </>)}
         {step===2 && isStreamer && (<>
@@ -2308,91 +2308,291 @@ function BuyTokensScreen({ onNavigate, viewerTokens = 350, onPurchase }) {
 // ── KYC ─────────────────────────────────────────────────────────────────────
 // ── KYC ───────────────────────────────────────────────────────────────────────
 function KYCScreen({ role, onNavigate }) {
+  const w = useWindowWidth(); const isMobile = w < 640;
   const isStreamer = role === "streamer";
-  const [kycStep,        setKycStep]        = useState(1);
-  const [docType,        setDocType]        = useState("passport");
-  const [frontUploaded,  setFrontUploaded]  = useState(false);
-  const [backUploaded,   setBackUploaded]   = useState(false);
-  const [selfieUploaded, setSelfieUploaded] = useState(false);
+
+  const [kycStep,   setKycStep]   = useState(1);
+  const [docType,   setDocType]   = useState("passport");
+  const [name,      setName]      = useState("");
+  const [email,     setEmail]     = useState("");
+  const [idFront,   setIdFront]   = useState(null);  // base64
+  const [idBack,    setIdBack]    = useState(null);
+  const [selfie,    setSelfie]    = useState(null);
+  const [submitting,setSubmitting]= useState(false);
+  const [submitOk,  setSubmitOk]  = useState(false);
+  const [submitErr, setSubmitErr] = useState("");
+
   const needsBack = docType !== "passport";
-  const simulateUpload = (setter) => setTimeout(() => setter(true), 1400);
-  const canProceedStep3 = frontUploaded && (!needsBack || backUploaded);
+  const canStep3  = idFront && (!needsBack || idBack);
+
+  // ── Compress + convert file to base64 ────────────────────────────────────
+  const compressImage = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const MAX = 1400;
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleFile = (setter) => async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setter(compressed);
+    } catch { setter(null); }
+    e.target.value = "";
+  };
+
+  // ── Upload zone component ─────────────────────────────────────────────────
+  const UploadZone = ({ label, value, onFile, hint="" }) => (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ fontSize:13, fontWeight:600, color:COLORS.muted, marginBottom:8 }}>{label}</div>
+      {value ? (
+        <div style={{ position:"relative", borderRadius:12, overflow:"hidden", border:`2px solid ${COLORS.green}` }}>
+          <img src={value} alt={label} style={{ width:"100%", maxHeight:200, objectFit:"cover", display:"block" }}/>
+          <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.45)", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:6 }}>
+            <div style={{ fontSize:28 }}>✅</div>
+            <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>Uploaded</div>
+          </div>
+          <button onClick={() => onFile({ target:{ files:[] } })}
+            style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.7)", border:"none", borderRadius:6, color:"#fff", cursor:"pointer", fontSize:11, padding:"4px 8px", fontWeight:700 }}
+            onClick={(e)=>{ e.stopPropagation(); /* handled by label */ }}>
+          </button>
+          <label style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.7)", borderRadius:6, color:"#fff", cursor:"pointer", fontSize:11, padding:"5px 10px", fontWeight:700 }}>
+            Retake
+            <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={onFile}/>
+          </label>
+        </div>
+      ) : (
+        <label style={{ display:"block", cursor:"pointer" }}>
+          <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={onFile}/>
+          <div style={{ border:`2px dashed ${COLORS.border}`, borderRadius:12, padding:"32px 20px", textAlign:"center", background:COLORS.surface, transition:"border-color 0.2s" }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=COLORS.accent}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=COLORS.border}>
+            <div style={{ fontSize:36, marginBottom:10 }}>📷</div>
+            <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>Tap to take photo or upload</div>
+            {hint && <div style={{ fontSize:12, color:COLORS.muted }}>{hint}</div>}
+          </div>
+        </label>
+      )}
+    </div>
+  );
+
+  // ── Submit to API ─────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitErr("");
+    try {
+      const res = await fetch("/api/send-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name, email, role, docType,
+          idFront, idBack: needsBack ? idBack : null, selfie,
+          submittedAt: new Date().toLocaleString(),
+        }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      setSubmitOk(true);
+      setKycStep(6);
+    } catch {
+      setSubmitErr("Could not send verification. Please try again or contact support.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ── Step 6 — Success ──────────────────────────────────────────────────────
+  if (kycStep === 6) return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+      <Card style={{ textAlign:"center", padding:"40px 28px" }}>
+        <div style={{ fontSize:64, marginBottom:16 }}>📬</div>
+        <h2 style={{ margin:"0 0 12px", fontWeight:900, color:COLORS.green }}>Verification Submitted!</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:8 }}>
+          Your ID and selfie have been sent to the Steamr team for review.
+        </p>
+        <p style={{ color:COLORS.muted, fontSize:13, marginBottom:28 }}>
+          We'll email <strong style={{ color:COLORS.text }}>{email}</strong> within 24–48 hours once your account is approved.
+        </p>
+        <Btn onClick={() => onNavigate(isStreamer ? "streamer-dashboard" : "viewer-dashboard")} style={{ width:"100%" }}>
+          Back to Dashboard
+        </Btn>
+      </Card>
+    </div>
+  );
+
+  // ── Step progress bar ─────────────────────────────────────────────────────
+  const STEPS = ["Intro", "ID Type", "Upload ID", "Selfie", "Review"];
 
   return (
-    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+    <div style={{ maxWidth:520, margin:"0 auto", padding:isMobile?"24px 16px 60px":"48px 24px" }}>
       <div style={{ marginBottom:8 }}><Pill color={isStreamer?COLORS.accent:COLORS.accentC}>Identity Verification</Pill></div>
-      <h2 style={{ margin:"0 0 6px", fontSize:26, fontWeight:800 }}>{kycStep<6?"Verify Your Identity":"Verification Submitted"}</h2>
-      <p style={{ color:COLORS.muted, fontSize:14, marginBottom:28 }}>{isStreamer?"Required by law to receive payouts. Powered by Stripe Identity.":"Required to confirm you are 18+. Takes under 2 minutes."}</p>
-      {kycStep<6 && (
-        <div style={{ display:"flex", alignItems:"center", marginBottom:32, gap:0 }}>
-          {["Intro","ID Type","Upload","Selfie","Review"].map((label,i) => {
-            const s=i+1, done=s<kycStep, active=s===kycStep;
-            return (
-              <div key={label} style={{ display:"flex", alignItems:"center", flex:s<5?1:"none" }}>
-                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-                  <div style={{ width:28,height:28,borderRadius:"50%",background:done?COLORS.green:active?COLORS.accent:COLORS.border,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:done||active?"#fff":COLORS.muted,transition:"all 0.3s" }}>{done?"✓":s}</div>
-                  <div style={{ fontSize:10,color:active?COLORS.text:COLORS.muted,whiteSpace:"nowrap",fontWeight:active?700:400 }}>{label}</div>
+      <h2 style={{ margin:"0 0 6px", fontSize:isMobile?20:26, fontWeight:800 }}>Verify Your Identity</h2>
+      <p style={{ color:COLORS.muted, fontSize:14, marginBottom:24 }}>
+        {isStreamer ? "Required to receive payouts." : "Required to confirm you are 18+."} Takes under 3 minutes.
+      </p>
+
+      {/* Progress */}
+      <div style={{ display:"flex", alignItems:"center", marginBottom:28, gap:0 }}>
+        {STEPS.map((label, i) => {
+          const s=i+1, done=s<kycStep, active=s===kycStep;
+          return (
+            <div key={label} style={{ display:"flex", alignItems:"center", flex:s<5?1:"none" }}>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                <div style={{ width:26, height:26, borderRadius:"50%", background:done?COLORS.green:active?COLORS.accent:COLORS.border, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, color:done||active?"#fff":COLORS.muted, transition:"all 0.3s" }}>
+                  {done?"✓":s}
                 </div>
-                {s<5 && <div style={{ flex:1,height:2,background:done?COLORS.green:COLORS.border,margin:"0 4px",marginBottom:18,transition:"background 0.3s" }} />}
+                <div style={{ fontSize:9, color:active?COLORS.text:COLORS.muted, whiteSpace:"nowrap", fontWeight:active?700:400 }}>{label}</div>
               </div>
-            );
-          })}
-        </div>
-      )}
+              {s<5 && <div style={{ flex:1, height:2, background:done?COLORS.green:COLORS.border, margin:"0 4px", marginBottom:18, transition:"background 0.3s" }}/>}
+            </div>
+          );
+        })}
+      </div>
+
       <Card>
+        {/* ── Step 1: Intro + Name/Email ── */}
         {kycStep===1 && (<>
-          <div style={{ textAlign:"center", padding:"8px 0 20px" }}><div style={{ fontSize:56, marginBottom:16 }}>🛡️</div><h3 style={{ margin:"0 0 12px",fontSize:18 }}>Why we verify your identity</h3></div>
-          {[{icon:"🔞",title:"Age Compliance",desc:"We are legally required to confirm all users are 18 or older."},{icon:"💸",title:isStreamer?"Payout KYC":"Payment Safety",desc:isStreamer?"Financial regulations require identity checks before we can send you money.":"Protects you and other users from fraud."},{icon:"🔒",title:"Your Data is Safe",desc:"Verification is handled by Stripe Identity. We never store your ID documents."}].map(item => (
-            <div key={item.title} style={{ display:"flex",gap:14,marginBottom:16,alignItems:"flex-start" }}><div style={{ fontSize:24,minWidth:32,textAlign:"center" }}>{item.icon}</div><div><div style={{ fontWeight:700,fontSize:14,marginBottom:2 }}>{item.title}</div><div style={{ color:COLORS.muted,fontSize:13,lineHeight:1.5 }}>{item.desc}</div></div></div>
-          ))}
-          <div style={{ background:COLORS.surface,borderRadius:10,padding:"12px 14px",marginTop:8,marginBottom:20,fontSize:12,color:COLORS.muted,lineHeight:1.6 }}>📋 You will need: a valid <strong style={{ color:COLORS.text }}>government-issued photo ID</strong> and access to your <strong style={{ color:COLORS.text }}>device camera</strong> for a selfie.</div>
-          <Btn onClick={() => setKycStep(2)} style={{ width:"100%" }}>Start Verification →</Btn>
+          <div style={{ textAlign:"center", paddingBottom:20 }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🛡️</div>
+            <h3 style={{ margin:"0 0 8px" }}>What you'll need</h3>
+            <p style={{ color:COLORS.muted, fontSize:13, lineHeight:1.6 }}>A valid government-issued photo ID and the ability to take a selfie.</p>
+          </div>
+          <Input label="Full Name" value={name} onChange={setName} placeholder="As it appears on your ID" />
+          <Input label="Email Address" type="email" value={email} onChange={setEmail} placeholder="We'll notify you here when approved" />
+          <div style={{ background:COLORS.surface, borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:COLORS.muted, lineHeight:1.6 }}>
+            🔒 Your documents are sent directly to the Steamr admin team and are never stored on our servers.
+          </div>
+          <Btn onClick={() => { if (!name||!email) return; setKycStep(2); }} style={{ width:"100%" }} disabled={!name||!email}>
+            Start Verification →
+          </Btn>
+          {(!name||!email) && <div style={{ marginTop:8, fontSize:12, color:COLORS.muted, textAlign:"center" }}>Please enter your name and email to continue</div>}
         </>)}
+
+        {/* ── Step 2: Document type ── */}
         {kycStep===2 && (<>
-          <p style={{ color:COLORS.muted,fontSize:13,marginTop:0 }}>Choose the ID document you want to use.</p>
-          {[{value:"passport",label:"🛂 Passport",desc:"International travel document"},{value:"drivers",label:"🚗 Driver's Licence",desc:"Front & back required"},{value:"national",label:"🪪 National ID Card",desc:"Front & back required"}].map(opt => (
-            <div key={opt.value} onClick={() => setDocType(opt.value)} style={{ border:`2px solid ${docType===opt.value?COLORS.accent:COLORS.border}`,borderRadius:12,padding:"14px 16px",marginBottom:10,cursor:"pointer",background:docType===opt.value?COLORS.accent+"11":"transparent",transition:"all 0.2s" }}>
-              <div style={{ fontWeight:700,fontSize:15 }}>{opt.label}</div><div style={{ color:COLORS.muted,fontSize:12,marginTop:2 }}>{opt.desc}</div>
+          <p style={{ color:COLORS.muted, fontSize:13, marginTop:0 }}>Choose the ID document you want to use.</p>
+          {[
+            {value:"passport", label:"🛂 Passport",         desc:"Photo page only"},
+            {value:"drivers",  label:"🚗 Driver's Licence", desc:"Front & back required"},
+            {value:"national", label:"🪪 National ID Card",  desc:"Front & back required"},
+          ].map(opt => (
+            <div key={opt.value} onClick={() => setDocType(opt.value)} style={{ border:`2px solid ${docType===opt.value?COLORS.accent:COLORS.border}`, borderRadius:12, padding:"14px 16px", marginBottom:10, cursor:"pointer", background:docType===opt.value?COLORS.accent+"11":"transparent", transition:"all 0.2s" }}>
+              <div style={{ fontWeight:700, fontSize:15 }}>{opt.label}</div>
+              <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>{opt.desc}</div>
             </div>
           ))}
-          <Btn onClick={() => setKycStep(3)} style={{ width:"100%",marginTop:8 }}>Continue →</Btn>
+          <Btn onClick={() => setKycStep(3)} style={{ width:"100%", marginTop:8 }}>Continue →</Btn>
         </>)}
+
+        {/* ── Step 3: Upload ID ── */}
         {kycStep===3 && (<>
-          <p style={{ color:COLORS.muted,fontSize:13,marginTop:0 }}>Upload a clear photo of your {docType==="passport"?"passport photo page":"ID card"}.</p>
-          {["front",...(needsBack?["back"]:[])] .map(side => {
-            const isBack=side==="back", uploaded=isBack?backUploaded:frontUploaded, canClick=!uploaded&&(!isBack||frontUploaded);
-            return (
-              <div key={side} style={{ marginBottom:14 }}>
-                <div style={{ fontSize:13,fontWeight:600,color:COLORS.muted,marginBottom:8 }}>{docType==="passport"?"📄 Passport Photo Page":isBack?"📄 Back of ID":"📄 Front of ID"}</div>
-                <div onClick={() => canClick && simulateUpload(isBack?setBackUploaded:setFrontUploaded)} style={{ border:`2px dashed ${uploaded?COLORS.green:COLORS.border}`,borderRadius:12,padding:"28px 20px",textAlign:"center",cursor:canClick?"pointer":"default",background:uploaded?COLORS.green+"0d":COLORS.surface,opacity:isBack&&!frontUploaded?0.5:1,transition:"all 0.3s" }}>
-                  {uploaded?<><div style={{ fontSize:28 }}>✅</div><div style={{ color:COLORS.green,fontWeight:700,fontSize:13,marginTop:6 }}>Uploaded successfully</div></>:<><div style={{ fontSize:28 }}>📤</div><div style={{ color:COLORS.muted,fontSize:13,marginTop:6 }}>{isBack&&!frontUploaded?"Upload front first":"Click to upload"}</div></>}
-                </div>
-              </div>
-            );
-          })}
-          <Btn onClick={() => setKycStep(4)} disabled={!canProceedStep3} style={{ width:"100%",marginTop:4 }}>Continue →</Btn>
+          <p style={{ color:COLORS.muted, fontSize:13, marginTop:0 }}>
+            Upload a clear, well-lit photo. All four corners must be visible.
+          </p>
+          <UploadZone
+            label={docType==="passport" ? "📄 Passport Photo Page" : "📄 Front of ID"}
+            value={idFront}
+            onFile={handleFile(setIdFront)}
+            hint="Make sure all text is readable"
+          />
+          {needsBack && (
+            <UploadZone
+              label="📄 Back of ID"
+              value={idBack}
+              onFile={handleFile(setIdBack)}
+              hint="Upload front first"
+            />
+          )}
+          <Btn onClick={() => setKycStep(4)} disabled={!canStep3} style={{ width:"100%", marginTop:4 }}>
+            Continue →
+          </Btn>
         </>)}
+
+        {/* ── Step 4: Selfie ── */}
         {kycStep===4 && (<>
-          <p style={{ color:COLORS.muted,fontSize:13,marginTop:0 }}>Take a selfie so we can confirm the face on your ID matches you.</p>
-          <div style={{ background:COLORS.surface,borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:12,color:COLORS.muted,lineHeight:1.6 }}>💡 Face camera directly · remove glasses · good lighting, no shadows</div>
-          <div onClick={() => !selfieUploaded && simulateUpload(setSelfieUploaded)} style={{ border:`2px dashed ${selfieUploaded?COLORS.green:COLORS.border}`,borderRadius:12,padding:"40px 20px",textAlign:"center",marginBottom:16,cursor:selfieUploaded?"default":"pointer",background:selfieUploaded?COLORS.green+"0d":COLORS.surface,transition:"all 0.3s" }}>
-            {selfieUploaded?<><div style={{ fontSize:40 }}>🤳✅</div><div style={{ color:COLORS.green,fontWeight:700,fontSize:13,marginTop:8 }}>Selfie uploaded</div></>:<><div style={{ fontSize:40 }}>🤳</div><div style={{ color:COLORS.muted,fontSize:13,marginTop:8 }}>Click to open camera or upload</div></>}
+          <p style={{ color:COLORS.muted, fontSize:13, marginTop:0 }}>
+            Take a selfie <strong>holding your ID</strong> next to your face so we can confirm it's you.
+          </p>
+          <div style={{ background:COLORS.surface, borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:COLORS.muted, lineHeight:1.7 }}>
+            💡 Face the camera directly · Good lighting · Hold ID so both your face and ID text are clearly visible
           </div>
-          <Btn onClick={() => setKycStep(5)} disabled={!selfieUploaded} style={{ width:"100%" }}>Continue →</Btn>
+          <UploadZone
+            label="🤳 Selfie holding your ID"
+            value={selfie}
+            onFile={handleFile(setSelfie)}
+            hint="Both your face and ID must be clearly visible"
+          />
+          <Btn onClick={() => setKycStep(5)} disabled={!selfie} style={{ width:"100%" }}>
+            Continue →
+          </Btn>
         </>)}
+
+        {/* ── Step 5: Review + Submit ── */}
         {kycStep===5 && (<>
-          <div style={{ textAlign:"center",marginBottom:20 }}><div style={{ fontSize:40,marginBottom:8 }}>🔍</div><h3 style={{ margin:"0 0 6px" }}>Review & Submit</h3><p style={{ color:COLORS.muted,fontSize:13 }}>Check everything looks correct before submitting.</p></div>
-          {[{label:"Document Type",value:docType==="passport"?"Passport":docType==="drivers"?"Driver's Licence":"National ID Card"},{label:"Front of ID",value:"✅ Uploaded"},...(needsBack?[{label:"Back of ID",value:"✅ Uploaded"}]:[]),{label:"Selfie",value:"✅ Uploaded"}].map(row => (
-            <div key={row.label} style={{ display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${COLORS.border}`,fontSize:14 }}><span style={{ color:COLORS.muted }}>{row.label}</span><span style={{ fontWeight:700,color:row.value.startsWith("✅")?COLORS.green:COLORS.text }}>{row.value}</span></div>
+          <h3 style={{ margin:"0 0 16px" }}>Review & Submit</h3>
+
+          {/* Thumbnail previews */}
+          <div style={{ display:"grid", gridTemplateColumns:needsBack?"1fr 1fr 1fr":"1fr 1fr", gap:10, marginBottom:16 }}>
+            {[
+              { label: docType==="passport"?"Passport":"ID Front", img: idFront },
+              ...(needsBack ? [{ label:"ID Back", img: idBack }] : []),
+              { label:"Selfie with ID", img: selfie },
+            ].map(item => (
+              <div key={item.label} style={{ borderRadius:10, overflow:"hidden", border:`1px solid ${COLORS.border}` }}>
+                <img src={item.img} alt={item.label} style={{ width:"100%", height:90, objectFit:"cover", display:"block" }}/>
+                <div style={{ padding:"6px 8px", fontSize:10, fontWeight:700, color:COLORS.muted, background:COLORS.surface }}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          {[
+            { label:"Name",     value: name },
+            { label:"Email",    value: email },
+            { label:"Document", value: docType==="passport"?"Passport":docType==="drivers"?"Driver's Licence":"National ID Card" },
+            { label:"Role",     value: isStreamer ? "Streamer" : "Viewer" },
+          ].map(row => (
+            <div key={row.label} style={{ display:"flex", justifyContent:"space-between", padding:"9px 0", borderBottom:`1px solid ${COLORS.border}22`, fontSize:13 }}>
+              <span style={{ color:COLORS.muted }}>{row.label}</span>
+              <span style={{ fontWeight:700 }}>{row.value}</span>
+            </div>
           ))}
-          <div style={{ background:COLORS.surface,borderRadius:10,padding:"12px 14px",margin:"16px 0",fontSize:12,color:COLORS.muted,lineHeight:1.6 }}>By submitting, you consent to Stripe Identity processing your personal data for identity verification purposes.</div>
-          <Btn onClick={() => setKycStep(6)} variant="green" style={{ width:"100%" }}>🛡️ Submit for Verification</Btn>
+
+          {submitErr && (
+            <div style={{ marginTop:14, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>
+              ⚠️ {submitErr}
+            </div>
+          )}
+
+          <div style={{ marginTop:16, display:"flex", gap:10 }}>
+            <Btn onClick={() => setKycStep(4)} variant="ghost" style={{ flex:1 }}>← Back</Btn>
+            <Btn onClick={handleSubmit} variant="green" style={{ flex:2 }} disabled={submitting}>
+              {submitting ? "Sending…" : "🛡️ Submit Verification"}
+            </Btn>
+          </div>
+          <p style={{ textAlign:"center", color:COLORS.muted, fontSize:11, marginTop:12, lineHeight:1.6 }}>
+            By submitting you consent to the Steamr team reviewing your documents for identity verification.
+          </p>
         </>)}
-        {kycStep===6 && <PendingKYC isStreamer={isStreamer} onNavigate={onNavigate} />}
       </Card>
     </div>
   );
 }
+
 
 function PendingKYC({ isStreamer, onNavigate, inline=false }) {
   const [status, setStatus] = useState("checking");
