@@ -87,7 +87,7 @@ export default async function handler(req, res) {
 
   try {
     await resend.emails.send({
-      from:    "Steamr Verification <onboarding@resend.dev>",
+      from:    "Steamr Verification <noreply@steamr.app>",
       to:      [process.env.ADMIN_EMAIL],
       subject: `🛡️ KYC Verification — ${name} (${role})`,
       html,
