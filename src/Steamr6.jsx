@@ -2476,10 +2476,14 @@ function KYCScreen({ role, onNavigate }) {
           <div style={{ background:COLORS.surface, borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:12, color:COLORS.muted, lineHeight:1.6 }}>
             🔒 Your documents are sent directly to the Steamr admin team and are never stored on our servers.
           </div>
+          {(!name||!email) && (
+            <div style={{ marginBottom:12, padding:"10px 14px", background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}44`, borderRadius:8, fontSize:12, color:COLORS.gold }}>
+              ⚠️ Please fill in your name and email above to continue
+            </div>
+          )}
           <Btn onClick={() => { if (!name||!email) return; setKycStep(2); }} style={{ width:"100%" }} disabled={!name||!email}>
             Start Verification →
           </Btn>
-          {(!name||!email) && <div style={{ marginTop:8, fontSize:12, color:COLORS.muted, textAlign:"center" }}>Please enter your name and email to continue</div>}
         </>)}
 
         {/* ── Step 2: Document type ── */}
@@ -6559,12 +6563,13 @@ export default function App() {
   const [seenOnboarding, setSeenOnboarding] = useState(false);
   const navigate = (s, opts = {}) => {
     setScreen(s);
+    setShowOnboarding(false); // always close modal when navigating
     if (opts.streamerId != null) setSelectedStreamerId(opts.streamerId);
-    // Trigger onboarding on first visit to main authenticated screens
+    // Trigger onboarding only on first visit to main home screens
     if (!seenOnboarding && (s === "viewer-browse" || s === "streamer-dashboard")) {
       setSeenOnboarding(true);
       setOnboardingRole(s === "streamer-dashboard" ? "streamer" : "viewer");
-      setTimeout(() => setShowOnboarding(true), 600);
+      setTimeout(() => setShowOnboarding(true), 800);
     }
   };
 
