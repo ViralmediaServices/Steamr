@@ -880,6 +880,120 @@ function Footer() {
   );
 }
 
+function LoginScreen({ onNavigate, onLogin }) {
+  const w = useWindowWidth(); const isMobile = w < 640;
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [error,    setError]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  const handleLogin = () => {
+    setError("");
+    if (!email || !password) { setError("Please enter your email and password."); return; }
+    setLoading(true);
+
+    // Check stored accounts in localStorage
+    setTimeout(() => {
+      try {
+        const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
+        const account  = accounts.find(a => a.email.toLowerCase() === email.toLowerCase() && a.password === password);
+        if (account) {
+          localStorage.setItem("steamr_session", JSON.stringify({
+            email:   account.email,
+            role:    account.role,
+            name:    account.name,
+            loginAt: new Date().toISOString(),
+          }));
+          onLogin(account.role);
+        } else {
+          // Check if email exists but password wrong
+          const exists = accounts.find(a => a.email.toLowerCase() === email.toLowerCase());
+          setError(exists ? "Incorrect password. Please try again." : "No account found with that email. Please sign up first.");
+          setLoading(false);
+        }
+      } catch {
+        setError("Something went wrong. Please try again.");
+        setLoading(false);
+      }
+    }, 800);
+  };
+
+  return (
+    <div style={{ maxWidth:420, margin:"0 auto", padding:isMobile?"40px 20px":"60px 24px" }}>
+      {/* Logo */}
+      <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
+        <SteamrLogo height={160} glow />
+      </div>
+
+      <h2 style={{ margin:"0 0 6px", fontSize:28, fontWeight:900, textAlign:"center" }}>Welcome back</h2>
+      <p style={{ color:COLORS.muted, fontSize:14, textAlign:"center", marginBottom:32 }}>Log in to your Steamr account</p>
+
+      <Card>
+        {/* Email */}
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>Email Address</label>
+          <input
+            type="email" value={email} onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+            style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        {/* Password */}
+        <div style={{ marginBottom:20 }}>
+          <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>Password</label>
+          <div style={{ position:"relative" }}>
+            <input
+              type={showPass?"text":"password"} value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="Your password"
+              onKeyDown={e => e.key === "Enter" && handleLogin()}
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 44px 12px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+            />
+            <button onClick={() => setShowPass(s => !s)}
+              style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:COLORS.muted, fontSize:16, padding:0 }}>
+              {showPass ? "🙈" : "👁"}
+            </button>
+          </div>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{ marginBottom:16, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* Login button */}
+        <Btn onClick={handleLogin} style={{ width:"100%", fontSize:15, padding:"13px", fontWeight:900 }} disabled={loading}>
+          {loading ? "Logging in…" : "Log In →"}
+        </Btn>
+
+        {/* Forgot password */}
+        <div style={{ textAlign:"center", marginTop:14 }}>
+          <button onClick={() => {}} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
+            Forgot your password? <span style={{ color:COLORS.accent, fontWeight:700 }}>Contact support</span>
+          </button>
+        </div>
+      </Card>
+
+      {/* Sign up links */}
+      <div style={{ textAlign:"center", marginTop:24 }}>
+        <div style={{ color:COLORS.muted, fontSize:13, marginBottom:12 }}>Don't have an account yet?</div>
+        <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
+          <Btn onClick={() => onNavigate("signup-viewer")} variant="secondary" style={{ fontSize:13 }}>Join as Viewer</Btn>
+          <Btn onClick={() => onNavigate("signup-streamer")} variant="ghost" style={{ fontSize:13 }}>Become a Streamer</Btn>
+        </div>
+      </div>
+
+      <div style={{ textAlign:"center", marginTop:20 }}>
+        <button onClick={() => onNavigate("landing")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>← Back to Home</button>
+      </div>
+    </div>
+  );
+}
+
 function LandingScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   return (
@@ -899,6 +1013,7 @@ function LandingScreen({ onNavigate }) {
       <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
         <Btn onClick={() => onNavigate("signup-streamer")} style={{ fontSize: 16, padding: "14px 32px" }}>🔥 Start Streaming</Btn>
         <Btn onClick={() => onNavigate("signup-viewer")} variant="secondary" style={{ fontSize: 16, padding: "14px 32px" }}>🤍 Join as Viewer</Btn>
+        <Btn onClick={() => onNavigate("login")} variant="ghost" style={{ fontSize: 16, padding: "14px 32px" }}>Log In →</Btn>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginTop: 64, textAlign: "left" }}>
         {[
@@ -954,10 +1069,19 @@ function SignupScreen({ role, onNavigate }) {
 
   const handleContinue = () => {
     const age = calcAge(form.dob);
-    if (age === null) { setAgeError(true); return; }   // no DOB entered
-    if (age < 18)     { setBlocked(true); return; }    // confirmed under 18
+    if (age === null) { setAgeError(true); return; }
+    if (age < 18)     { setBlocked(true); return; }
     if (!agreedToS || !agreedAge) { setAgeError(true); return; }
-    setAgeError(false); setStep(2);
+    setAgeError(false);
+    // Save account to localStorage so user can log back in
+    try {
+      const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
+      const exists   = accounts.findIndex(a => a.email.toLowerCase() === form.email.toLowerCase());
+      const account  = { email: form.email, password: form.password, name: form.name, role, joinedAt: new Date().toISOString() };
+      if (exists >= 0) accounts[exists] = account; else accounts.push(account);
+      localStorage.setItem("steamr_accounts", JSON.stringify(accounts));
+    } catch {}
+    setStep(2);
   };
 
   if (blocked) return <AgeGate onNavigate={onNavigate} />;
@@ -2608,7 +2732,19 @@ function PendingKYC({ isStreamer, onNavigate, inline=false }) {
     <div style={{ textAlign:"center",padding:"16px 0" }}>
       {status==="checking"
         ? (<><div style={{ fontSize:52,marginBottom:16 }}>⏳</div><h3 style={{ margin:"0 0 8px",color:COLORS.gold }}>Verifying your identity…</h3><p style={{ color:COLORS.muted,fontSize:13,lineHeight:1.6 }}>Stripe Identity is processing your documents. This usually takes a few seconds.</p></>)
-        : (<><div style={{ fontSize:52,marginBottom:16 }}>🎉</div><h3 style={{ margin:"0 0 8px",color:COLORS.green }}>Identity Verified!</h3><p style={{ color:COLORS.muted,fontSize:13,lineHeight:1.6,marginBottom:20 }}>{isStreamer?"You can now go live and request payouts.":"You're all set to watch and support streamers."}</p><Btn onClick={()=>onNavigate(isStreamer?"streamer-dashboard":"viewer-dashboard")} variant="green" style={{ width:"100%" }}>{isStreamer?"🚀 Go to Dashboard":"🎭 Browse Streams"}</Btn></>)
+        : (<><div style={{ fontSize:52,marginBottom:16 }}>🎉</div><h3 style={{ margin:"0 0 8px",color:COLORS.green }}>Identity Verified!</h3><p style={{ color:COLORS.muted,fontSize:13,lineHeight:1.6,marginBottom:20 }}>{isStreamer?"You can now go live and request payouts.":"You're all set to watch and support streamers."}</p><Btn onClick={()=>(() => {
+          try {
+            const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+            if (!session) {
+              const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
+              if (accounts.length) {
+                const last = accounts[accounts.length-1];
+                localStorage.setItem("steamr_session", JSON.stringify({ email:last.email, role:last.role, name:last.name }));
+              }
+            }
+          } catch {}
+          onNavigate(isStreamer?"streamer-dashboard":"viewer-dashboard");
+        })()} variant="green" style={{ width:"100%" }}>{isStreamer?"🚀 Go to Dashboard":"🎭 Browse Streams"}</Btn></>)
       }
     </div>
   );
@@ -6350,7 +6486,7 @@ function OnboardingModal({ role, onClose }) {
 }
 
 
-function Nav({ screen, onNavigate, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme }) {
+function Nav({ screen, onNavigate, onSignOut, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme }) {
   const w          = useWindowWidth();
   const isMobile   = w < 640;
   const [open, setOpen] = useState(false);
@@ -6386,7 +6522,7 @@ function Nav({ screen, onNavigate, notifications = [], onMarkRead, onMarkAllRead
     { label:"🔔 Notifications",screen:"notifications", onClick:() => go("notifications") },
     { label: isDark ? "☀️ Light Mode" : "🌙 Dark Mode", screen:null, onClick: onToggleTheme },
     { label:"⚙️ Settings", screen:"settings", onClick:() => go("settings") },
-    { label:"Sign Out",    screen:null,        onClick:() => go("landing")  },
+    { label:"Sign Out",    screen:null,        onClick:() => { onSignOut(); } },
   ];
 
   const links = [...(isStreamer ? STREAMER_LINKS : VIEWER_LINKS), ...SHARED_LINKS];
@@ -6490,7 +6626,7 @@ function Nav({ screen, onNavigate, notifications = [], onMarkRead, onMarkAllRead
           {isDark ? "☀️" : "🌙"}
         </button>
         <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>⚙️</Btn>
-        <Btn onClick={() => onNavigate("landing")} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>Sign Out</Btn>
+        <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>Sign Out</Btn>
       </div>
     </div>
   );
@@ -6543,6 +6679,27 @@ export default function App() {
   const markAllRead   = ()   => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   // ── Navigation ──
+  // ── Auto-login from saved session ───────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (session?.role) {
+        setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+      }
+    } catch {}
+  }, []);
+
+  // ── Handle login ─────────────────────────────────────────────────────────────
+  const onLogin = (role) => {
+    setScreen(role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+  };
+
+  // ── Handle sign out ──────────────────────────────────────────────────────────
+  const onSignOut = () => {
+    try { localStorage.removeItem("steamr_session"); } catch {}
+    setScreen("landing");
+  };
+
   // ── Stripe payment return handler ──────────────────────────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -6613,6 +6770,7 @@ export default function App() {
   const renderScreen = () => {
     switch (screen) {
       case "landing":            return <LandingScreen onNavigate={navigate} />;
+      case "login":              return <LoginScreen onNavigate={navigate} onLogin={onLogin} />;
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
       case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} />;
@@ -6679,7 +6837,7 @@ export default function App() {
           </div>
         )}
 
-        <Nav screen={screen} onNavigate={navigate}
+        <Nav screen={screen} onNavigate={navigate} onSignOut={onSignOut}
           notifications={notifications} onMarkRead={markNotifRead} onMarkAllRead={markAllRead}
           isDark={isDark} onToggleTheme={toggleTheme} />
         <ToastContainer toasts={toasts} />
