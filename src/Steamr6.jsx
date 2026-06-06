@@ -6543,7 +6543,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"🔔 Notifications",screen:"notifications", onClick:() => go("notifications") },
     { label: isDark ? "☀️ Light Mode" : "🌙 Dark Mode", screen:null, onClick: onToggleTheme },
     { label:"⚙️ Settings", screen:"settings", onClick:() => go("settings") },
-    { label:"Sign Out",    screen:null,        onClick:() => { onSignOut(); } },
+    { label:"🚪 Log Out", screen:null,        onClick:() => { onSignOut(); } },
   ];
 
   const links = [...(isStreamer ? STREAMER_LINKS : VIEWER_LINKS), ...SHARED_LINKS];
@@ -6641,19 +6641,22 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
           )}
         </button>
 
-        {/* Viewer — Profile + Log Out between search and theme */}
-        {isViewer && <>
+        {/* Profile button — role aware */}
+        {isViewer && (
           <Btn onClick={() => onNavigate("viewer-profile")}
             variant={screen==="viewer-profile"||screen==="viewer-edit-profile"?"secondary":"ghost"}
             style={{ fontSize:12,padding:"7px 12px" }}>👤 Profile</Btn>
-          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:12,padding:"7px 12px",color:COLORS.muted }}>🚪 Log Out</Btn>
-        </>}
-
-        {/* Streamer — Settings + Log Out */}
-        {isStreamer && <>
+        )}
+        {isStreamer && (
           <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:12,padding:"7px 10px" }}>⚙️</Btn>
-          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:12,padding:"7px 12px",color:COLORS.muted }}>🚪 Log Out</Btn>
-        </>}
+        )}
+
+        {/* Log Out — always visible on any authenticated screen */}
+        {(isViewer || isStreamer || ALL_AUTHED.includes(screen)) && (
+          <Btn onClick={onSignOut} style={{ fontSize:12, padding:"7px 14px", background:COLORS.accent, color:"#fff", border:"none", borderRadius:10, cursor:"pointer", fontWeight:700 }}>
+            🚪 Log Out
+          </Btn>
+        )}
 
         {/* Theme toggle */}
         <button onClick={onToggleTheme} title={isDark?"Light Mode":"Dark Mode"}
@@ -6947,4 +6950,3 @@ export default function App() {
     </ThemeCtx.Provider>
   );
 }
-
