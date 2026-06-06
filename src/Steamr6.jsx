@@ -6530,15 +6530,16 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"👤 Profile",  screen:"profile",            onClick:() => go("profile",{streamerId:1}) },
   ];
   const VIEWER_LINKS = [
-    { label:"🏠 Dashboard",   screen:"viewer-dashboard",onClick:() => go("viewer-dashboard") },
-    { label:"Browse",          screen:"viewer-browse",  onClick:() => go("viewer-browse")  },
-    { label:"🔍 Discover",    screen:"discovery",      onClick:() => go("discovery")      },
-    { label:"👑 Fan Club",   screen:"fan-club",       onClick:() => go("fan-club")       },
-    { label:"🏆 Rankings",   screen:"leaderboard",    onClick:() => go("leaderboard")    },
-    { label:"🪙 Buy Tokens", screen:"buy-tokens",     onClick:() => go("buy-tokens")     },
-    { label:"🎬 Exclusive",  screen:"ppv-content",    onClick:() => go("ppv-content")    },
-    { label:"🎁 Gift Cards", screen:"gift-cards",     onClick:() => go("gift-cards")     },
-    { label:"👤 My Profile", screen:"viewer-profile", onClick:() => go("viewer-profile") },
+    { label:"🏠 Dashboard",   screen:"viewer-dashboard", onClick:() => go("viewer-dashboard") },
+    { label:"Browse",          screen:"viewer-browse",   onClick:() => go("viewer-browse")    },
+    { label:"🔍 Discover",    screen:"discovery",       onClick:() => go("discovery")         },
+    { label:"👑 Fan Club",   screen:"fan-club",        onClick:() => go("fan-club")          },
+    { label:"🏆 Rankings",   screen:"leaderboard",     onClick:() => go("leaderboard")       },
+    { label:"🪙 Buy Tokens", screen:"buy-tokens",      onClick:() => go("buy-tokens")        },
+    { label:"🎬 Exclusive",  screen:"ppv-content",     onClick:() => go("ppv-content")       },
+    { label:"🎁 Gift Cards", screen:"gift-cards",      onClick:() => go("gift-cards")        },
+    { label:"👤 Profile",    screen:"viewer-profile",  onClick:() => go("viewer-profile")    },
+    { label:"🚪 Log Out",    screen:null,              onClick:() => onSignOut()              },
   ];
   const SHARED_LINKS = [
     { label:"🔍 Search",       screen:"search",        onClick:() => go("search")       },
@@ -6648,8 +6649,14 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
             transition:"all 0.2s", lineHeight:1 }}>
           {isDark ? "☀️" : "🌙"}
         </button>
-        <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>⚙️</Btn>
-        <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>Sign Out</Btn>
+        {isViewer && <>
+          <Btn onClick={() => onNavigate("viewer-profile")} variant={screen==="viewer-profile"||screen==="viewer-edit-profile"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👤 Profile</Btn>
+          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>🚪 Log Out</Btn>
+        </>}
+        {isStreamer && <>
+          <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>⚙️</Btn>
+          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>🚪 Log Out</Btn>
+        </>}
       </div>
     </div>
   );
