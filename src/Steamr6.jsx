@@ -893,30 +893,24 @@ function LoginScreen({ onNavigate, onLogin }) {
     if (!email || !password) { setError("Please enter your email and password."); return; }
     setLoading(true);
 
-    // Check stored accounts in localStorage
-    setTimeout(() => {
-      try {
-        const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
-        const account  = accounts.find(a => a.email.toLowerCase() === email.toLowerCase() && a.password === password);
-        if (account) {
-          localStorage.setItem("steamr_session", JSON.stringify({
-            email:   account.email,
-            role:    account.role,
-            name:    account.name,
-            loginAt: new Date().toISOString(),
-          }));
-          onLogin(account.role);
-        } else {
-          // Check if email exists but password wrong
-          const exists = accounts.find(a => a.email.toLowerCase() === email.toLowerCase());
-          setError(exists ? "Incorrect password. Please try again." : "No account found with that email. Please sign up first.");
-          setLoading(false);
-        }
-      } catch {
-        setError("Something went wrong. Please try again.");
+    fetch("/api/auth-login", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ email: email.trim(), password }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        onLogin(data.role, data.token, data.email, data.name);
+      } else {
+        setError(data.error || "Login failed. Please try again.");
         setLoading(false);
       }
-    }, 800);
+    })
+    .catch(() => {
+      setError("Could not connect. Please check your connection and try again.");
+      setLoading(false);
+    });
   };
 
   return (
@@ -1073,14 +1067,22 @@ function SignupScreen({ role, onNavigate }) {
     if (age < 18)     { setBlocked(true); return; }
     if (!agreedToS || !agreedAge) { setAgeError(true); return; }
     setAgeError(false);
-    // Save account to localStorage so user can log back in
-    try {
-      const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
-      const exists   = accounts.findIndex(a => a.email.toLowerCase() === form.email.toLowerCase());
-      const account  = { email: form.email, password: form.password, name: form.name, role, joinedAt: new Date().toISOString() };
-      if (exists >= 0) accounts[exists] = account; else accounts.push(account);
-      localStorage.setItem("steamr_accounts", JSON.stringify(accounts));
-    } catch {}
+    // Save account to Upstash via API
+    fetch("/api/auth-signup", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ email: form.email.trim(), password: form.password, name: form.name, role }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        // Save token for session
+        localStorage.setItem("steamr_token", data.token);
+        localStorage.setItem("steamr_session", JSON.stringify({ email: data.email, name: data.name, role: data.role }));
+      }
+      // Continue to step 2 regardless — user can still complete signup
+    })
+    .catch(() => {});
     setStep(2);
   };
 
@@ -2734,13 +2736,11 @@ function PendingKYC({ isStreamer, onNavigate, inline=false }) {
         ? (<><div style={{ fontSize:52,marginBottom:16 }}>⏳</div><h3 style={{ margin:"0 0 8px",color:COLORS.gold }}>Verifying your identity…</h3><p style={{ color:COLORS.muted,fontSize:13,lineHeight:1.6 }}>Stripe Identity is processing your documents. This usually takes a few seconds.</p></>)
         : (<><div style={{ fontSize:52,marginBottom:16 }}>🎉</div><h3 style={{ margin:"0 0 8px",color:COLORS.green }}>Identity Verified!</h3><p style={{ color:COLORS.muted,fontSize:13,lineHeight:1.6,marginBottom:20 }}>{isStreamer?"You can now go live and request payouts.":"You're all set to watch and support streamers."}</p><Btn onClick={()=>(() => {
           try {
+            // Session already saved during signup step — nothing extra needed
             const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
             if (!session) {
-              const accounts = JSON.parse(localStorage.getItem("steamr_accounts") || "[]");
-              if (accounts.length) {
-                const last = accounts[accounts.length-1];
-                localStorage.setItem("steamr_session", JSON.stringify({ email:last.email, role:last.role, name:last.name }));
-              }
+              // Fallback: session might not be set yet
+              console.warn("No session found after KYC");
             }
           } catch {}
           onNavigate(isStreamer?"streamer-dashboard":"viewer-dashboard");
@@ -6709,27 +6709,52 @@ export default function App() {
   };
   const [userRole, setUserRole] = useState(getStoredRole);
 
-  // ── Auto-login from saved session ─────────────────────────────────────────────
+  // ── Auto-login from saved session token ──────────────────────────────────────
   useEffect(() => {
-    try {
-      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
-      if (session?.role) {
-        setUserRole(session.role);
-        setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/auth-check", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ token }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        setUserRole(data.role);
+        localStorage.setItem("steamr_session", JSON.stringify({ email: data.email, name: data.name, role: data.role }));
+        setScreen(data.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+      } else {
+        // Token expired — clear it
+        localStorage.removeItem("steamr_token");
+        localStorage.removeItem("steamr_session");
       }
-    } catch {}
+    })
+    .catch(() => {
+      // Fallback to localStorage session if API unavailable
+      try {
+        const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+        if (session?.role) { setUserRole(session.role); setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard"); }
+      } catch {}
+    });
   }, []);
 
   // ── Handle login ──────────────────────────────────────────────────────────────
-  const onLogin = (role) => {
+  const onLogin = (role, token, email, name) => {
     setUserRole(role);
+    if (token) localStorage.setItem("steamr_token", token);
+    if (email) localStorage.setItem("steamr_session", JSON.stringify({ email, name, role }));
     setScreen(role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
   };
 
   // ── Handle sign out ───────────────────────────────────────────────────────────
   const onSignOut = () => {
     setUserRole(null);
-    try { localStorage.removeItem("steamr_session"); } catch {}
+    try {
+      localStorage.removeItem("steamr_token");
+      localStorage.removeItem("steamr_session");
+      localStorage.removeItem("steamr_accounts");
+    } catch {}
     setScreen("landing");
   };
 
