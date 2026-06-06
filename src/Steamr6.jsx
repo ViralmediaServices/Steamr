@@ -6709,17 +6709,31 @@ export default function App() {
   const markAllRead   = ()   => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   // ── Navigation ──
-  // ── User role from session ────────────────────────────────────────────────────
+  // ── User role — read from localStorage immediately so nav shows on refresh ────
   const getStoredRole = () => {
-    try { return JSON.parse(localStorage.getItem("steamr_session") || "null")?.role || null; }
-    catch { return null; }
+    try {
+      const token   = localStorage.getItem("steamr_token");
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      // Only trust stored role if we also have a token
+      return (token && session?.role) ? session.role : null;
+    } catch { return null; }
   };
   const [userRole, setUserRole] = useState(getStoredRole);
 
-  // ── Auto-login from saved session token ──────────────────────────────────────
+  // ── Auto-login — instant from localStorage, verified async in background ───────
   useEffect(() => {
-    const token = localStorage.getItem("steamr_token");
+    const token   = localStorage.getItem("steamr_token");
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session") || "null"); } catch { return null; } })();
+
+    // Show dashboard immediately if we have both token + session (fast path)
+    if (token && session?.role) {
+      setUserRole(session.role);
+      setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+    }
+
     if (!token) return;
+
+    // Verify token in background — silent logout if expired
     fetch("/api/auth-check", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
@@ -6730,19 +6744,18 @@ export default function App() {
       if (data.ok) {
         setUserRole(data.role);
         localStorage.setItem("steamr_session", JSON.stringify({ email: data.email, name: data.name, role: data.role }));
-        setScreen(data.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+        if (!session?.role) setScreen(data.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
       } else {
-        // Token expired — clear it
+        // Token invalid — sign out silently
+        setUserRole(null);
         localStorage.removeItem("steamr_token");
         localStorage.removeItem("steamr_session");
+        setScreen("landing");
       }
     })
     .catch(() => {
-      // Fallback to localStorage session if API unavailable
-      try {
-        const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
-        if (session?.role) { setUserRole(session.role); setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard"); }
-      } catch {}
+      // API unreachable — keep user logged in with cached session
+      if (session?.role) setUserRole(session.role);
     });
   }, []);
 
