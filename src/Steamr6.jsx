@@ -6628,35 +6628,41 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
         </>}
       </div>
       <SteamrLogo height={44} />
-      <div style={{ display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8 }}>
-        <button onClick={() => onNavigate("search")}
-          title="Search"
-          style={{ background:"none",border:`1px solid ${COLORS.border}`,borderRadius:10,padding:"7px 10px",cursor:"pointer",color:COLORS.text,fontSize:15,transition:"all 0.2s",lineHeight:1 }}>
+      <div style={{ display:"flex",justifyContent:"flex-end",alignItems:"center",gap:6 }}>
+        {/* Search — compact icon only */}
+        <button onClick={() => onNavigate("search")} title="Search"
+          style={{ background:"none",border:`1px solid ${COLORS.border}`,borderRadius:10,padding:"7px 9px",cursor:"pointer",color:COLORS.text,fontSize:14,lineHeight:1 }}>
           🔍
         </button>
-        <button onClick={() => onNavigate("notifications")}
-          title="Notifications"
-          style={{ position:"relative",background:"none",border:`1px solid ${COLORS.border}`,borderRadius:10,padding:"7px 10px",cursor:"pointer",color:COLORS.text,fontSize:15,transition:"all 0.2s",lineHeight:1 }}>
+
+        {/* Notifications */}
+        <button onClick={() => onNavigate("notifications")} title="Notifications"
+          style={{ position:"relative",background:"none",border:`1px solid ${COLORS.border}`,borderRadius:10,padding:"7px 9px",cursor:"pointer",color:COLORS.text,fontSize:14,lineHeight:1 }}>
           🔔
           {notifications.filter(n=>!n.read).length > 0 && (
-            <span style={{ position:"absolute",top:2,right:2,width:8,height:8,borderRadius:"50%",background:COLORS.accent,border:`2px solid ${COLORS.surface}` }}/>
+            <span style={{ position:"absolute",top:2,right:2,width:7,height:7,borderRadius:"50%",background:COLORS.accent,border:`2px solid ${COLORS.surface}` }}/>
           )}
         </button>
-        <button onClick={onToggleTheme}
-          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          style={{ background:"none", border:`1px solid ${COLORS.border}`, borderRadius:10,
-            padding:"7px 10px", cursor:"pointer", color:COLORS.text, fontSize:17,
-            transition:"all 0.2s", lineHeight:1 }}>
+
+        {/* Viewer — Profile + Log Out between search and theme */}
+        {isViewer && <>
+          <Btn onClick={() => onNavigate("viewer-profile")}
+            variant={screen==="viewer-profile"||screen==="viewer-edit-profile"?"secondary":"ghost"}
+            style={{ fontSize:12,padding:"7px 12px" }}>👤 Profile</Btn>
+          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:12,padding:"7px 12px",color:COLORS.muted }}>🚪 Log Out</Btn>
+        </>}
+
+        {/* Streamer — Settings + Log Out */}
+        {isStreamer && <>
+          <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:12,padding:"7px 10px" }}>⚙️</Btn>
+          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:12,padding:"7px 12px",color:COLORS.muted }}>🚪 Log Out</Btn>
+        </>}
+
+        {/* Theme toggle */}
+        <button onClick={onToggleTheme} title={isDark?"Light Mode":"Dark Mode"}
+          style={{ background:"none",border:`1px solid ${COLORS.border}`,borderRadius:10,padding:"7px 9px",cursor:"pointer",color:COLORS.text,fontSize:16,lineHeight:1 }}>
           {isDark ? "☀️" : "🌙"}
         </button>
-        {isViewer && <>
-          <Btn onClick={() => onNavigate("viewer-profile")} variant={screen==="viewer-profile"||screen==="viewer-edit-profile"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👤 Profile</Btn>
-          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>🚪 Log Out</Btn>
-        </>}
-        {isStreamer && <>
-          <Btn onClick={() => onNavigate("settings")} variant={screen==="settings"?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>⚙️</Btn>
-          <Btn onClick={onSignOut} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>🚪 Log Out</Btn>
-        </>}
       </div>
     </div>
   );
@@ -6745,16 +6751,17 @@ export default function App() {
         setUserRole(data.role);
         localStorage.setItem("steamr_session", JSON.stringify({ email: data.email, name: data.name, role: data.role }));
         if (!session?.role) setScreen(data.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
-      } else {
-        // Token invalid — sign out silently
+      } else if (data.error === "Session expired. Please log in again." || data.error === "Account not found.") {
+        // Only log out on definitive server confirmation that token is invalid
         setUserRole(null);
         localStorage.removeItem("steamr_token");
         localStorage.removeItem("steamr_session");
         setScreen("landing");
       }
+      // Any other error — keep user logged in with cached session
     })
     .catch(() => {
-      // API unreachable — keep user logged in with cached session
+      // Network error — keep user logged in with cached session
       if (session?.role) setUserRole(session.role);
     });
   }, []);
