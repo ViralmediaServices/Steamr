@@ -2493,10 +2493,7 @@ function KYCScreen({ role, onNavigate }) {
             <div style={{ fontSize:28 }}>✅</div>
             <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>Uploaded</div>
           </div>
-          <button onClick={() => onFile({ target:{ files:[] } })}
-            style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.7)", border:"none", borderRadius:6, color:"#fff", cursor:"pointer", fontSize:11, padding:"4px 8px", fontWeight:700 }}
-            onClick={(e)=>{ e.stopPropagation(); /* handled by label */ }}>
-          </button>
+
           <label style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.7)", borderRadius:6, color:"#fff", cursor:"pointer", fontSize:11, padding:"5px 10px", fontWeight:700 }}>
             Retake
             <input type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={onFile}/>
@@ -6672,7 +6669,16 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
 const AUTHED = ["viewer-browse","stream-room","buy-tokens","streamer-dashboard","go-live","kyc-streamer","kyc-viewer","profile","edit-profile","settings","fan-club","private-show","schedule","leaderboard","discovery","analytics","viewer-profile","notifications","search","earnings","ppv-content","gift-cards","viewer-dashboard","viewer-edit-profile"];
 
 export default function App() {
-  const [screen,             setScreen]            = useState("landing");
+  const [screen, setScreen] = useState(() => {
+    try {
+      const token   = localStorage.getItem("steamr_token");
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (token && session?.role) {
+        return session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
+      }
+    } catch {}
+    return "landing";
+  });
   const [selectedStreamerId, setSelectedStreamerId] = useState(1);
   const [profileData,        setProfileData]        = useState(STREAMER_PROFILES[1]);
   const [following,          setFollowing]          = useState(new Set([1, 4, 7]));
@@ -6715,56 +6721,27 @@ export default function App() {
   const markAllRead   = ()   => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   // ── Navigation ──
-  // ── User role — read from localStorage immediately so nav shows on refresh ────
-  const getStoredRole = () => {
+  // ── User role — read synchronously from localStorage on first render ──────────
+  const [userRole, setUserRole] = useState(() => {
     try {
       const token   = localStorage.getItem("steamr_token");
       const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
-      // Only trust stored role if we also have a token
       return (token && session?.role) ? session.role : null;
     } catch { return null; }
-  };
-  const [userRole, setUserRole] = useState(getStoredRole);
+  });
 
-  // ── Auto-login — instant from localStorage, verified async in background ───────
+  // ── Auto-login from localStorage — stays logged in until explicit sign out ────
   useEffect(() => {
-    const token   = localStorage.getItem("steamr_token");
-    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session") || "null"); } catch { return null; } })();
-
-    // Show dashboard immediately if we have both token + session (fast path)
-    if (token && session?.role) {
-      setUserRole(session.role);
-      setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
-    }
-
-    if (!token) return;
-
-    // Verify token in background — silent logout if expired
-    fetch("/api/auth-check", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ token }),
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        setUserRole(data.role);
-        localStorage.setItem("steamr_session", JSON.stringify({ email: data.email, name: data.name, role: data.role }));
-        if (!session?.role) setScreen(data.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
-      } else if (data.error === "Session expired. Please log in again." || data.error === "Account not found.") {
-        // Only log out on definitive server confirmation that token is invalid
-        setUserRole(null);
-        localStorage.removeItem("steamr_token");
-        localStorage.removeItem("steamr_session");
-        setScreen("landing");
+    try {
+      const token   = localStorage.getItem("steamr_token");
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (token && session?.role) {
+        setUserRole(session.role);
+        setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
       }
-      // Any other error — keep user logged in with cached session
-    })
-    .catch(() => {
-      // Network error — keep user logged in with cached session
-      if (session?.role) setUserRole(session.role);
-    });
+    } catch {}
   }, []);
+);
 
   // ── Handle login ──────────────────────────────────────────────────────────────
   const onLogin = (role, token, email, name) => {
