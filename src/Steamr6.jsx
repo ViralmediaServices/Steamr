@@ -6511,9 +6511,15 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     "leaderboard","discovery","private-show","viewer-profile","ppv-content","gift-cards",
     "search","notifications","viewer-dashboard","viewer-edit-profile","streamer-dashboard",
     "go-live","kyc-streamer","profile","edit-profile","settings","schedule","analytics","earnings","login"];
-  const isViewer   = userRole === "viewer"   && ALL_AUTHED.includes(screen);
-  const isStreamer  = userRole === "streamer" && ALL_AUTHED.includes(screen);
-  if (!isStreamer && !isViewer) return null;
+  // Derive role from localStorage directly as fallback if userRole prop is null
+  const storedRole  = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null")?.role||null; } catch { return null; } })();
+  const activeRole  = userRole || storedRole;
+  const isOnAuthed  = ALL_AUTHED.includes(screen);
+  const isViewer    = (activeRole === "viewer")   && isOnAuthed;
+  const isStreamer   = (activeRole === "streamer") && isOnAuthed;
+
+  // Always show nav on authenticated screens — never return null
+  if (!isOnAuthed) return null;
 
   // Close menu on navigation
   const go = (dest, opts) => { onNavigate(dest, opts); setOpen(false); };
