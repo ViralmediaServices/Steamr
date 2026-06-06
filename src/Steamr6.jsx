@@ -6741,7 +6741,6 @@ export default function App() {
       }
     } catch {}
   }, []);
-);
 
   // ── Handle login ──────────────────────────────────────────────────────────────
   const onLogin = (role, token, email, name) => {
