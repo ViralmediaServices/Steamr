@@ -2092,7 +2092,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                 ? <img src={VIEWER_PROFILE_DATA.avatarImg} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 : VIEWER_PROFILE_DATA.avatar}
             </div>
-            <Btn onClick={() => onNavigate("settings")} variant="ghost" style={{ fontSize:12,padding:"7px 14px" }}>
+            <Btn onClick={() => onNavigate("viewer-edit-profile")} variant="ghost" style={{ fontSize:12,padding:"7px 14px" }}>
               ⚙️ Settings
             </Btn>
           </div>
@@ -2944,8 +2944,26 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   const startStream = () => {
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
-    addToast("live", "You're live! 🔴 Followers have been notified");
+    addToast("live", "You're live! 🔴 Notifying your followers…");
     addNotification("live", `Your stream "${title}" started — goal: ${goalLabel}`);
+    // Email all followers
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      fetch("/api/notify-followers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamerId:    session?.id || 1,
+          streamerEmail: session?.email || "streamer@steamr.app",
+          streamerName:  session?.name  || "Your favourite streamer",
+          streamTitle:   title,
+          streamUrl:     typeof window !== "undefined" ? window.location.origin : "https://steamr.app",
+        }),
+      })
+      .then(r => r.json())
+      .then(d => { if (d.sent > 0) addToast("success", `📧 ${d.sent} follower${d.sent===1?"":"s"} notified!`); })
+      .catch(() => {});
+    } catch {}
   };
 
   const endStream = () => {
@@ -3466,7 +3484,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       }}>
         {/* Back button */}
         <button
-          onClick={() => onNavigate(backScreen)}
+          onClick={() => onNavigate(backScreen || "viewer-browse")}
           style={{ position:"absolute", top:16, left:20, background:"#00000055", border:"none", color:"#fff", borderRadius:8, padding:"6px 14px", fontSize:12, cursor:"pointer" }}
         >← Back</button>
 
@@ -6486,13 +6504,18 @@ function OnboardingModal({ role, onClose }) {
 }
 
 
-function Nav({ screen, onNavigate, onSignOut, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme }) {
+function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme }) {
   const w          = useWindowWidth();
   const isMobile   = w < 640;
   const [open, setOpen] = useState(false);
 
-  const isStreamer = ["streamer-dashboard","go-live","kyc-streamer","profile","edit-profile","settings","schedule","analytics","earnings"].includes(screen);
-  const isViewer   = ["viewer-browse","stream-room","buy-tokens","kyc-viewer","fan-club","leaderboard","discovery","private-show","viewer-profile","ppv-content","gift-cards","search","notifications","viewer-dashboard","viewer-edit-profile"].includes(screen);
+  // Use logged-in role to determine nav side — never rely on screen name alone
+  const ALL_AUTHED = ["viewer-browse","stream-room","buy-tokens","kyc-viewer","fan-club",
+    "leaderboard","discovery","private-show","viewer-profile","ppv-content","gift-cards",
+    "search","notifications","viewer-dashboard","viewer-edit-profile","streamer-dashboard",
+    "go-live","kyc-streamer","profile","edit-profile","settings","schedule","analytics","earnings","login"];
+  const isViewer   = userRole === "viewer"   && ALL_AUTHED.includes(screen);
+  const isStreamer  = userRole === "streamer" && ALL_AUTHED.includes(screen);
   if (!isStreamer && !isViewer) return null;
 
   // Close menu on navigation
@@ -6679,23 +6702,33 @@ export default function App() {
   const markAllRead   = ()   => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   // ── Navigation ──
-  // ── Auto-login from saved session ───────────────────────────────────────────
+  // ── User role from session ────────────────────────────────────────────────────
+  const getStoredRole = () => {
+    try { return JSON.parse(localStorage.getItem("steamr_session") || "null")?.role || null; }
+    catch { return null; }
+  };
+  const [userRole, setUserRole] = useState(getStoredRole);
+
+  // ── Auto-login from saved session ─────────────────────────────────────────────
   useEffect(() => {
     try {
       const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
       if (session?.role) {
+        setUserRole(session.role);
         setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
       }
     } catch {}
   }, []);
 
-  // ── Handle login ─────────────────────────────────────────────────────────────
+  // ── Handle login ──────────────────────────────────────────────────────────────
   const onLogin = (role) => {
+    setUserRole(role);
     setScreen(role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
   };
 
-  // ── Handle sign out ──────────────────────────────────────────────────────────
+  // ── Handle sign out ───────────────────────────────────────────────────────────
   const onSignOut = () => {
+    setUserRole(null);
     try { localStorage.removeItem("steamr_session"); } catch {}
     setScreen("landing");
   };
@@ -6740,6 +6773,35 @@ export default function App() {
         const s = STREAMERS.find(x => x.id === id);
         addToast("follow", `Now following ${s ? s.name : "streamer"} ♥`);
         addNotification("follow", `Someone new started following you`);
+        // Save follow to Vercel KV so streamer can notify on go live
+        try {
+          const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+          if (session?.email && s) {
+            fetch("/api/follow", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                streamerId:    id,
+                streamerName:  s.name,
+                streamerEmail: s.email || `streamer_${id}@steamr.app`,
+                viewerEmail:   session.email,
+                viewerName:    session.name || session.email,
+              }),
+            }).catch(() => {}); // fail silently — local state already updated
+          }
+        } catch {}
+      } else {
+        // Remove follow from KV
+        try {
+          const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+          if (session?.email) {
+            fetch("/api/follow", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ streamerId: id, viewerEmail: session.email }),
+            }).catch(() => {});
+          }
+        } catch {}
       }
       return next;
     });
@@ -6837,7 +6899,7 @@ export default function App() {
           </div>
         )}
 
-        <Nav screen={screen} onNavigate={navigate} onSignOut={onSignOut}
+        <Nav screen={screen} onNavigate={navigate} onSignOut={onSignOut} userRole={userRole}
           notifications={notifications} onMarkRead={markNotifRead} onMarkAllRead={markAllRead}
           isDark={isDark} onToggleTheme={toggleTheme} />
         <ToastContainer toasts={toasts} />
