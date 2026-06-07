@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Steamr Admin — Account Cleanup</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0d0608; color: #fff0f3; font-family: 'Segoe UI', sans-serif; padding: 32px 24px; min-height: 100vh; }
+    h1 { font-size: 24px; font-weight: 900; margin-bottom: 6px; color: #ff2d55; }
+    p  { color: #aa8890; font-size: 13px; margin-bottom: 24px; }
+    .card { background: #1e0f13; border: 1px solid #3d1f28; border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+    label { display: block; font-size: 12px; color: #aa8890; font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.6px; }
+    input { width: 100%; background: #160a0d; border: 1px solid #3d1f28; border-radius: 8px; padding: 10px 12px; color: #fff0f3; font-size: 14px; outline: none; margin-bottom: 12px; }
+    button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 700; font-size: 13px; transition: opacity 0.2s; }
+    button:hover { opacity: 0.85; }
+    .btn-primary { background: #ff2d55; color: #fff; }
+    .btn-danger  { background: #ff4444; color: #fff; }
+    .btn-ghost   { background: #3d1f28; color: #fff0f3; }
+    .account-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #3d1f2822; font-size: 13px; }
+    .account-row:last-child { border-bottom: none; }
+    .badge { background: #ff2d5533; color: #ff2d55; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .badge.viewer { background: #ff6b3533; color: #ff6b35; }
+    .status { padding: 12px 14px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+    .status.ok  { background: #00e5a022; border: 1px solid #00e5a044; color: #00e5a0; }
+    .status.err { background: #ff444422; border: 1px solid #ff444444; color: #ff6666; }
+    #accounts { margin-top: 16px; }
+    .total { font-size: 12px; color: #aa8890; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h1>🛡️ Steamr Admin</h1>
+  <p>Manage and clean up test accounts in Upstash. Keep this page private.</p>
+
+  <!-- Auth -->
+  <div class="card">
+    <label>Admin Secret Key</label>
+    <input type="password" id="adminKey" placeholder="Your ADMIN_SECRET_KEY value"/>
+    <div style="display:flex;gap:8px;">
+      <button class="btn-primary" onclick="listAccounts()">📋 List All Accounts</button>
+    </div>
+    <div id="listStatus"></div>
+  </div>
+
+  <!-- Accounts list -->
+  <div class="card" id="accountsCard" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <strong>All Accounts</strong>
+      <button class="btn-danger" onclick="deleteAll()">🗑️ Delete ALL Test Accounts</button>
+    </div>
+    <div id="total" class="total"></div>
+    <div id="accounts"></div>
+  </div>
+
+  <!-- Delete single -->
+  <div class="card">
+    <label>Delete Specific Account by Email</label>
+    <input type="email" id="deleteEmail" placeholder="email@example.com"/>
+    <button class="btn-danger" onclick="deleteOne()">🗑️ Delete Account</button>
+    <div id="deleteStatus"></div>
+  </div>
+
+  <script>
+    const apiBase = window.location.origin;
+
+    function getKey() {
+      return document.getElementById("adminKey").value.trim();
+    }
+
+    async function listAccounts() {
+      const key = getKey();
+      if (!key) { alert("Enter your admin key first"); return; }
+      document.getElementById("listStatus").innerHTML = '<div class="status ok">Loading...</div>';
+      try {
+        const res  = await fetch(`${apiBase}/api/admin-cleanup`, {
+          headers: { "x-admin-key": key }
+        });
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("listStatus").innerHTML = `<div class="status err">❌ ${data.error}</div>`;
+          return;
+        }
+        document.getElementById("listStatus").innerHTML = "";
+        document.getElementById("accountsCard").style.display = "block";
+        document.getElementById("total").textContent = `${data.total} account${data.total !== 1 ? "s" : ""} found`;
+        const html = data.accounts.map(a => `
+          <div class="account-row">
+            <div>
+              <div style="font-weight:700;">${a.email || a.key}</div>
+              <div style="color:#aa8890;font-size:11px;margin-top:2px;">${a.name || "—"} · ${a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown date"}</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="badge ${a.role}">${a.role || "?"}</span>
+              <button class="btn-ghost" style="padding:5px 10px;font-size:11px;" onclick="deleteByEmail('${a.email}')">Delete</button>
+            </div>
+          </div>
+        `).join("");
+        document.getElementById("accounts").innerHTML = html || "<div style='color:#aa8890;text-align:center;padding:16px;'>No accounts found</div>";
+      } catch (err) {
+        document.getElementById("listStatus").innerHTML = `<div class="status err">❌ ${err.message}</div>`;
+      }
+    }
+
+    async function deleteByEmail(email) {
+      if (!confirm(`Delete account: ${email}?`)) return;
+      const key = getKey();
+      const res  = await fetch(`${apiBase}/api/admin-cleanup`, {
+        method:  "DELETE",
+        headers: { "x-admin-key": key, "Content-Type": "application/json" },
+        body:    JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (data.ok) { alert(`✅ Deleted ${email}`); listAccounts(); }
+      else alert(`❌ ${data.error}`);
+    }
+
+    async function deleteOne() {
+      const email = document.getElementById("deleteEmail").value.trim();
+      const key   = getKey();
+      if (!email || !key) { alert("Enter email and admin key"); return; }
+      await deleteByEmail(email);
+    }
+
+    async function deleteAll() {
+      if (!confirm("⚠️ This will delete ALL accounts. Are you sure?")) return;
+      if (!confirm("Really delete everything? This cannot be undone.")) return;
+      const key = getKey();
+      const res  = await fetch(`${apiBase}/api/admin-cleanup`, {
+        method:  "POST",
+        headers: { "x-admin-key": key, "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "delete-all-test" }),
+      });
+      const data = await res.json();
+      if (data.ok) { alert(`✅ Deleted ${data.deleted} records`); listAccounts(); }
+      else alert(`❌ ${data.error}`);
+    }
+  </script>
+</body>
+</html>
