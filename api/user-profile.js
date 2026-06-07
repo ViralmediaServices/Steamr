@@ -72,12 +72,13 @@ export default async function handler(req, res) {
           following:    account.following    || [],
         },
         activity: {
-          tokenBalance: activity.tokenBalance || 350,
-          totalSpent:   activity.totalSpent   || 0,
-          tipsCount:    activity.tipsCount    || 0,
-          tipHistory:   activity.tipHistory   || [],
-          giftsCount:   activity.giftsCount   || 0,
-          achievements: activity.achievements || [],
+          tokenBalance:  activity.tokenBalance  || 350,
+          totalSpent:    activity.totalSpent    || 0,
+          tipsCount:     activity.tipsCount     || 0,
+          tipHistory:    activity.tipHistory    || [],
+          giftsCount:    activity.giftsCount    || 0,
+          achievements:  activity.achievements  || [],
+          subscriptions: activity.subscriptions || {},
         },
       });
     } catch (err) {
@@ -103,6 +104,25 @@ export default async function handler(req, res) {
         account.following = [...following];
         await kvCommand("SET", accountKey, JSON.stringify(account));
         return res.status(200).json({ ok: true, following: account.following });
+      }
+
+      // Subscribe / unsubscribe action
+      if (action === "subscribe" && req.body.sub) {
+        const actResult = (await kvCommand("GET", activityKey)).result;
+        const activity  = parse(actResult) || {};
+        activity.subscriptions = activity.subscriptions || {};
+        activity.subscriptions[streamerId] = req.body.sub;
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
+      }
+
+      if (action === "unsubscribe") {
+        const actResult = (await kvCommand("GET", activityKey)).result;
+        const activity  = parse(actResult) || {};
+        activity.subscriptions = activity.subscriptions || {};
+        delete activity.subscriptions[streamerId];
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
       }
 
       // Tip action — record tip in activity
