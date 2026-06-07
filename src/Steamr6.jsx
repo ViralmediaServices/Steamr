@@ -5510,40 +5510,88 @@ function LiveViewerMap({ viewerCount = 1284 }) {
 // NOTIFICATIONS CENTER SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 function NotificationsCenterScreen({ onNavigate }) {
-  const [tab, setTab] = useState("all");
-  const [notifs, setNotifs] = useState(EXTENDED_NOTIFICATIONS);
+  const [tab,    setTab]    = useState("all");
+  const [notifs, setNotifs] = useState([]);
+  const [loading,setLoading]= useState(true);
+  const [error,  setError]  = useState("");
+
+  const TYPE_ICON  = {tip:"💰", follow:"❤️", sub:"⭐", payout:"💸", system:"⚙️", ppv:"🎬", gift:"🎁", verified:"✅", live:"🔴"};
+  const TYPE_COLOR = {tip:COLORS.gold, follow:COLORS.accent, sub:COLORS.accentC, payout:COLORS.green, system:COLORS.muted, ppv:COLORS.accentB, gift:COLORS.gold, verified:COLORS.green, live:COLORS.accent};
 
   const TABS = [
-    {key:"all",    label:"All"},
-    {key:"tip",    label:"💰 Tips"},
-    {key:"follow", label:"❤️ Follows"},
-    {key:"sub",    label:"⭐ Subs"},
-    {key:"payout", label:"💸 Payouts"},
-    {key:"system", label:"⚙️ System"},
+    {key:"all",      label:"All"},
+    {key:"tip",      label:"💰 Tips"},
+    {key:"follow",   label:"❤️ Follows"},
+    {key:"sub",      label:"⭐ Subs"},
+    {key:"verified", label:"✅ Account"},
+    {key:"system",   label:"⚙️ System"},
   ];
-  const TYPE_ICON  = {tip:"💰",follow:"❤️",sub:"⭐",payout:"💸",system:"⚙️",ppv:"🎬",gift:"🎁"};
-  const TYPE_COLOR = {tip:COLORS.gold,follow:COLORS.accent,sub:COLORS.accentC,payout:COLORS.green,system:COLORS.muted,ppv:COLORS.accentB,gift:COLORS.gold};
+
+  // Load notifications from API
+  const loadNotifications = () => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); setError("Please log in to view notifications."); return; }
+
+    fetch("/api/notifications", {
+      headers: { "x-auth-token": token },
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { setNotifs(data.notifications); }
+      else { setError(data.error || "Could not load notifications."); }
+      setLoading(false);
+    })
+    .catch(() => { setError("Could not connect."); setLoading(false); });
+  };
+
+  useEffect(() => { loadNotifications(); }, []);
+
+  const markAllRead = () => {
+    const token = localStorage.getItem("steamr_token");
+    fetch("/api/notifications", {
+      method:  "PATCH",
+      headers: { "x-auth-token": token, "Content-Type": "application/json" },
+      body:    JSON.stringify({ token, markAllRead: true }),
+    }).then(() => setNotifs(ns => ns.map(n => ({ ...n, read: true }))));
+  };
+
+  const markRead = (id) => {
+    const token = localStorage.getItem("steamr_token");
+    fetch("/api/notifications", {
+      method:  "PATCH",
+      headers: { "x-auth-token": token, "Content-Type": "application/json" },
+      body:    JSON.stringify({ token, notificationId: id }),
+    }).then(() => setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n)));
+  };
 
   const filtered = tab === "all" ? notifs : notifs.filter(n => n.type === tab);
   const unread   = notifs.filter(n => !n.read).length;
-  const groups   = [...new Set(filtered.map(n => n.group))];
 
-  const markRead    = (id) => setNotifs(ns => ns.map(n => n.id===id ? {...n, read:true} : n));
-  const markAllRead = ()   => setNotifs(ns => ns.map(n => ({...n, read:true})));
+  // Group by date
+  const groupNotif = (n) => {
+    const d    = new Date(n.time);
+    const now  = new Date();
+    const diff = (now - d) / (1000 * 60 * 60 * 24);
+    if (diff < 1)  return "Today";
+    if (diff < 2)  return "Yesterday";
+    if (diff < 7)  return "This Week";
+    return "Earlier";
+  };
+
+  const groups = [...new Set(filtered.map(groupNotif))];
 
   return (
-    <div style={{maxWidth:640, margin:"0 auto", padding:"32px 24px 60px"}}>
-      {/* Header */}
-      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20}}>
-        <h2 style={{margin:0, fontSize:24, fontWeight:900}}>
+    <div style={{ maxWidth:640, margin:"0 auto", padding:"32px 24px 60px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <h2 style={{ margin:0, fontSize:24, fontWeight:900 }}>
           Notifications
-          {unread > 0 && <span style={{marginLeft:8, fontSize:13, fontWeight:700, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:12, padding:"2px 9px"}}>{unread}</span>}
+          {unread > 0 && <span style={{ marginLeft:8, fontSize:13, fontWeight:700, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:12, padding:"2px 9px" }}>{unread}</span>}
         </h2>
-        {unread > 0 && <button onClick={markAllRead} style={{background:"none",border:"none",color:COLORS.accent,cursor:"pointer",fontSize:13,fontWeight:700}}>Mark all read</button>}
+        {unread > 0 && <button onClick={markAllRead} style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:13, fontWeight:700 }}>Mark all read</button>}
       </div>
 
       {/* Tabs */}
-      <div style={{display:"flex", gap:4, marginBottom:20, overflowX:"auto", paddingBottom:2}}>
+      <div style={{ display:"flex", gap:4, marginBottom:20, overflowX:"auto", paddingBottom:2 }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background:tab===t.key?COLORS.accent:COLORS.surface,
@@ -5555,17 +5603,36 @@ function NotificationsCenterScreen({ onNavigate }) {
         ))}
       </div>
 
-      {/* Grouped notifications */}
-      {groups.length === 0 ? (
-        <div style={{textAlign:"center", padding:"64px 24px", color:COLORS.muted}}>
-          <div style={{fontSize:40, marginBottom:12}}>🔔</div>
-          <div style={{fontWeight:700, fontSize:16}}>All caught up!</div>
-          <div style={{fontSize:13, marginTop:6}}>No notifications in this category</div>
+      {/* Loading */}
+      {loading && (
+        <div style={{ textAlign:"center", padding:"48px 24px", color:COLORS.muted }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>⏳</div>
+          <div>Loading notifications...</div>
         </div>
-      ) : groups.map(group => (
-        <div key={group} style={{marginBottom:24}}>
-          <div style={{fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:10}}>{group}</div>
-          {filtered.filter(n => n.group === group).map(n => (
+      )}
+
+      {/* Error */}
+      {error && !loading && (
+        <div style={{ textAlign:"center", padding:"48px 24px", color:COLORS.muted }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>⚠️</div>
+          <div>{error}</div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && filtered.length === 0 && (
+        <div style={{ textAlign:"center", padding:"64px 24px", color:COLORS.muted }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>🔔</div>
+          <div style={{ fontWeight:700, fontSize:16 }}>All caught up!</div>
+          <div style={{ fontSize:13, marginTop:6 }}>No notifications yet — activity will appear here</div>
+        </div>
+      )}
+
+      {/* Grouped notifications */}
+      {!loading && !error && groups.map(group => (
+        <div key={group} style={{ marginBottom:24 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 }}>{group}</div>
+          {filtered.filter(n => groupNotif(n) === group).map(n => (
             <div key={n.id} onClick={() => markRead(n.id)} style={{
               display:"flex", alignItems:"center", gap:14,
               padding:"13px 16px", marginBottom:6,
@@ -5580,11 +5647,11 @@ function NotificationsCenterScreen({ onNavigate }) {
                 border:`1px solid ${(TYPE_COLOR[n.type]||COLORS.muted)}44`,
                 display:"flex", alignItems:"center", justifyContent:"center", fontSize:18,
               }}>{TYPE_ICON[n.type]||"📣"}</div>
-              <div style={{flex:1, minWidth:0}}>
-                <div style={{fontSize:13, fontWeight:n.read?400:700, marginBottom:3, color:COLORS.text, lineHeight:1.4}}>{n.message}</div>
-                <div style={{fontSize:11, color:COLORS.muted}}>{n.time}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:n.read?400:700, marginBottom:3, color:COLORS.text, lineHeight:1.4 }}>{n.message}</div>
+                <div style={{ fontSize:11, color:COLORS.muted }}>{new Date(n.time).toLocaleString()}</div>
               </div>
-              {!n.read && <div style={{width:8, height:8, borderRadius:"50%", background:COLORS.accent, flexShrink:0}}/>}
+              {!n.read && <div style={{ width:8, height:8, borderRadius:"50%", background:COLORS.accent, flexShrink:0 }}/>}
             </div>
           ))}
         </div>
@@ -5592,6 +5659,7 @@ function NotificationsCenterScreen({ onNavigate }) {
     </div>
   );
 }
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SEARCH RESULTS SCREEN
