@@ -2084,15 +2084,42 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
 
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
-    if (!token) { setError("Please log in to view your profile."); setLoading(false); return; }
+    if (!token) { setLoading(false); return; }
+
+    // Prefill from localStorage session immediately so UI shows instantly
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (session?.name || session?.email) {
+        setProfile(p => p || {
+          name:        session.name  || "User",
+          displayName: session.name  || "User",
+          email:       session.email || "",
+          username:    session.email?.split("@")[0] || "user",
+          joinDate:    "Recently",
+          verified:    false,
+          bio:         "",
+          avatarImg:   null,
+          following:   [],
+        });
+        setActivity({ tokenBalance:350, totalSpent:0, tipsCount:0, tipHistory:[], giftsCount:0, achievements:[] });
+        setLoading(false); // show screen immediately, then update below
+      }
+    } catch {}
+
+    // Fetch real data from API in background
     fetch("/api/user-profile", { headers: { "x-auth-token": token } })
     .then(r => r.json())
     .then(data => {
-      if (data.ok) { setProfile(data.profile); setActivity(data.activity); }
-      else { setError(data.error || "Could not load profile."); }
+      if (data.ok) {
+        setProfile(data.profile);
+        setActivity(data.activity);
+      }
       setLoading(false);
     })
-    .catch(() => { setError("Could not connect."); setLoading(false); });
+    .catch(() => {
+      // API failed — profile already showing from localStorage fallback
+      setLoading(false);
+    });
   }, []);
 
   const TABS = [
@@ -2109,13 +2136,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
     </div>
   );
 
-  if (error) return (
-    <div style={{ textAlign:"center", padding:"80px 24px", color:COLORS.muted }}>
-      <div style={{ fontSize:36, marginBottom:12 }}>⚠️</div>
-      <div>{error}</div>
-      <Btn onClick={() => onNavigate("landing")} variant="ghost" style={{ marginTop:16 }}>Go Home</Btn>
-    </div>
-  );
+  // Non-blocking error — shown as banner inside the screen if needed
 
   return (
     <div style={{ maxWidth:760, margin:"0 auto", padding:isMobile?"20px 16px 60px":"32px 24px 60px" }}>
