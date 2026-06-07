@@ -6850,7 +6850,7 @@ export default function App() {
   });
   const [selectedStreamerId, setSelectedStreamerId] = useState(1);
   const [profileData,        setProfileData]        = useState(STREAMER_PROFILES[1]);
-  const [following,          setFollowing]          = useState(new Set([1, 4, 7]));
+  const [following,          setFollowing]          = useState(new Set());
   const [subscriptions,      setSubscriptions]      = useState({});
   const [notifications,      setNotifications]      = useState(INIT_NOTIFICATIONS);
   const [toasts,             setToasts]             = useState([]);
@@ -6907,6 +6907,15 @@ export default function App() {
       if (token && session?.role) {
         setUserRole(session.role);
         setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+        // Load following list from Upstash
+        fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && Array.isArray(data.profile?.following)) {
+            setFollowing(new Set(data.profile.following));
+          }
+        })
+        .catch(() => {});
       }
     } catch {}
   }, []);
@@ -6979,6 +6988,18 @@ export default function App() {
         const s = STREAMERS.find(x => x.id === id);
         addToast("follow", `Now following ${s ? s.name : "streamer"} ♥`);
         addNotification("follow", `Someone new started following you`);
+        // Save follow to Upstash user profile
+        try {
+          const token = localStorage.getItem("steamr_token");
+          if (token) {
+            // Update following list in user profile
+            fetch("/api/user-profile/follow", {
+              method: "POST",
+              headers: { "x-auth-token": token, "Content-Type": "application/json" },
+              body: JSON.stringify({ streamerId: id, action: "follow" }),
+            }).catch(() => {});
+          }
+        } catch {}
         // Save follow to Vercel KV so streamer can notify on go live
         try {
           const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
@@ -6997,6 +7018,17 @@ export default function App() {
           }
         } catch {}
       } else {
+        // Save unfollow to Upstash user profile
+        try {
+          const token = localStorage.getItem("steamr_token");
+          if (token) {
+            fetch("/api/user-profile/follow", {
+              method: "POST",
+              headers: { "x-auth-token": token, "Content-Type": "application/json" },
+              body: JSON.stringify({ streamerId: id, action: "unfollow" }),
+            }).catch(() => {});
+          }
+        } catch {}
         // Remove follow from KV
         try {
           const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
