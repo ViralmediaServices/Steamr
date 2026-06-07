@@ -2535,36 +2535,39 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
 function BuyTokensScreen({ onNavigate, viewerTokens = 350, onPurchase }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [selected,  setSelected]  = useState(2);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState("");
+  const [step,      setStep]      = useState("packs"); // packs | success
+  const [adding,    setAdding]    = useState(false);
 
   const selectedPack = TOKEN_PACKS.find(p => p.id === selected);
   const total        = selectedPack ? selectedPack.tokens + selectedPack.bonus : 0;
 
-  const handleStripeCheckout = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/create-checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packId:  selectedPack.id,
-          tokens:  selectedPack.tokens,
-          bonus:   selectedPack.bonus,
-          total:   total,
-          price:   selectedPack.price,
-          label:   `${total.toLocaleString()} Steamr Tokens`,
-        }),
-      });
-      if (!res.ok) throw new Error("Server error");
-      const { url } = await res.json();
-      window.location.href = url;
-    } catch (err) {
-      setError("Could not connect to payment provider. Please try again.");
-      setLoading(false);
-    }
+  const handleAddTokens = () => {
+    setAdding(true);
+    setTimeout(() => {
+      onPurchase && onPurchase(total);
+      setStep("success");
+      setAdding(false);
+    }, 800);
   };
+
+  if (step === "success") return (
+    <div style={{ maxWidth:480, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
+      <div style={{ width:80,height:80,borderRadius:"50%",background:COLORS.green+"22",
+        border:`2px solid ${COLORS.green}44`,margin:"0 auto 20px",
+        display:"flex",alignItems:"center",justifyContent:"center",fontSize:40 }}>✅</div>
+      <h2 style={{ margin:"0 0 8px",fontSize:26,fontWeight:900,color:COLORS.green }}>Tokens Added!</h2>
+      <p style={{ color:COLORS.muted,fontSize:14,marginBottom:8 }}>
+        <strong style={{ color:COLORS.gold }}>🪙 {total.toLocaleString()} tokens</strong> have been added to your wallet.
+      </p>
+      <p style={{ color:COLORS.muted,fontSize:13,marginBottom:28 }}>
+        New balance: <strong style={{ color:COLORS.gold }}>🪙 {(viewerTokens + total).toLocaleString()}</strong>
+      </p>
+      <div style={{ display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap" }}>
+        <Btn onClick={() => onNavigate("viewer-browse")} style={{ flex:1,maxWidth:200 }}>Browse Streams →</Btn>
+        <Btn onClick={() => { setStep("packs"); }} variant="secondary" style={{ flex:1,maxWidth:200 }}>Add More Tokens</Btn>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ maxWidth:520, margin:"0 auto", padding:isMobile?"24px 16px 60px":"48px 24px" }}>
@@ -2577,22 +2580,22 @@ function BuyTokensScreen({ onNavigate, viewerTokens = 350, onPurchase }) {
 
       {/* Pack selection */}
       {TOKEN_PACKS.map(pack => {
-        const tot = pack.tokens + pack.bonus;
+        const tot  = pack.tokens + pack.bonus;
         const isSel = selected === pack.id;
         return (
           <div key={pack.id} onClick={() => setSelected(pack.id)} style={{
             border:`2px solid ${isSel?COLORS.gold:COLORS.border}`,
-            borderRadius:14, padding:"16px 20px", marginBottom:12, cursor:"pointer",
+            borderRadius:14,padding:"16px 20px",marginBottom:12,cursor:"pointer",
             background:isSel?COLORS.gold+"11":COLORS.card,
-            display:"flex", justifyContent:"space-between", alignItems:"center",
-            transition:"all 0.2s", position:"relative",
+            display:"flex",justifyContent:"space-between",alignItems:"center",
+            transition:"all 0.2s",position:"relative",
           }}>
             {pack.popular && (
               <div style={{ position:"absolute",top:-10,left:16,background:COLORS.accent,color:"#fff",fontSize:9,fontWeight:800,borderRadius:20,padding:"3px 10px" }}>MOST POPULAR</div>
             )}
             <div>
               <div style={{ fontWeight:800,fontSize:18 }}>🪙 {pack.tokens.toLocaleString()}</div>
-              {pack.bonus>0 && <div style={{ color:COLORS.green,fontSize:12,fontWeight:700 }}>+ {pack.bonus.toLocaleString()} bonus → {tot.toLocaleString()} total</div>}
+              {pack.bonus > 0 && <div style={{ color:COLORS.green,fontSize:12,fontWeight:700 }}>+ {pack.bonus.toLocaleString()} bonus → {tot.toLocaleString()} total</div>}
             </div>
             <div style={{ textAlign:"right" }}>
               <div style={{ fontSize:22,fontWeight:900,color:isSel?COLORS.gold:COLORS.text }}>${fmtUSD(pack.price)}</div>
@@ -2603,55 +2606,42 @@ function BuyTokensScreen({ onNavigate, viewerTokens = 350, onPurchase }) {
       })}
 
       {/* Order summary */}
-      <div style={{ background:COLORS.gold+"14",border:`1px solid ${COLORS.gold}44`,borderRadius:12,padding:"14px 18px",marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+      <div style={{ background:COLORS.gold+"14",border:`1px solid ${COLORS.gold}44`,borderRadius:12,
+        padding:"14px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center" }}>
         <div>
           <div style={{ fontWeight:700,fontSize:14 }}>🪙 {total.toLocaleString()} tokens</div>
-          {selectedPack?.bonus>0 && <div style={{ fontSize:11,color:COLORS.green }}>Includes {selectedPack.bonus} bonus tokens</div>}
+          {selectedPack?.bonus > 0 && <div style={{ fontSize:11,color:COLORS.green }}>Includes {selectedPack.bonus} bonus tokens</div>}
+          <div style={{ fontSize:11,color:COLORS.muted,marginTop:2 }}>Your balance after: 🪙 {(viewerTokens+total).toLocaleString()}</div>
         </div>
         <div style={{ fontSize:24,fontWeight:900,color:COLORS.gold }}>${fmtUSD(selectedPack?.price||0)}</div>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div style={{ marginBottom:16,padding:"10px 14px",background:"#ff444422",border:"1px solid #ff444444",borderRadius:8,fontSize:13,color:"#ff6666" }}>
-          ⚠️ {error}
+      {/* Payment coming soon notice */}
+      <div style={{ background:COLORS.surface,border:`1px solid ${COLORS.border}`,borderRadius:12,
+        padding:"14px 18px",marginBottom:20,display:"flex",gap:12,alignItems:"flex-start" }}>
+        <div style={{ fontSize:20,flexShrink:0 }}>🔧</div>
+        <div>
+          <div style={{ fontWeight:700,fontSize:13,marginBottom:3 }}>Payment Processing Coming Soon</div>
+          <div style={{ fontSize:12,color:COLORS.muted,lineHeight:1.5 }}>
+            We're finalising our payment partner integration. Use the button below to add tokens for testing.
+          </div>
         </div>
-      )}
+      </div>
 
-      {/* Stripe checkout button */}
-      <button
-        onClick={handleStripeCheckout}
-        disabled={loading}
-        style={{
-          width:"100%", padding:"16px", borderRadius:12, border:"none",
-          background: loading ? COLORS.border : "#635bff",
-          color:"#fff", fontSize:16, fontWeight:800, cursor:loading?"not-allowed":"pointer",
-          display:"flex", alignItems:"center", justifyContent:"center", gap:10,
-          transition:"all 0.2s", opacity:loading?0.7:1,
-        }}>
-        {loading ? (
-          <>⏳ Connecting to Stripe…</>
-        ) : (
-          <>
-            <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="8" fill="white" fillOpacity="0.15"/>
-              <path d="M19.5 10C14.25 10 10 14.25 10 19.5S14.25 29 19.5 29 29 24.75 29 19.5 24.75 10 19.5 10zm1.2 14.3h-2.4v-7.8h2.4v7.8zm0-9.8h-2.4v-2.4h2.4v2.4z" fill="white"/>
-            </svg>
-            Pay ${fmtUSD(selectedPack?.price||0)} with Stripe
-          </>
-        )}
-      </button>
+      {/* Add tokens button */}
+      <Btn
+        onClick={handleAddTokens}
+        disabled={adding}
+        variant="gold"
+        style={{ width:"100%",fontSize:16,padding:"16px",fontWeight:900 }}>
+        {adding ? "Adding tokens…" : `🪙 Add ${total.toLocaleString()} Tokens`}
+      </Btn>
 
-      {/* Trust badges */}
       <div style={{ display:"flex",justifyContent:"center",gap:20,marginTop:16,flexWrap:"wrap" }}>
-        {["🔒 256-bit SSL","💳 All major cards","🔄 Instant delivery"].map(b => (
+        {["🔒 Secure","🔄 Instant delivery","💳 Zen Payments coming soon"].map(b => (
           <span key={b} style={{ fontSize:11,color:COLORS.muted }}>{b}</span>
         ))}
       </div>
-
-      <p style={{ textAlign:"center",color:COLORS.muted,fontSize:11,marginTop:12,lineHeight:1.6 }}>
-        You'll be taken to Stripe's secure checkout. Tokens are added to your account instantly after payment.
-      </p>
     </div>
   );
 }
