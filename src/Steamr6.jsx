@@ -1794,6 +1794,11 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const w = useWindowWidth(); const isMobile = w < 768;
   const tokens = viewerTokens; // Use real token balance from App
   const [tipAmount,  setTipAmount]  = useState(10);
+  const [customTip,  setCustomTip]  = useState("");
+  const [useCustom,  setUseCustom]  = useState(false);
+
+  // Effective tip amount — either preset or custom
+  const effectiveTip = useCustom ? (parseInt(customTip) || 0) : tipAmount;
   const [msgs,       setMsgs]       = useState(CHAT_MSGS);
   const [chatInput,  setChatInput]  = useState("");
   const [tipped,     setTipped]     = useState(false);
@@ -1837,17 +1842,17 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const streamerName = streamer?.name || "Streamer";
 
   const sendTip = () => {
-    if (tokens < tipAmount) return;
+    if (tokens < effectiveTip || effectiveTip < 1) return;
 
     // Deduct from real token balance
-    onSpendTokens && onSpendTokens(tipAmount);
+    onSpendTokens && onSpendTokens(effectiveTip);
 
-    setGoal(g => ({ ...g, current: Math.min(g.target, g.current + tipAmount) }));
-    setMsgs(m => [...m, { user: "You", msg: `sent ${tipAmount} tokens! 🎉`, tokens: tipAmount }]);
+    setGoal(g => ({ ...g, current: Math.min(g.target, g.current + effectiveTip) }));
+    setMsgs(m => [...m, { user: "You", msg: `sent ${effectiveTip} tokens! 🎉`, tokens: effectiveTip }]);
     setTipped(true);
-    addTipAlert("You", tipAmount, "own");
-    addToast("tip", `🪙 ${tipAmount} tokens sent to ${streamerName}!`);
-    addNotification("tip", `viewer sent you 🪙 ${tipAmount} tokens`);
+    addTipAlert("You", effectiveTip, "own");
+    addToast("tip", `🪙 ${effectiveTip} tokens sent to ${streamerName}!`);
+    addNotification("tip", `viewer sent you 🪙 ${effectiveTip} tokens`);
     setTimeout(() => setTipped(false), 3000);
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
 
@@ -1863,7 +1868,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           tip: {
             streamer:  streamerName,
             streamerId: selectedStreamerId,
-            tokens:    tipAmount,
+            tokens:    effectiveTip,
             date:      new Date().toISOString(),
           },
         }),
@@ -1952,19 +1957,55 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           {/* Tip controls */}
           <div style={{ padding:16, background:COLORS.surface, borderRadius:12 }}>
             <div style={{ fontSize:13, color:COLORS.muted, fontWeight:600, marginBottom:10 }}>Send Tokens</div>
-            <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+
+            {/* Preset amounts + custom toggle */}
+            <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
               {[10,25,50,100,200].map(t => (
-                <button key={t} onClick={() => setTipAmount(t)} style={{
-                  background: tipAmount===t ? COLORS.gold : COLORS.card,
-                  color:       tipAmount===t ? "#000"      : COLORS.text,
-                  border:     `1px solid ${tipAmount===t ? COLORS.gold : COLORS.border}`,
-                  borderRadius:8, padding:"6px 14px", fontWeight:700, fontSize:13, cursor:"pointer",
+                <button key={t} onClick={() => { setTipAmount(t); setUseCustom(false); setCustomTip(""); }} style={{
+                  background: !useCustom && tipAmount===t ? COLORS.gold : COLORS.card,
+                  color:       !useCustom && tipAmount===t ? "#000"      : COLORS.text,
+                  border:     `1px solid ${!useCustom && tipAmount===t ? COLORS.gold : COLORS.border}`,
+                  borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
                 }}>🪙 {t}</button>
               ))}
+              <button onClick={() => { setUseCustom(true); setCustomTip(""); }} style={{
+                background: useCustom ? COLORS.accentC+"33" : COLORS.card,
+                color:       useCustom ? COLORS.accentC      : COLORS.muted,
+                border:     `1px solid ${useCustom ? COLORS.accentC : COLORS.border}`,
+                borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
+              }}>✏️ Custom</button>
             </div>
+
+            {/* Custom amount input */}
+            {useCustom && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10,
+                background:COLORS.card, border:`1px solid ${COLORS.accentC}66`, borderRadius:10, padding:"8px 12px" }}>
+                <span style={{ color:COLORS.muted, fontSize:16 }}>🪙</span>
+                <input
+                  type="number" min="1" max={tokens}
+                  value={customTip}
+                  onChange={e => setCustomTip(e.target.value.replace(/[^0-9]/g,""))}
+                  placeholder="Enter any amount…"
+                  autoFocus
+                  style={{ flex:1, background:"transparent", border:"none", outline:"none",
+                    color:COLORS.gold, fontSize:16, fontWeight:800, width:"100%" }}
+                />
+                {customTip && parseInt(customTip) > tokens && (
+                  <span style={{ fontSize:11, color:"#ff6666", whiteSpace:"nowrap" }}>Not enough 🪙</span>
+                )}
+              </div>
+            )}
+
+            {/* Send button + balance */}
             <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <Btn onClick={sendTip} variant="gold" disabled={tokens < tipAmount} style={{ flex:1 }}>Send 🪙 {tipAmount}</Btn>
-              <div style={{ fontSize:12, color:COLORS.muted, whiteSpace:"nowrap" }}>Balance: <span style={{ color:COLORS.gold, fontWeight:700 }}>🪙 {tokens}</span></div>
+              <Btn onClick={sendTip} variant="gold"
+                disabled={tokens < effectiveTip || effectiveTip < 1}
+                style={{ flex:1 }}>
+                Send 🪙 {effectiveTip > 0 ? effectiveTip : "—"}
+              </Btn>
+              <div style={{ fontSize:12, color:COLORS.muted, whiteSpace:"nowrap" }}>
+                Balance: <span style={{ color:COLORS.gold, fontWeight:700 }}>🪙 {tokens}</span>
+              </div>
             </div>
           </div>
 
