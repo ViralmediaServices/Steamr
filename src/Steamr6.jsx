@@ -6166,16 +6166,13 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
       <div style={{background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:16,overflow:"hidden",transition:"transform 0.2s",cursor:"pointer"}}>
         <div style={{height:isMini?80:148,background:`linear-gradient(135deg,${COLORS.surface},${COLORS.bg})`,display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
           <div style={{fontSize:isMini?36:52}}>{item.thumbnail}</div>
-          {!bought && <div style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.75)",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:800,color:COLORS.gold}}>🔒 🪙 {item.price}</div>}
-          {bought  && <div style={{position:"absolute",top:8,right:8,background:COLORS.green+"cc",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:800,color:"#fff"}}>✓ Owned</div>}
+          <div style={{position:"absolute",top:8,right:8,background:COLORS.green+"cc",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:800,color:"#fff"}}>✓ Owned</div>
           {item.duration && <div style={{position:"absolute",bottom:8,left:8,background:"rgba(0,0,0,0.7)",borderRadius:4,padding:"2px 7px",fontSize:10,color:COLORS.muted}}>{item.duration}</div>}
         </div>
         <div style={{padding:"12px 14px"}}>
           <div style={{fontSize:11,color:COLORS.muted,marginBottom:4}}>{item.avatar} {item.streamer} · {item.category}</div>
           <div style={{fontWeight:700,fontSize:13,lineHeight:1.4,marginBottom:10}}>{item.title}</div>
-          {bought
-            ? <Btn style={{width:"100%",fontSize:12}} variant="secondary">▶ Watch Now</Btn>
-            : <Btn onClick={()=>setBuying(item)} style={{width:"100%",fontSize:12}} variant="gold">🔓 Unlock · 🪙 {item.price}</Btn>}
+          <Btn style={{width:"100%",fontSize:12}} variant="secondary">▶ Watch Now</Btn>
         </div>
       </div>
     );
@@ -6183,8 +6180,8 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
 
   return (
     <div style={{maxWidth:960,margin:"0 auto",padding:"32px 24px 60px"}}>
-      <h2 style={{margin:"0 0 4px",fontSize:24,fontWeight:900}}>🎬 Exclusive Content</h2>
-      <p style={{color:COLORS.muted,fontSize:14,marginBottom:20}}>Premium videos and clips from your favourite creators.</p>
+      <h2 style={{margin:"0 0 4px",fontSize:24,fontWeight:900}}>🎬 My Content</h2>
+      <p style={{color:COLORS.muted,fontSize:14,marginBottom:20}}>Videos and clips you own — purchased or unlocked via subscription.</p>
 
       <div style={{display:"flex",gap:4,marginBottom:20}}>
         {[{k:"videos",l:"🎬 Videos"},{k:"clips",l:"✂️ Clips"}].map(t=>(
@@ -6199,15 +6196,37 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
       {loading ? (
         <div style={{textAlign:"center",padding:"60px 24px",color:COLORS.muted}}>
           <div style={{fontSize:32,marginBottom:12}}>⏳</div>
-          <div>Loading content…</div>
+          <div>Loading your content…</div>
         </div>
-      ) : (
-        <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${isMobile?"160px":"256px"},1fr))`,gap:14}}>
-          {(tab==="videos"?PPV_CONTENT:CLIP_PURCHASES).map(item=>(
-            <ContentCard key={item.id} item={item} isMini={isMobile}/>
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const allItems   = tab==="videos" ? PPV_CONTENT : CLIP_PURCHASES;
+        const ownedItems = allItems.filter(item => isPurchased(item));
+
+        if (ownedItems.length === 0) return (
+          <div style={{textAlign:"center",padding:"64px 24px",color:COLORS.muted}}>
+            <div style={{fontSize:52,marginBottom:16}}>🎬</div>
+            <div style={{fontWeight:800,fontSize:18,marginBottom:8,color:COLORS.text}}>
+              No {tab==="videos"?"videos":"clips"} yet
+            </div>
+            <div style={{fontSize:14,color:COLORS.muted,lineHeight:1.7,marginBottom:24}}>
+              {tab==="videos"
+                ? "Subscribe to a streamer or purchase exclusive videos to see them here."
+                : "Subscribe to a streamer or purchase exclusive clips to see them here."}
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+              <Btn onClick={() => onNavigate("viewer-browse")} variant="secondary">Browse Streamers</Btn>
+            </div>
+          </div>
+        );
+
+        return (
+          <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${isMobile?"160px":"256px"},1fr))`,gap:14}}>
+            {ownedItems.map(item=>(
+              <ContentCard key={item.id} item={item} isMini={isMobile}/>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Purchase modal */}
       {buying && (
