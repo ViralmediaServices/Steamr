@@ -1897,7 +1897,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           <div style={{ position:"absolute", top:14, left:14 }}>
             {spyMode ? <Pill color={COLORS.gold}>🔍 SPY MODE</Pill> : <Pill color={COLORS.accent}>🔴 LIVE</Pill>}
           </div>
-          <div style={{ position:"absolute", top:14, right:14, background:"#00000066", borderRadius:8, padding:"4px 10px", fontSize:13, color:"#fff" }}>👁 1,284 watching</div>
+
           {/* Tip alerts overlay */}
           <TipAlertsOverlay alerts={tipAlerts} onDone={removeTipAlert} />
         </div>
@@ -2015,11 +2015,6 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           <GoalBar goal={goal} large />
         </Card>
 
-        {/* Live viewer map */}
-        <div style={{ marginBottom:14 }}>
-          <LiveViewerMap viewerCount={1284} />
-        </div>
-
         <Card>
           {/* Streamer header */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12, marginBottom:12 }}>
@@ -2069,7 +2064,16 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
       {/* Chat */}
       <Card style={{ display:"flex", flexDirection:"column", height:isMobile?400:620, padding:isMobile?10:16 }}>
-        <div style={{ fontWeight:700, marginBottom:12, fontSize:15 }}>💬 Live Chat</div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={{ fontWeight:700, fontSize:15 }}>💬 Live Chat</div>
+          <div style={{ display:"flex", alignItems:"center", gap:6, background:COLORS.surface,
+            border:`1px solid ${COLORS.border}`, borderRadius:20, padding:"4px 10px", fontSize:12 }}>
+            <span style={{ width:7,height:7,borderRadius:"50%",background:COLORS.accent,display:"inline-block",boxShadow:`0 0 6px ${COLORS.accent}` }}/>
+            <span style={{ color:COLORS.muted }}>👁</span>
+            <span style={{ fontWeight:700, color:COLORS.text }}>1,284</span>
+            <span style={{ color:COLORS.muted }}>watching</span>
+          </div>
+        </div>
         <div ref={chatRef} style={{ flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:10 }}>
           {msgs.map((m,i) => (
             <div key={i} style={{ fontSize:13 }}>
