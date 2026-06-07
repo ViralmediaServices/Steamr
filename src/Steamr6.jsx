@@ -2047,23 +2047,52 @@ function WishlistSection({ wishlist, viewerTokens, onGift, isOwn }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewerTokens = 350 }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [tab, setTab] = useState("overview"); // "overview" | "tips" | "subs" | "following"
+  const [tab,      setTab]     = useState("overview");
+  const [profile,  setProfile] = useState(null);
+  const [activity, setActivity]= useState(null);
+  const [loading,  setLoading] = useState(true);
+  const [error,    setError]   = useState("");
 
-  const totalSpent   = VIEWER_TIP_HISTORY.reduce((s, t) => s + t.tokens, 0);
-  const totalUSD     = (totalSpent * 0.10).toFixed(2);
-  const subCount     = Object.keys(subscriptions).length;
-  const followCount  = following ? following.size : 12;
+  const subCount    = Object.keys(subscriptions).length;
+  const followCount = following ? following.size : 0;
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setError("Please log in to view your profile."); setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { setProfile(data.profile); setActivity(data.activity); }
+      else { setError(data.error || "Could not load profile."); }
+      setLoading(false);
+    })
+    .catch(() => { setError("Could not connect."); setLoading(false); });
+  }, []);
 
   const TABS = [
     {key:"overview",  label:"Overview"},
-    {key:"tips",      label:"🪙 Tip History"},
-    {key:"subs",      label:"⭐ Subscriptions"},
+    {key:"tips",      label:"🪙 Tips"},
+    {key:"subs",      label:"⭐ Subs"},
     {key:"following", label:"❤️ Following"},
   ];
 
+  if (loading) return (
+    <div style={{ textAlign:"center", padding:"80px 24px", color:COLORS.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
+      <div>Loading your profile...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ textAlign:"center", padding:"80px 24px", color:COLORS.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⚠️</div>
+      <div>{error}</div>
+      <Btn onClick={() => onNavigate("landing")} variant="ghost" style={{ marginTop:16 }}>Go Home</Btn>
+    </div>
+  );
+
   return (
-    <div style={{ maxWidth:760, margin:"0 auto", padding:"32px 24px 60px" }}>
-      {/* ── Header ── */}
+    <div style={{ maxWidth:760, margin:"0 auto", padding:isMobile?"20px 16px 60px":"32px 24px 60px" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
         <button onClick={() => onNavigate("viewer-dashboard")}
           style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",fontSize:13,padding:0 }}>
@@ -2074,238 +2103,184 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
         </Btn>
       </div>
 
-      {/* ── Hero ── */}
       <Card style={{ marginBottom:24, overflow:"visible", padding:0 }}>
-        {/* Banner */}
         <div style={{ height:90, background:"linear-gradient(135deg,#1a0a2e,#2e0a1a,#0a1a2e)",
           position:"relative", overflow:"hidden", borderRadius:"14px 14px 0 0" }}>
           <div style={{ position:"absolute",inset:0,opacity:0.4,
-            backgroundImage:"repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,45,85,0.05) 10px,rgba(255,45,85,0.05) 20px)" }} />
+            backgroundImage:"repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,45,85,0.05) 10px,rgba(255,45,85,0.05) 20px)" }}/>
         </div>
         <div style={{ padding:"0 22px 22px" }}>
-          {/* Avatar floated up */}
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:14 }}>
-            <div style={{ width:80,height:80,borderRadius:"50%",
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14 }}>
+            <div style={{ width:80, height:80, borderRadius:"50%",
               background:`linear-gradient(135deg,${COLORS.accent},${COLORS.accentC})`,
-              border:`4px solid ${COLORS.bg}`,marginTop:-40,
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,lineHeight:1,
+              border:`4px solid ${COLORS.bg}`, marginTop:-40,
+              display:"flex", alignItems:"center", justifyContent:"center", fontSize:36,
               overflow:"hidden", flexShrink:0, position:"relative", zIndex:2 }}>
-              {VIEWER_PROFILE_DATA.avatarImg
-                ? <img src={VIEWER_PROFILE_DATA.avatarImg} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                : VIEWER_PROFILE_DATA.avatar}
+              {profile?.avatarImg
+                ? <img src={profile.avatarImg} alt="avatar" style={{ width:"100%",height:"100%",objectFit:"cover" }}/>
+                : "🦇"}
             </div>
-            <Btn onClick={() => onNavigate("viewer-edit-profile")} variant="ghost" style={{ fontSize:12,padding:"7px 14px" }}>
-              ⚙️ Settings
-            </Btn>
+            {profile?.verified && (
+              <div style={{ background:COLORS.green+"22", border:`1px solid ${COLORS.green}44`, borderRadius:8, padding:"5px 10px", fontSize:11, fontWeight:700, color:COLORS.green }}>
+                ✅ Verified
+              </div>
+            )}
           </div>
-          <h2 style={{ margin:"0 0 4px",fontSize:22,fontWeight:900 }}>
-            {VIEWER_PROFILE_DATA.displayName || VIEWER_PROFILE_DATA.username}
+          <h2 style={{ margin:"0 0 4px", fontSize:22, fontWeight:900 }}>
+            {profile?.displayName || profile?.name || "Anonymous"}
           </h2>
-          <div style={{ fontSize:12,color:COLORS.muted,marginBottom:12 }}>
-            Member since {VIEWER_PROFILE_DATA.joinDate}
+          <div style={{ fontSize:13, color:COLORS.muted, marginBottom:4 }}>
+            @{profile?.username || profile?.email?.split("@")[0]}
           </div>
-          <div style={{ display:"flex",gap:20 }}>
+          {profile?.bio && <div style={{ fontSize:13, color:COLORS.muted, marginBottom:8, lineHeight:1.5 }}>{profile.bio}</div>}
+          <div style={{ fontSize:12, color:COLORS.muted, marginBottom:14 }}>Member since {profile?.joinDate || "Recently"}</div>
+          <div style={{ display:"flex", gap:24, flexWrap:"wrap" }}>
             {[
               {label:"Following",  value:followCount},
-              {label:"Subscribed", value:subCount || 1},
-              {label:"Tips Sent",  value:VIEWER_TIP_HISTORY.length},
+              {label:"Subscribed", value:subCount},
+              {label:"Tips Sent",  value:activity?.tipsCount || 0},
             ].map(s => (
               <div key={s.label}>
-                <div style={{ fontWeight:900,fontSize:16 }}>{s.value}</div>
-                <div style={{ fontSize:11,color:COLORS.muted }}>{s.label}</div>
+                <div style={{ fontSize:20, fontWeight:900 }}>{s.value}</div>
+                <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.7 }}>{s.label}</div>
               </div>
             ))}
           </div>
         </div>
       </Card>
 
-      {/* ── Token + spend cards ── */}
-      <div style={{ display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(3,1fr)",
-        gap:12,marginBottom:24 }}>
-        {[
-          {icon:"🪙",label:"Token Balance",  value:`🪙 ${viewerTokens}`, color:COLORS.gold,   action:() => onNavigate("buy-tokens"), actionLabel:"Buy More"},
-          {icon:"💰",label:"Total Spent",    value:`$${totalUSD}`,        color:COLORS.muted,  sub:`🪙 ${totalSpent.toLocaleString()} tokens`},
-          {icon:"🎁",label:"Gifts Sent",     value:`0`,                   color:COLORS.accentC,sub:"All time"},
-        ].map(s => (
-          <Card key={s.label} style={{ padding:"14px 16px" }}>
-            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:6 }}>
-              {s.icon} {s.label}
-            </div>
-            <div style={{ fontSize:20,fontWeight:900,color:s.color,marginBottom:s.sub||s.action?4:0 }}>
-              {s.value}
-            </div>
-            {s.sub && <div style={{ fontSize:11,color:COLORS.muted }}>{s.sub}</div>}
-            {s.action && (
-              <button onClick={s.action} style={{ fontSize:11,color:COLORS.accent,background:"none",
-                border:"none",cursor:"pointer",padding:0,fontWeight:700 }}>
-                {s.actionLabel} →
-              </button>
-            )}
-          </Card>
-        ))}
-      </div>
-
-      {/* ── Achievements ── */}
-      <Card style={{ marginBottom:24 }}>
-        <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>🏆 Achievements</div>
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10 }}>
-          {VIEWER_ACHIEVEMENTS.map(a => (
-            <div key={a.id} style={{ textAlign:"center",
-              opacity: a.earned ? 1 : 0.3,
-              filter: a.earned ? "none" : "grayscale(1)",
-              cursor:"default",
-            }} title={a.desc}>
-              <div style={{ fontSize:28,marginBottom:4,
-                background: a.earned ? `linear-gradient(135deg,${COLORS.accent}22,${COLORS.gold}22)` : COLORS.surface,
-                width:52,height:52,borderRadius:14,display:"flex",alignItems:"center",
-                justifyContent:"center",margin:"0 auto 6px",
-                border:`1px solid ${a.earned ? COLORS.gold+"44" : COLORS.border}`,
-              }}>{a.icon}</div>
-              <div style={{ fontSize:10,fontWeight:700,color:a.earned?COLORS.text:COLORS.muted,
-                lineHeight:1.3 }}>{a.label}</div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* ── Tabs ── */}
-      <div style={{ display:"flex",gap:4,marginBottom:16,overflowX:"auto",paddingBottom:2 }}>
+      <div style={{ display:"flex", gap:4, marginBottom:20, overflowX:"auto" }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
-            background: tab===t.key ? COLORS.accent : COLORS.surface,
-            color:      tab===t.key ? "#fff"         : COLORS.muted,
+            background:tab===t.key?COLORS.accent:COLORS.surface,
+            color:tab===t.key?"#fff":COLORS.muted,
             border:`1px solid ${tab===t.key?COLORS.accent:COLORS.border}`,
-            borderRadius:8,padding:"7px 16px",cursor:"pointer",
-            fontWeight:700,fontSize:12,whiteSpace:"nowrap",transition:"all 0.18s",
+            borderRadius:8, padding:"7px 14px", cursor:"pointer",
+            fontWeight:700, fontSize:12, whiteSpace:"nowrap", transition:"all 0.18s",
           }}>{t.label}</button>
         ))}
       </div>
 
-      {/* ── Overview ── */}
-      {tab === "overview" && (
-        <Card>
-          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>📊 Activity Summary</div>
-          {[
-            {label:"Favourite streamer", value:"Luna Vex 🎵"},
-            {label:"Largest single tip",  value:"🪙 500 (May 18)"},
-            {label:"Avg tip size",         value:`🪙 ${Math.round(totalSpent/VIEWER_TIP_HISTORY.length)}`},
-            {label:"Tokens purchased",    value:`🪙 ${(viewerTokens + totalSpent).toLocaleString()} total`},
-            {label:"Member since",        value:VIEWER_PROFILE_DATA.joinDate},
-            {label:"Email",               value:VIEWER_PROFILE_DATA.email},
-          ].map(row => (
-            <div key={row.label} style={{ display:"flex",justifyContent:"space-between",
-              padding:"10px 0",borderBottom:`1px solid ${COLORS.border}22`,fontSize:13 }}>
-              <span style={{ color:COLORS.muted }}>{row.label}</span>
-              <span style={{ fontWeight:700 }}>{row.value}</span>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* ── Tip History ── */}
-      {tab === "tips" && (
-        <Card>
-          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>
-            🪙 Tip History <span style={{ fontSize:11,color:COLORS.muted,fontWeight:400 }}>({VIEWER_TIP_HISTORY.length} tips)</span>
-          </div>
-          <div style={{ display:"flex",flexDirection:"column",gap:0 }}>
-            {VIEWER_TIP_HISTORY.map((tip, i) => (
-              <div key={tip.id} style={{ display:"flex",alignItems:"center",gap:12,
-                padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`,
-              }}>
-                <div style={{ width:40,height:40,borderRadius:"50%",background:COLORS.surface,
-                  border:`1px solid ${COLORS.border}`,
-                  display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>
-                  {tip.avatar}
-                </div>
-                <div style={{ flex:1,minWidth:0 }}>
-                  <div style={{ fontWeight:700,fontSize:13 }}>{tip.streamer}</div>
-                  {tip.note && <div style={{ fontSize:11,color:COLORS.muted,fontStyle:"italic" }}>"{tip.note}"</div>}
-                </div>
-                <div style={{ textAlign:"right",flexShrink:0 }}>
-                  <div style={{ fontWeight:800,color:COLORS.gold,fontSize:14 }}>🪙 {tip.tokens}</div>
-                  <div style={{ fontSize:10,color:COLORS.muted }}>{tip.date}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ textAlign:"center",marginTop:16,padding:"12px",
-            background:COLORS.surface,borderRadius:10,fontSize:12,color:COLORS.muted }}>
-            Total tipped: <strong style={{ color:COLORS.gold }}>🪙 {totalSpent.toLocaleString()}</strong>
-            {" "}·{" "}
-            Value: <strong style={{ color:COLORS.green }}>${totalUSD}</strong>
-          </div>
-        </Card>
-      )}
-
-      {/* ── Subscriptions ── */}
-      {tab === "subs" && (
-        <Card>
-          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>⭐ Subscriptions</div>
-          {Object.keys(subscriptions).length === 0 ? (
-            <div style={{ textAlign:"center",padding:"32px 16px",color:COLORS.muted }}>
-              <div style={{ fontSize:36,marginBottom:12 }}>⭐</div>
-              <div style={{ fontWeight:700,marginBottom:8 }}>No subscriptions yet</div>
-              <div style={{ fontSize:13,marginBottom:20 }}>Subscribe to a streamer to unlock their Fan Club!</div>
-              <Btn onClick={() => onNavigate("viewer-browse")} variant="secondary">Browse Streamers</Btn>
-            </div>
-          ) : (
-            <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
-              {/* Show at least one sample sub */}
-              {[
-                { id:1, name:"Luna Vex", avatar:"🎵", tier:{name:"Fan",badge:"🌟",color:"#c0163a"}, since:"May 2026" },
-                ...Object.entries(subscriptions).map(([id,sub]) => {
-                  const s = STREAMERS.find(x => x.id === Number(id));
-                  return s ? { id:Number(id), name:s.name, avatar:s.avatar, tier:{name:sub.tierName,badge:sub.tierBadge,color:sub.tierColor}, since:sub.since } : null;
-                }).filter(Boolean),
-              ].map(sub => (
-                <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:12,
-                  padding:"14px 16px",background:COLORS.surface,borderRadius:12,
-                  border:`1px solid ${sub.tier.color+"44"}` }}>
-                  <div style={{ fontSize:28 }}>{sub.avatar}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:800,fontSize:14 }}>{sub.name}</div>
-                    <div style={{ fontSize:12,color:COLORS.muted }}>Since {sub.since}</div>
+      {tab==="overview" && (
+        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:14 }}>
+          <Card style={{ padding:"18px" }}>
+            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8 }}>🪙 Token Balance</div>
+            <div style={{ fontSize:28,fontWeight:900,color:COLORS.gold }}>{viewerTokens.toLocaleString()}</div>
+            <Btn onClick={() => onNavigate("buy-tokens")} variant="ghost" style={{ fontSize:12,marginTop:10,padding:"6px 12px" }}>+ Buy Tokens</Btn>
+          </Card>
+          <Card style={{ padding:"18px" }}>
+            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8 }}>💸 Total Spent</div>
+            <div style={{ fontSize:28,fontWeight:900,color:COLORS.accent }}>🪙 {(activity?.totalSpent||0).toLocaleString()}</div>
+            <div style={{ fontSize:12,color:COLORS.muted,marginTop:6 }}>across {activity?.tipsCount||0} tips</div>
+          </Card>
+          <Card style={{ padding:"18px" }}>
+            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8 }}>⭐ Subscriptions</div>
+            <div style={{ fontSize:28,fontWeight:900,color:COLORS.accentC }}>{subCount}</div>
+            <button onClick={() => setTab("subs")} style={{ background:"none",border:"none",color:COLORS.accent,cursor:"pointer",fontSize:12,marginTop:6,padding:0,fontWeight:700 }}>View all →</button>
+          </Card>
+          <Card style={{ padding:"18px" }}>
+            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8 }}>❤️ Following</div>
+            <div style={{ fontSize:28,fontWeight:900,color:COLORS.accent }}>{followCount}</div>
+            <button onClick={() => setTab("following")} style={{ background:"none",border:"none",color:COLORS.accent,cursor:"pointer",fontSize:12,marginTop:6,padding:0,fontWeight:700 }}>View all →</button>
+          </Card>
+          <Card style={{ padding:"18px", gridColumn:isMobile?"auto":"span 2" }}>
+            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:12 }}>🏆 Achievements</div>
+            {activity?.achievements?.length > 0 ? (
+              <div style={{ display:"flex",gap:12,flexWrap:"wrap" }}>
+                {activity.achievements.map((a,i) => (
+                  <div key={i} style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:28 }}>{a.icon}</div>
+                    <div style={{ fontSize:10,color:COLORS.muted,marginTop:4 }}>{a.label}</div>
                   </div>
-                  <SubBadge tier={{ name:sub.tier.name, badge:sub.tier.badge, color:sub.tier.color }} />
-                </div>
-              ))}
+                ))}
+              </div>
+            ) : (
+              <div style={{ color:COLORS.muted,fontSize:13,textAlign:"center",padding:"16px 0" }}>
+                🎯 Start tipping and following to earn achievements!
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {tab==="tips" && (
+        <Card>
+          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Tip History</div>
+          {activity?.tipHistory?.length > 0 ? activity.tipHistory.map((tip,i) => (
+            <div key={i} style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700,fontSize:13 }}>{tip.streamer}</div>
+                {tip.note && <div style={{ fontSize:11,color:COLORS.muted }}>{tip.note}</div>}
+                <div style={{ fontSize:10,color:COLORS.muted }}>{new Date(tip.date).toLocaleDateString()}</div>
+              </div>
+              <div style={{ fontWeight:800,color:COLORS.gold }}>🪙 {tip.tokens}</div>
+            </div>
+          )) : (
+            <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
+              <div style={{ fontSize:32,marginBottom:10 }}>🪙</div>
+              <div style={{ fontWeight:700 }}>No tips yet</div>
+              <div style={{ fontSize:12,marginTop:6 }}>Your tip history will appear here</div>
             </div>
           )}
         </Card>
       )}
 
-      {/* ── Following ── */}
-      {tab === "following" && (
+      {tab==="subs" && (
         <Card>
-          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>❤️ Following</div>
-          <div style={{ display:"grid",gridTemplateColumns:isMobile?"repeat(3,1fr)":"repeat(4,1fr)",gap:12 }}>
-            {STREAMERS.slice(0,12).map(s => (
-              <div key={s.id} onClick={() => onNavigate("profile",{streamerId:s.id})}
-                style={{ textAlign:"center",cursor:"pointer",padding:"12px 8px",
-                  background:COLORS.surface,borderRadius:12,border:`1px solid ${COLORS.border}`,
-                  transition:"all 0.15s" }}>
-                <div style={{ fontSize:28,marginBottom:6 }}>{s.avatar}</div>
-                <div style={{ fontSize:12,fontWeight:700,marginBottom:2,overflow:"hidden",
-                  textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</div>
-                <div style={{ display:"flex",alignItems:"center",justifyContent:"center",gap:4 }}>
-                  {s.live && <div style={{ width:6,height:6,borderRadius:"50%",background:COLORS.accent }} />}
-                  <div style={{ fontSize:10,color:s.live?COLORS.accent:COLORS.muted }}>
-                    {s.live?"Live":"Offline"}
-                  </div>
+          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
+          {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
+            const streamer = STREAMERS.find(s => s.id===Number(id));
+            return (
+              <div key={id} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
+                style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`,cursor:"pointer" }}>
+                <div style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44` }}>
+                  {streamer?.avatar||"🎭"}
                 </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
+                  <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since}</div>
+                </div>
+                <SubBadge tierName={sub.tierName} />
               </div>
-            ))}
-          </div>
+            );
+          }) : (
+            <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
+              <div style={{ fontSize:32,marginBottom:10 }}>⭐</div>
+              <div style={{ fontWeight:700 }}>No subscriptions yet</div>
+              <div style={{ fontSize:12,marginTop:6 }}>Subscribe to streamers to support them monthly</div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {tab==="following" && (
+        <Card>
+          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Streamers You Follow</div>
+          {followCount > 0 ? STREAMERS.filter(s => following?.has(s.id)).map(s => (
+            <div key={s.id} onClick={() => onNavigate("stream-room",{streamerId:s.id})}
+              style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`,cursor:"pointer" }}>
+              <div style={{ width:44,height:44,borderRadius:"50%",background:s.preview||COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>
+                {s.avatar}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:700,fontSize:13 }}>{s.name}</div>
+                <div style={{ fontSize:11,color:COLORS.muted }}>{s.tags?.slice(0,2).join(" · ")}</div>
+              </div>
+              {s.live && <Pill color={COLORS.accent} style={{ fontSize:10 }}>LIVE</Pill>}
+            </div>
+          )) : (
+            <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
+              <div style={{ fontSize:32,marginBottom:10 }}>❤️</div>
+              <div style={{ fontWeight:700 }}>Not following anyone yet</div>
+              <div style={{ fontSize:12,marginTop:6 }}>Click the heart on any stream to follow</div>
+            </div>
+          )}
         </Card>
       )}
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ENHANCED BUY TOKENS SCREEN — with confirmation + email receipt flow
-// ══════════════════════════════════════════════════════════════════════════════
 function BuyTokensScreen({ onNavigate, viewerTokens = 350, onPurchase }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [selected,  setSelected]  = useState(2);
@@ -6214,25 +6189,46 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
 function ViewerEditProfileScreen({ onNavigate, addToast }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [form, setForm] = useState({
-    displayName: VIEWER_PROFILE_DATA.displayName || "",
-    bio:         VIEWER_PROFILE_DATA.bio         || "",
-    avatar:      VIEWER_PROFILE_DATA.avatar      || "🦇",
-    avatarImg:   VIEWER_PROFILE_DATA.avatarImg   || null,
+    displayName: "", bio: "", avatar: "🦇", avatarImg: null,
   });
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) setForm(f => ({
+        ...f,
+        displayName: data.profile.displayName || data.profile.name || "",
+        bio:         data.profile.bio || "",
+        avatarImg:   data.profile.avatarImg || null,
+      }));
+    }).catch(() => {});
+  }, []);
   const [saved, setSaved] = useState(false);
 
   const update = (k, v) => setForm(f => ({ ...f, [k]:v }));
 
   const handleSave = () => {
-    // Persist back into the data object (client-side for now)
-    Object.assign(VIEWER_PROFILE_DATA, {
-      displayName: form.displayName,
-      bio:         form.bio,
-      avatarImg:   form.avatarImg,
-    });
     setSaved(true);
-    addToast && addToast("success", "Profile updated! ✓");
-    setTimeout(() => { setSaved(false); onNavigate("viewer-profile"); }, 900);
+    const token = localStorage.getItem("steamr_token");
+    fetch("/api/user-profile", {
+      method:  "POST",
+      headers: { "x-auth-token": token, "Content-Type": "application/json" },
+      body: JSON.stringify({ token, displayName: form.displayName, bio: form.bio, avatarImg: form.avatarImg }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        addToast && addToast("success", "Profile updated! ✓");
+        setTimeout(() => { setSaved(false); onNavigate("viewer-profile"); }, 900);
+      } else {
+        addToast && addToast("error", "Could not save. Try again.");
+        setSaved(false);
+      }
+    })
+    .catch(() => { addToast && addToast("error", "Connection error."); setSaved(false); });
   };
 
   return (
