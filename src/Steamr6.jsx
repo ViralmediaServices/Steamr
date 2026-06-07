@@ -2272,70 +2272,64 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
         </Card>
       )}
 
-      {tab==="subs" && (
-        <Card>
-          <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
-          {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
-            const streamer = STREAMERS.find(s => s.id===Number(id));
-            const [confirm, setConfirm] = React.useState(false);
-            return (
-              <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
-                {/* Subscription row */}
-                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
-                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
-                    {streamer?.avatar||"🎭"}
+      {tab==="subs" && (() => {
+        // confirmId tracks which subscription has confirm open — safe at render level
+        const [confirmId, setConfirmId] = useState(null);
+        return (
+          <Card>
+            <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
+            {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
+              const streamer  = STREAMERS.find(s => s.id===Number(id));
+              const isConfirm = confirmId === id;
+              return (
+                <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
+                      style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
+                      {streamer?.avatar||"🎭"}
+                    </div>
+                    <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}>
+                      <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
+                      <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
+                    </div>
+                    <SubBadge tierName={sub.tierName} />
+                    <button onClick={() => setConfirmId(isConfirm ? null : id)}
+                      style={{ background:"none",border:`1px solid ${isConfirm?"#ff6666":COLORS.border}`,borderRadius:8,
+                        color:isConfirm?"#ff6666":COLORS.muted,cursor:"pointer",fontSize:11,padding:"5px 10px",
+                        fontWeight:600,whiteSpace:"nowrap",flexShrink:0,transition:"all 0.2s" }}>
+                      {isConfirm ? "Keep" : "Cancel"}
+                    </button>
                   </div>
-                  <div style={{ flex:1, cursor:"pointer" }} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}>
-                    <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
-                    <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
-                  </div>
-                  <SubBadge tierName={sub.tierName} />
-                  <button onClick={() => setConfirm(true)}
-                    style={{ background:"none",border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.muted,
-                      cursor:"pointer",fontSize:11,padding:"5px 10px",fontWeight:600,whiteSpace:"nowrap",
-                      transition:"all 0.2s",flexShrink:0 }}
-                    onMouseEnter={e=>{ e.currentTarget.style.borderColor="#ff6666"; e.currentTarget.style.color="#ff6666"; }}
-                    onMouseLeave={e=>{ e.currentTarget.style.borderColor=COLORS.border; e.currentTarget.style.color=COLORS.muted; }}>
-                    Cancel
-                  </button>
+                  {isConfirm && (
+                    <div style={{ marginTop:12,padding:"14px 16px",background:COLORS.surface,border:`1px solid #ff666644`,borderRadius:10 }}>
+                      <div style={{ fontWeight:700,fontSize:13,marginBottom:6 }}>Cancel {streamer?.name||"Streamer"} subscription?</div>
+                      <div style={{ fontSize:12,color:COLORS.muted,marginBottom:14,lineHeight:1.5 }}>
+                        You'll lose access to their Fan Club and subscriber perks. This takes effect immediately.
+                      </div>
+                      <div style={{ display:"flex",gap:8 }}>
+                        <button onClick={() => setConfirmId(null)}
+                          style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
+                          Keep Subscription
+                        </button>
+                        <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
+                          style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
+                          Yes, Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Confirm cancel panel */}
-                {confirm && (
-                  <div style={{ marginTop:12, padding:"14px 16px", background:COLORS.surface,
-                    border:`1px solid #ff666644`, borderRadius:10 }}>
-                    <div style={{ fontWeight:700, fontSize:13, marginBottom:6 }}>
-                      Cancel {streamer?.name||"Streamer"} subscription?
-                    </div>
-                    <div style={{ fontSize:12, color:COLORS.muted, marginBottom:14, lineHeight:1.5 }}>
-                      You'll lose access to their Fan Club and subscriber perks at the end of the current billing period.
-                    </div>
-                    <div style={{ display:"flex", gap:8 }}>
-                      <button onClick={() => setConfirm(false)}
-                        style={{ flex:1, padding:"8px", background:COLORS.card, border:`1px solid ${COLORS.border}`,
-                          borderRadius:8, color:COLORS.text, cursor:"pointer", fontSize:12, fontWeight:700 }}>
-                        Keep Subscription
-                      </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirm(false); }}
-                        style={{ flex:1, padding:"8px", background:"#ff4444", border:"none",
-                          borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700 }}>
-                        Yes, Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
+              );
+            }) : (
+              <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
+                <div style={{ fontSize:32,marginBottom:10 }}>⭐</div>
+                <div style={{ fontWeight:700 }}>No subscriptions yet</div>
+                <div style={{ fontSize:12,marginTop:6 }}>Subscribe to streamers to support them monthly</div>
               </div>
-            );
-          }) : (
-            <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
-              <div style={{ fontSize:32,marginBottom:10 }}>⭐</div>
-              <div style={{ fontWeight:700 }}>No subscriptions yet</div>
-              <div style={{ fontSize:12,marginTop:6 }}>Subscribe to streamers to support them monthly</div>
-            </div>
-          )}
-        </Card>
-      )}
+            )}
+          </Card>
+        );
+      })()}
 
       {tab==="following" && (
         <Card>
@@ -7023,7 +7017,7 @@ export default function App() {
       if (token && session?.role) {
         setUserRole(session.role);
         setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
-        // Load real following list + token balance from Upstash
+        // Load real following list, token balance + subscriptions from Upstash
         fetch("/api/user-profile", { headers: { "x-auth-token": token } })
         .then(r => r.json())
         .then(data => {
@@ -7033,6 +7027,9 @@ export default function App() {
             }
             if (data.activity?.tokenBalance !== undefined) {
               setViewerTokens(data.activity.tokenBalance);
+            }
+            if (data.activity?.subscriptions) {
+              setSubscriptions(data.activity.subscriptions);
             }
           }
         })
@@ -7168,24 +7165,47 @@ export default function App() {
 
   // ── Subscribe — fires toast + notification ──
   const onSubscribe = (streamerId, tier) => {
-    setSubscriptions(prev => ({
-      ...prev,
-      [streamerId]: {
-        tierName:  tier.name,
-        tierBadge: tier.badge,
-        tierPrice: tier.price,
-        tierColor: tier.color,
-        since: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-      },
-    }));
+    const newSub = {
+      tierName:  tier.name,
+      tierBadge: tier.badge,
+      tierPrice: tier.price,
+      tierColor: tier.color,
+      since: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    };
+    setSubscriptions(prev => {
+      const updated = { ...prev, [streamerId]: newSub };
+      // Save to Upstash
+      const token = localStorage.getItem("steamr_token");
+      if (token) {
+        fetch("/api/user-profile", {
+          method:  "POST",
+          headers: { "x-auth-token": token, "Content-Type": "application/json" },
+          body:    JSON.stringify({ token, action: "subscribe", streamerId, sub: newSub }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
     const s = STREAMERS.find(x => x.id === streamerId);
     addToast("subscribe", `${tier.badge} Subscribed to ${s?.name || "streamer"} — ${tier.name}!`);
     addNotification("subscribe", `New ${tier.name} subscriber! ${tier.badge}`);
   };
 
   const onCancelSub = (streamerId) => {
-    setSubscriptions(prev => { const n = { ...prev }; delete n[streamerId]; return n; });
-    addToast("success", "Subscription cancelled");
+    setSubscriptions(prev => {
+      const updated = { ...prev };
+      delete updated[streamerId];
+      // Save to Upstash
+      const token = localStorage.getItem("steamr_token");
+      if (token) {
+        fetch("/api/user-profile", {
+          method:  "POST",
+          headers: { "x-auth-token": token, "Content-Type": "application/json" },
+          body:    JSON.stringify({ token, action: "unsubscribe", streamerId }),
+        }).catch(() => {});
+      }
+      return updated;
+    });
+    addToast("success", "Subscription cancelled ✓");
   };
 
   const renderScreen = () => {
