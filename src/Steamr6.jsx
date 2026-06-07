@@ -2075,21 +2075,21 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
       </div>
 
       {/* ── Hero ── */}
-      <Card style={{ marginBottom:24,overflow:"hidden",padding:0 }}>
+      <Card style={{ marginBottom:24, overflow:"visible", padding:0 }}>
         {/* Banner */}
-        <div style={{ height:90,background:"linear-gradient(135deg,#1a0a2e,#2e0a1a,#0a1a2e)",
-          position:"relative",overflow:"hidden" }}>
+        <div style={{ height:90, background:"linear-gradient(135deg,#1a0a2e,#2e0a1a,#0a1a2e)",
+          position:"relative", overflow:"hidden", borderRadius:"14px 14px 0 0" }}>
           <div style={{ position:"absolute",inset:0,opacity:0.4,
             backgroundImage:"repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,45,85,0.05) 10px,rgba(255,45,85,0.05) 20px)" }} />
         </div>
         <div style={{ padding:"0 22px 22px" }}>
           {/* Avatar floated up */}
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:14 }}>
-            <div style={{ width:76,height:76,borderRadius:"50%",
+            <div style={{ width:80,height:80,borderRadius:"50%",
               background:`linear-gradient(135deg,${COLORS.accent},${COLORS.accentC})`,
-              border:`3px solid ${COLORS.card}`,marginTop:-38,
+              border:`4px solid ${COLORS.bg}`,marginTop:-40,
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,lineHeight:1,
-              overflow:"hidden" }}>
+              overflow:"hidden", flexShrink:0, position:"relative", zIndex:2 }}>
               {VIEWER_PROFILE_DATA.avatarImg
                 ? <img src={VIEWER_PROFILE_DATA.avatarImg} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                 : VIEWER_PROFILE_DATA.avatar}
