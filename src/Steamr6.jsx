@@ -7092,7 +7092,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"🏆 Rankings",   screen:"leaderboard",     onClick:() => go("leaderboard")       },
     { label:"🪙 Buy Tokens", screen:"buy-tokens",      onClick:() => go("buy-tokens")        },
     { label:"🎬 Exclusive",  screen:"ppv-content",     onClick:() => go("ppv-content")       },
-    { label:"🎁 Gift Cards", screen:"gift-cards",      onClick:() => go("gift-cards")        },
+
     { label:"👤 Profile",    screen:"viewer-profile",  onClick:() => go("viewer-profile")    },
     { label:"🚪 Log Out",    screen:null,              onClick:() => onSignOut()              },
   ];
