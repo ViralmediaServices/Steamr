@@ -6189,7 +6189,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
 function ViewerEditProfileScreen({ onNavigate, addToast }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [form, setForm] = useState({
-    displayName: "", bio: "", avatar: "🦇", avatarImg: null,
+    displayName: "", username: "", bio: "", avatar: "🦇", avatarImg: null,
   });
 
   useEffect(() => {
@@ -6201,8 +6201,9 @@ function ViewerEditProfileScreen({ onNavigate, addToast }) {
       if (data.ok) setForm(f => ({
         ...f,
         displayName: data.profile.displayName || data.profile.name || "",
-        bio:         data.profile.bio || "",
-        avatarImg:   data.profile.avatarImg || null,
+        username:    data.profile.username    || data.profile.email?.split("@")[0] || "",
+        bio:         data.profile.bio         || "",
+        avatarImg:   data.profile.avatarImg   || null,
       }));
     }).catch(() => {});
   }, []);
@@ -6216,7 +6217,7 @@ function ViewerEditProfileScreen({ onNavigate, addToast }) {
     fetch("/api/user-profile", {
       method:  "POST",
       headers: { "x-auth-token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ token, displayName: form.displayName, bio: form.bio, avatarImg: form.avatarImg }),
+      body: JSON.stringify({ token, displayName: form.displayName, username: form.username, bio: form.bio, avatarImg: form.avatarImg }),
     })
     .then(r => r.json())
     .then(data => {
@@ -6276,9 +6277,22 @@ function ViewerEditProfileScreen({ onNavigate, addToast }) {
         </div>
       </Card>
 
-      {/* Display Name + Bio */}
+      {/* Display Name + Username + Bio */}
       <Card style={{ marginBottom:20 }}>
         <Input label="Display Name" value={form.displayName} onChange={v => update("displayName", v)} placeholder="How should we call you?" />
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>Username</label>
+          <div style={{ display:"flex", alignItems:"center", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:9, overflow:"hidden" }}>
+            <span style={{ padding:"10px 12px", color:COLORS.muted, fontSize:13, borderRight:`1px solid ${COLORS.border}`, userSelect:"none" }}>@</span>
+            <input
+              value={form.username}
+              onChange={e => update("username", e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0,30))}
+              placeholder="your_username"
+              style={{ flex:1, background:"transparent", border:"none", padding:"10px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
+            />
+          </div>
+          <div style={{ fontSize:10, color:COLORS.muted, marginTop:4 }}>Letters, numbers and underscores only · Max 30 chars</div>
+        </div>
         <div>
           <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>
             Bio <span style={{ fontWeight:400, color:form.bio.length>120?"#ff4444":COLORS.muted }}>{form.bio.length}/120</span>
@@ -6860,8 +6874,26 @@ export default function App() {
   const [viewerTokens,       setViewerTokens]       = useState(350);
   const [searchQuery,        setSearchQuery]        = useState("");
 
-  const onPurchase    = (tokens) => setViewerTokens(t => t + tokens);
-  const onSpendTokens = (tokens) => setViewerTokens(t => Math.max(0, t - tokens));
+  const syncTokenBalance = (newBalance) => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", {
+      method:  "PATCH",
+      headers: { "x-auth-token": token, "Content-Type": "application/json" },
+      body:    JSON.stringify({ tokenBalance: newBalance }),
+    }).catch(() => {});
+  };
+
+  const onPurchase = (tokens) => setViewerTokens(t => {
+    const next = t + tokens;
+    syncTokenBalance(next);
+    return next;
+  });
+  const onSpendTokens = (tokens) => setViewerTokens(t => {
+    const next = Math.max(0, t - tokens);
+    syncTokenBalance(next);
+    return next;
+  });
 
   // ── Theme toggle ──
   const toggleTheme = () => {
@@ -6907,12 +6939,17 @@ export default function App() {
       if (token && session?.role) {
         setUserRole(session.role);
         setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
-        // Load following list from Upstash
+        // Load real following list + token balance from Upstash
         fetch("/api/user-profile", { headers: { "x-auth-token": token } })
         .then(r => r.json())
         .then(data => {
-          if (data.ok && Array.isArray(data.profile?.following)) {
-            setFollowing(new Set(data.profile.following));
+          if (data.ok) {
+            if (Array.isArray(data.profile?.following)) {
+              setFollowing(new Set(data.profile.following));
+            }
+            if (data.activity?.tokenBalance !== undefined) {
+              setViewerTokens(data.activity.tokenBalance);
+            }
           }
         })
         .catch(() => {});
