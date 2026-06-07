@@ -6234,6 +6234,102 @@ function ViewerEditProfileScreen({ onNavigate, addToast }) {
 }
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ADMIN SCREEN — Account cleanup (password protected)
+// ══════════════════════════════════════════════════════════════════════════════
+function AdminScreen({ onNavigate }) {
+  const [adminKey,  setAdminKey]  = useState("");
+  const [authed,    setAuthed]    = useState(false);
+  const [accounts,  setAccounts]  = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [status,    setStatus]    = useState("");
+  const [error,     setError]     = useState("");
+
+  const fetchAccounts = async (key) => {
+    setLoading(true); setError("");
+    try {
+      const res  = await fetch("/api/admin-cleanup", { headers: { "x-admin-key": key } });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setAuthed(false); }
+      else { setAccounts(data.accounts); setAuthed(true); }
+    } catch { setError("Could not connect to server."); }
+    setLoading(false);
+  };
+
+  const deleteAccount = async (email) => {
+    if (!window.confirm(`Delete account: ${email}?`)) return;
+    try {
+      const res  = await fetch("/api/admin-cleanup", {
+        method: "DELETE",
+        headers: { "x-admin-key": adminKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (data.ok) { setStatus(`✅ Deleted ${email}`); fetchAccounts(adminKey); }
+      else setError(data.error);
+    } catch { setError("Delete failed."); }
+  };
+
+  const deleteAll = async () => {
+    if (!window.confirm("Delete ALL accounts? This cannot be undone.")) return;
+    try {
+      const res  = await fetch("/api/admin-cleanup", {
+        method: "POST",
+        headers: { "x-admin-key": adminKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-all-test" }),
+      });
+      const data = await res.json();
+      if (data.ok) { setStatus(`✅ Deleted ${data.deleted} records`); setAccounts([]); }
+      else setError(data.error);
+    } catch { setError("Delete failed."); }
+  };
+
+  return (
+    <div style={{ maxWidth:640, margin:"0 auto", padding:"40px 24px 60px" }}>
+      <h2 style={{ margin:"0 0 6px", fontSize:24, fontWeight:900 }}>🛡️ Admin Panel</h2>
+      <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage Upstash accounts. Keep this page private.</p>
+
+      {!authed ? (
+        <Card>
+          <Input label="Admin Secret Key" type="password" value={adminKey} onChange={setAdminKey} placeholder="Your ADMIN_SECRET_KEY" />
+          {error && <div style={{ marginBottom:12, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>❌ {error}</div>}
+          <Btn onClick={() => fetchAccounts(adminKey)} style={{ width:"100%" }} disabled={!adminKey||loading}>
+            {loading ? "Loading…" : "List All Accounts →"}
+          </Btn>
+        </Card>
+      ) : (
+        <>
+          {status && <div style={{ marginBottom:12, padding:"10px 14px", background:COLORS.green+"22", border:`1px solid ${COLORS.green}44`, borderRadius:8, fontSize:13, color:COLORS.green }}>{status}</div>}
+          {error  && <div style={{ marginBottom:12, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>❌ {error}</div>}
+
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ fontWeight:700 }}>{accounts.length} account{accounts.length!==1?"s":""} found</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <Btn onClick={() => fetchAccounts(adminKey)} variant="secondary" style={{ fontSize:12 }}>🔄 Refresh</Btn>
+              <Btn onClick={deleteAll} variant="ghost" style={{ fontSize:12, color:"#ff6666" }}>🗑️ Delete All</Btn>
+            </div>
+          </div>
+
+          <Card style={{ padding:0, overflow:"hidden" }}>
+            {accounts.length === 0 ? (
+              <div style={{ padding:"32px", textAlign:"center", color:COLORS.muted }}>No accounts found</div>
+            ) : accounts.map((a, i) => (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}22` }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{a.email || a.key}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{a.name} · {a.role} · {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown"}</div>
+                </div>
+                <Btn onClick={() => deleteAccount(a.email)} variant="ghost" style={{ fontSize:11, color:"#ff6666", padding:"5px 10px" }}>Delete</Btn>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 function GlobalStyles() {
   const isDark = useIsDark();
   const sBase  = isDark ? "#2d1f28" : "#f0ccd8";
@@ -6770,6 +6866,15 @@ export default function App() {
     setScreen("landing");
   };
 
+  // ── Admin access via URL ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("admin") === "true") {
+      setScreen("admin");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // ── Stripe payment return handler ──────────────────────────────────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -6870,6 +6975,7 @@ export default function App() {
     switch (screen) {
       case "landing":            return <LandingScreen onNavigate={navigate} />;
       case "login":              return <LoginScreen onNavigate={navigate} onLogin={onLogin} />;
+      case "admin":              return <AdminScreen onNavigate={navigate} />;
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
       case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} />;
