@@ -1614,9 +1614,9 @@ function BrowseScreen({ onNavigate, following, onFollow }) {
 }
 
 // ── STREAM ROOM ───────────────────────────────────────────────────────────────
-function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions = {}, onSubscribe }) {
+function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions = {}, onSubscribe, viewerTokens = 350, onSpendTokens, selectedStreamerId = 1 }) {
   const w = useWindowWidth(); const isMobile = w < 768;
-  const [tokens,     setTokens]     = useState(350);
+  const tokens = viewerTokens; // Use real token balance from App
   const [tipAmount,  setTipAmount]  = useState(10);
   const [msgs,       setMsgs]       = useState(CHAT_MSGS);
   const [chatInput,  setChatInput]  = useState("");
@@ -1656,17 +1656,43 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   }, []);
   const currentSub = subscriptions[1] || null;   // stream room is always Luna Vex (id=1)
 
+  // Get streamer name for tip record
+  const streamer = STREAMERS.find(s => s.id === selectedStreamerId);
+  const streamerName = streamer?.name || "Streamer";
+
   const sendTip = () => {
     if (tokens < tipAmount) return;
-    setTokens(t => t - tipAmount);
+
+    // Deduct from real token balance
+    onSpendTokens && onSpendTokens(tipAmount);
+
     setGoal(g => ({ ...g, current: Math.min(g.target, g.current + tipAmount) }));
     setMsgs(m => [...m, { user: "You", msg: `sent ${tipAmount} tokens! 🎉`, tokens: tipAmount }]);
     setTipped(true);
     addTipAlert("You", tipAmount, "own");
-    addToast("tip", `🪙 ${tipAmount} tokens sent to Luna Vex!`);
+    addToast("tip", `🪙 ${tipAmount} tokens sent to ${streamerName}!`);
     addNotification("tip", `viewer sent you 🪙 ${tipAmount} tokens`);
     setTimeout(() => setTipped(false), 3000);
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+
+    // Save tip to Upstash activity record
+    const token = localStorage.getItem("steamr_token");
+    if (token) {
+      fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          token,
+          action:   "tip",
+          tip: {
+            streamer:  streamerName,
+            streamerId: selectedStreamerId,
+            tokens:    tipAmount,
+            date:      new Date().toISOString(),
+          },
+        }),
+      }).catch(() => {});
+    }
   };
 
   const sendChat = () => {
@@ -7112,7 +7138,7 @@ export default function App() {
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
       case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} />;
-      case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} />;
+      case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} />;
       case "buy-tokens":         return <BuyTokensScreen onNavigate={navigate} viewerTokens={viewerTokens} onPurchase={onPurchase} />;
       case "kyc-streamer":       return <KYCScreen role="streamer" onNavigate={navigate} />;
       case "kyc-viewer":         return <KYCScreen role="viewer"   onNavigate={navigate} />;
