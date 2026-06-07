@@ -6254,42 +6254,65 @@ function GiftCardScreen({ onNavigate }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subscriptions = {}, addToast }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const name     = VIEWER_PROFILE_DATA.displayName;
 
+  const [profile,  setProfile]  = useState(null);
+  const [activity, setActivity] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { setProfile(data.profile); setActivity(data.activity); }
+    })
+    .catch(() => {});
+
+    // Fallback: fill from localStorage immediately
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (session?.name) setProfile(p => p || { name: session.name, displayName: session.name, username: session.email?.split("@")[0], avatarImg: null });
+    } catch {}
+  }, []);
+
+  const name        = profile?.displayName || profile?.name || "Viewer";
+  const username    = profile?.username    || "";
+  const joinDate    = profile?.joinDate    || "";
+  const avatarImg   = profile?.avatarImg   || null;
+  const tipsCount   = activity?.tipsCount  || 0;
+  const totalSpent  = activity?.totalSpent || 0;
+  const tipHistory  = activity?.tipHistory || [];
+  const achievements = activity?.achievements || [];
+
+  const subCount    = Object.keys(subscriptions).length;
+  const followCount = following?.size || 0;
   const liveFollowed = STREAMERS.filter(s => s.live && following?.has(s.id));
-  const totalSpent   = VIEWER_TIP_HISTORY.reduce((s, t) => s + t.tokens, 0);
-  const subCount     = Object.keys(subscriptions).length;
-  const followCount  = following?.size || 0;
-  const earnedCount  = VIEWER_ACHIEVEMENTS.filter(a => a.earned).length;
-
-  // Recommended = not following, live
-  const recommended = STREAMERS.filter(s => s.live && !following?.has(s.id)).slice(0, 4);
+  const recommended  = STREAMERS.filter(s => s.live && !following?.has(s.id)).slice(0, 4);
 
   const STATS = [
-    { label:"Token Balance", value:`🪙 ${viewerTokens.toLocaleString()}`, color:COLORS.gold,   action:() => onNavigate("buy-tokens"),  cta:"Top Up" },
-    { label:"Following",     value:followCount,                            color:COLORS.accent,  action:() => onNavigate("viewer-profile"), cta:"View" },
-    { label:"Subscriptions", value:subCount,                               color:COLORS.accentC, action:() => onNavigate("viewer-profile"), cta:"View" },
-    { label:"Tips Sent",     value:VIEWER_TIP_HISTORY.length,              color:COLORS.green,   action:() => onNavigate("viewer-profile"), cta:"History" },
+    { label:"Token Balance", value:`🪙 ${viewerTokens.toLocaleString()}`, color:COLORS.gold,    action:() => onNavigate("buy-tokens"),    cta:"Top Up"  },
+    { label:"Following",     value:followCount,                            color:COLORS.accent,  action:() => onNavigate("viewer-profile"), cta:"View"    },
+    { label:"Subscriptions", value:subCount,                               color:COLORS.accentC, action:() => onNavigate("viewer-profile"), cta:"View"    },
+    { label:"Tips Sent",     value:tipsCount,                              color:COLORS.green,   action:() => onNavigate("viewer-profile"), cta:"History" },
   ];
 
   return (
     <div style={{ maxWidth:980, margin:"0 auto", padding:isMobile?"20px 16px 60px":"32px 24px 60px" }}>
 
-      {/* ── Greeting Hero ── */}
+      {/* Greeting Hero */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24, flexWrap:"wrap", gap:12 }}>
         <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-          {/* Avatar */}
-          <div style={{ width:52, height:52, borderRadius:"50%", background:COLORS.card, border:`2px solid ${COLORS.border}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, overflow:"hidden", flexShrink:0 }}>
-            {VIEWER_PROFILE_DATA.avatarImg
-              ? <img src={VIEWER_PROFILE_DATA.avatarImg} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
-              : VIEWER_PROFILE_DATA.avatar}
+          <div style={{ width:52, height:52, borderRadius:"50%", background:COLORS.card, border:`2px solid ${COLORS.border}`,
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, overflow:"hidden", flexShrink:0 }}>
+            {avatarImg ? <img src={avatarImg} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : "🦇"}
           </div>
           <div>
             <div style={{ fontSize:isMobile?18:22, fontWeight:900 }}>{greeting}, {name} 👋</div>
-            <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>@{VIEWER_PROFILE_DATA.username} · Member since {VIEWER_PROFILE_DATA.joinDate}</div>
+            <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>
+              {username && `@${username}`}{joinDate && ` · Member since ${joinDate}`}
+            </div>
           </div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
@@ -6298,11 +6321,11 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
         </div>
       </div>
 
-      {/* ── Stat Cards ── */}
+      {/* Stat Cards */}
       <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:10, marginBottom:28 }}>
         {STATS.map(s => (
-          <div key={s.label} onClick={s.action} style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"16px", cursor:"pointer", transition:"transform 0.18s, box-shadow 0.18s" }}
-            className="steamr-card-hover">
+          <div key={s.label} onClick={s.action} style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`,
+            borderRadius:14, padding:"16px", cursor:"pointer", transition:"transform 0.18s, box-shadow 0.18s" }}>
             <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.7, marginBottom:6 }}>{s.label}</div>
             <div style={{ fontSize:isMobile?20:24, fontWeight:900, color:s.color }}>{s.value}</div>
             <div style={{ fontSize:11, color:s.color, marginTop:6, fontWeight:700 }}>{s.cta} →</div>
@@ -6311,7 +6334,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 320px", gap:20, alignItems:"start" }}>
-        {/* ── Left column ── */}
+        {/* Left column */}
         <div>
 
           {/* Live Now */}
@@ -6328,12 +6351,12 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
               </div>
             ) : (
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:12 }}>
-                {liveFollowed.map(s => <StreamCard key={s.id} streamer={s} onClick={() => onNavigate("stream-room", { streamerId:s.id })} />)}
+                {liveFollowed.map(s => <StreamCard key={s.id} streamer={s} onNavigate={onNavigate} />)}
               </div>
             )}
           </div>
 
-          {/* Your Subscriptions */}
+          {/* Subscriptions */}
           {subCount > 0 && (
             <div style={{ marginBottom:24 }}>
               <div style={{ fontWeight:800, fontSize:16, marginBottom:12 }}>⭐ Your Subscriptions</div>
@@ -6342,11 +6365,11 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
                   const streamer = STREAMERS.find(s => s.id === Number(id));
                   return (
                     <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
-                      style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card, border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer", transition:"all 0.18s" }}
-                      className="steamr-card-hover">
-                      <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0, border:`2px solid ${sub.tierColor}44` }}>
-                        {streamer?.avatar || "🎭"}
-                      </div>
+                      style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
+                        border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
+                      <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
+                        display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0,
+                        border:`2px solid ${sub.tierColor}44` }}>{streamer?.avatar || "🎭"}</div>
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:700, fontSize:13 }}>{streamer?.name || "Streamer"}</div>
                         <div style={{ fontSize:11, color:COLORS.muted }}>Since {sub.since}</div>
@@ -6360,50 +6383,62 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
             </div>
           )}
 
-          {/* Recent Tip Activity */}
+          {/* Recent Tips */}
           <div style={{ marginBottom:24 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
               <div style={{ fontWeight:800, fontSize:16 }}>🪙 Recent Tips</div>
               <button onClick={() => onNavigate("viewer-profile")} style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:12, fontWeight:700 }}>Full history →</button>
             </div>
-            <Card style={{ padding:0, overflow:"hidden" }}>
-              {VIEWER_TIP_HISTORY.slice(0,4).map((tip, i) => (
-                <div key={tip.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px", borderBottom: i<3 ? `1px solid ${COLORS.border}22` : "none" }}>
-                  <div style={{ width:36, height:36, borderRadius:"50%", background:COLORS.surface, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{tip.avatar}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13, fontWeight:700 }}>{tip.streamer}</div>
-                    {tip.note && <div style={{ fontSize:11, color:COLORS.muted }}>{tip.note}</div>}
+            {tipHistory.length > 0 ? (
+              <Card style={{ padding:0, overflow:"hidden" }}>
+                {tipHistory.slice(0,4).map((tip, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px",
+                    borderBottom: i < Math.min(tipHistory.length,4)-1 ? `1px solid ${COLORS.border}22` : "none" }}>
+                    <div style={{ width:36, height:36, borderRadius:"50%", background:COLORS.surface,
+                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>🎭</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:700 }}>{tip.streamer}</div>
+                      {tip.note && <div style={{ fontSize:11, color:COLORS.muted }}>{tip.note}</div>}
+                    </div>
+                    <div style={{ textAlign:"right" }}>
+                      <div style={{ fontWeight:800, color:COLORS.gold }}>🪙 {tip.tokens}</div>
+                      <div style={{ fontSize:10, color:COLORS.muted }}>{new Date(tip.date).toLocaleDateString()}</div>
+                    </div>
                   </div>
-                  <div style={{ textAlign:"right" }}>
-                    <div style={{ fontWeight:800, color:COLORS.gold }}>🪙 {tip.tokens}</div>
-                    <div style={{ fontSize:10, color:COLORS.muted }}>{tip.date}</div>
-                  </div>
-                </div>
-              ))}
-            </Card>
+                ))}
+              </Card>
+            ) : (
+              <Card style={{ textAlign:"center", padding:"28px" }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>🪙</div>
+                <div style={{ fontSize:13, color:COLORS.muted }}>No tips yet — send your first tip in a live stream!</div>
+                <Btn onClick={() => onNavigate("viewer-browse")} variant="ghost" style={{ marginTop:12, fontSize:12 }}>Browse Streams</Btn>
+              </Card>
+            )}
           </div>
         </div>
 
-        {/* ── Right sidebar ── */}
+        {/* Right sidebar */}
         <div>
           {/* Achievements */}
           <Card style={{ marginBottom:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
               <div style={{ fontWeight:800, fontSize:14 }}>🏆 Achievements</div>
-              <div style={{ fontSize:11, color:COLORS.muted }}>{earnedCount}/{VIEWER_ACHIEVEMENTS.length}</div>
+              <div style={{ fontSize:11, color:COLORS.muted }}>{achievements.length} earned</div>
             </div>
-            {/* Progress bar */}
-            <div style={{ height:6, background:COLORS.surface, borderRadius:3, marginBottom:14, overflow:"hidden" }}>
-              <div style={{ height:"100%", width:`${(earnedCount/VIEWER_ACHIEVEMENTS.length)*100}%`, background:`linear-gradient(90deg,${COLORS.accent},${COLORS.gold})`, borderRadius:3, transition:"width 0.4s" }}/>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-              {VIEWER_ACHIEVEMENTS.map(a => (
-                <div key={a.id} title={`${a.label}: ${a.desc}`} style={{ textAlign:"center", opacity: a.earned ? 1 : 0.3, transition:"opacity 0.2s", cursor:"default" }}>
-                  <div style={{ fontSize:24, marginBottom:3 }}>{a.icon}</div>
-                  <div style={{ fontSize:9, color:COLORS.muted, lineHeight:1.2 }}>{a.label}</div>
-                </div>
-              ))}
-            </div>
+            {achievements.length > 0 ? (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                {achievements.map((a, i) => (
+                  <div key={i} style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:24, marginBottom:3 }}>{a.icon}</div>
+                    <div style={{ fontSize:9, color:COLORS.muted, lineHeight:1.2 }}>{a.label}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize:12, color:COLORS.muted, textAlign:"center", padding:"12px 0", lineHeight:1.6 }}>
+                🎯 Tip streamers, follow creators and subscribe to earn achievements!
+              </div>
+            )}
           </Card>
 
           {/* Recommended */}
@@ -6416,15 +6451,15 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
                 {recommended.map(s => (
                   <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId:s.id })}
                     style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", padding:"8px", borderRadius:10, transition:"background 0.15s" }}>
-                    <div style={{ width:40, height:40, borderRadius:10, background:s.preview||COLORS.surface, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{s.avatar}</div>
+                    <div style={{ width:40, height:40, borderRadius:10, background:s.preview||COLORS.surface,
+                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{s.avatar}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
-                      <div style={{ fontSize:10, color:COLORS.muted }}>👁 {s.viewers?.toLocaleString()}</div>
+                      <div style={{ fontSize:10, color:COLORS.muted }}>{s.viewers?.toLocaleString()} viewers</div>
                     </div>
-                    {s.live && <div style={{ width:8, height:8, borderRadius:"50%", background:COLORS.accent, flexShrink:0 }}/>}
+                    <Pill color={COLORS.accent} style={{ fontSize:9, padding:"2px 6px" }}>LIVE</Pill>
                   </div>
                 ))}
-                <Btn onClick={() => onNavigate("discovery")} variant="ghost" style={{ fontSize:12, marginTop:4 }}>Discover more →</Btn>
               </div>
             )}
           </Card>
@@ -6434,9 +6469,6 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// VIEWER EDIT PROFILE SCREEN
-// ══════════════════════════════════════════════════════════════════════════════
 function ViewerEditProfileScreen({ onNavigate, addToast }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [form, setForm] = useState({
