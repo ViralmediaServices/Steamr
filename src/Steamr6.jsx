@@ -1790,7 +1790,7 @@ function BrowseScreen({ onNavigate, following, onFollow }) {
 }
 
 // ── STREAM ROOM ───────────────────────────────────────────────────────────────
-function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions = {}, onSubscribe, viewerTokens = 350, onSpendTokens, selectedStreamerId = 1 }) {
+function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions = {}, onSubscribe, viewerTokens = 350, onSpendTokens, selectedStreamerId = 1, following = new Set(), onFollow }) {
   const w = useWindowWidth(); const isMobile = w < 768;
   const tokens = viewerTokens; // Use real token balance from App
   const [tipAmount,  setTipAmount]  = useState(10);
@@ -1835,7 +1835,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     const first = setTimeout(() => schedule(), 3000);
     return () => { clearTimeout(first); clearTimeout(nextTipRef.current); };
   }, []);
-  const currentSub = subscriptions[1] || null;   // stream room is always Luna Vex (id=1)
+  const currentSub  = subscriptions[selectedStreamerId] || subscriptions[1] || null;
+  const isFollowing = following?.has(selectedStreamerId) || following?.has(1);
+  const streamerProfile = STREAMER_PROFILES[selectedStreamerId] || STREAMER_PROFILES[1];
 
   // Get streamer name for tip record
   const streamer = STREAMERS.find(s => s.id === selectedStreamerId);
@@ -1900,6 +1902,114 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           <TipAlertsOverlay alerts={tipAlerts} onDone={removeTipAlert} />
         </div>
 
+        {/* ── Action Bar — Follow, Tips, Spy, Private, Subscribe ── */}
+        <div style={{ marginBottom:14, display:"flex", flexDirection:"column", gap:10 }}>
+
+          {/* Row 1: Follow + Spy + Private + Subscribe */}
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {/* Follow button */}
+            <button
+              onClick={() => onFollow && onFollow(selectedStreamerId || 1)}
+              style={{
+                display:"flex", alignItems:"center", gap:6,
+                background: isFollowing ? COLORS.accent+"22" : "transparent",
+                border: `1px solid ${isFollowing ? COLORS.accent : COLORS.border}`,
+                borderRadius:10, padding:"9px 16px", cursor:"pointer",
+                color: isFollowing ? COLORS.accent : COLORS.muted,
+                fontSize:13, fontWeight:700, transition:"all 0.2s", flexShrink:0,
+              }}>
+              {isFollowing ? "❤️ Following" : "🤍 Follow"}
+            </button>
+
+            {/* Spy */}
+            {!spyMode ? (
+              <button onClick={() => setSpyMode(true)} style={{
+                flex:1, background:"transparent", border:`1px solid ${COLORS.gold}44`,
+                borderRadius:10, padding:"9px 10px", color:COLORS.gold,
+                fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
+              }}>👁 Spy · 🪙 30/min</button>
+            ) : (
+              <button onClick={() => setSpyMode(false)} style={{
+                flex:1, background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}`,
+                borderRadius:10, padding:"9px 10px", color:COLORS.gold,
+                fontSize:12, fontWeight:700, cursor:"pointer",
+              }}>✕ Leave Spy Mode</button>
+            )}
+
+            {/* Private */}
+            <button onClick={() => onNavigate("private-show")} style={{
+              flex:1, background:"transparent", border:`1px solid ${COLORS.accent}55`,
+              borderRadius:10, padding:"9px 10px", color:COLORS.accent,
+              fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
+            }}>🔒 Private</button>
+
+            {/* Subscribe */}
+            {currentSub ? (
+              <button onClick={() => setShowSubModal(true)} style={{
+                display:"flex", alignItems:"center", gap:6, flexShrink:0,
+                background:currentSub.tierColor+"18", border:`1px solid ${currentSub.tierColor}44`,
+                borderRadius:10, padding:"9px 12px", color:currentSub.tierColor,
+                fontSize:12, fontWeight:700, cursor:"pointer",
+              }}>{currentSub.tierBadge} {currentSub.tierName}</button>
+            ) : (
+              <button onClick={() => setShowSubModal(true)} style={{
+                flex:1, background:`linear-gradient(135deg,${COLORS.gold}22,${COLORS.gold}11)`,
+                border:`1px solid ${COLORS.gold}55`, borderRadius:10, padding:"9px 10px",
+                color:COLORS.gold, fontSize:12, fontWeight:700, cursor:"pointer",
+              }}>👑 Subscribe</button>
+            )}
+          </div>
+
+          {/* Row 2: Send Tokens */}
+          <div style={{ background:COLORS.surface, borderRadius:12, padding:"14px 16px" }}>
+            <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, marginBottom:10 }}>
+              💰 Send Tokens
+              <span style={{ float:"right", color:COLORS.gold, fontWeight:700 }}>🪙 {tokens} balance</span>
+            </div>
+
+            {/* Preset amounts + custom */}
+            <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+              {[10,25,50,100,200].map(t => (
+                <button key={t} onClick={() => { setTipAmount(t); setUseCustom(false); setCustomTip(""); }} style={{
+                  background: !useCustom && tipAmount===t ? COLORS.gold : COLORS.card,
+                  color:       !useCustom && tipAmount===t ? "#000"      : COLORS.text,
+                  border:     `1px solid ${!useCustom && tipAmount===t ? COLORS.gold : COLORS.border}`,
+                  borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
+                }}>🪙 {t}</button>
+              ))}
+              <button onClick={() => { setUseCustom(true); setCustomTip(""); }} style={{
+                background: useCustom ? COLORS.accentC+"33" : COLORS.card,
+                color:       useCustom ? COLORS.accentC      : COLORS.muted,
+                border:     `1px solid ${useCustom ? COLORS.accentC : COLORS.border}`,
+                borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
+              }}>✏️ Custom</button>
+            </div>
+
+            {/* Custom input */}
+            {useCustom && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10,
+                background:COLORS.card, border:`1px solid ${COLORS.accentC}66`, borderRadius:10, padding:"8px 12px" }}>
+                <span style={{ color:COLORS.muted, fontSize:16 }}>🪙</span>
+                <input type="number" min="1" max={tokens} value={customTip}
+                  onChange={e => setCustomTip(e.target.value.replace(/[^0-9]/g,""))}
+                  placeholder="Enter any amount…" autoFocus
+                  style={{ flex:1, background:"transparent", border:"none", outline:"none",
+                    color:COLORS.gold, fontSize:16, fontWeight:800, width:"100%" }}
+                />
+                {customTip && parseInt(customTip) > tokens && (
+                  <span style={{ fontSize:11, color:"#ff6666", whiteSpace:"nowrap" }}>Not enough 🪙</span>
+                )}
+              </div>
+            )}
+
+            <Btn onClick={sendTip} variant="gold"
+              disabled={tokens < effectiveTip || effectiveTip < 1}
+              style={{ width:"100%", fontWeight:900 }}>
+              Send 🪙 {effectiveTip > 0 ? effectiveTip.toLocaleString() : "—"}
+            </Btn>
+          </div>
+        </div>
+
         {/* Goal bar */}
         <Card style={{ marginBottom:14, padding:"14px 18px" }}>
           <GoalBar goal={goal} large />
@@ -1954,109 +2064,6 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             </div>
           </div>
 
-          {/* Tip controls */}
-          <div style={{ padding:16, background:COLORS.surface, borderRadius:12 }}>
-            <div style={{ fontSize:13, color:COLORS.muted, fontWeight:600, marginBottom:10 }}>Send Tokens</div>
-
-            {/* Preset amounts + custom toggle */}
-            <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
-              {[10,25,50,100,200].map(t => (
-                <button key={t} onClick={() => { setTipAmount(t); setUseCustom(false); setCustomTip(""); }} style={{
-                  background: !useCustom && tipAmount===t ? COLORS.gold : COLORS.card,
-                  color:       !useCustom && tipAmount===t ? "#000"      : COLORS.text,
-                  border:     `1px solid ${!useCustom && tipAmount===t ? COLORS.gold : COLORS.border}`,
-                  borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
-                }}>🪙 {t}</button>
-              ))}
-              <button onClick={() => { setUseCustom(true); setCustomTip(""); }} style={{
-                background: useCustom ? COLORS.accentC+"33" : COLORS.card,
-                color:       useCustom ? COLORS.accentC      : COLORS.muted,
-                border:     `1px solid ${useCustom ? COLORS.accentC : COLORS.border}`,
-                borderRadius:8, padding:"6px 12px", fontWeight:700, fontSize:13, cursor:"pointer", transition:"all 0.15s",
-              }}>✏️ Custom</button>
-            </div>
-
-            {/* Custom amount input */}
-            {useCustom && (
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10,
-                background:COLORS.card, border:`1px solid ${COLORS.accentC}66`, borderRadius:10, padding:"8px 12px" }}>
-                <span style={{ color:COLORS.muted, fontSize:16 }}>🪙</span>
-                <input
-                  type="number" min="1" max={tokens}
-                  value={customTip}
-                  onChange={e => setCustomTip(e.target.value.replace(/[^0-9]/g,""))}
-                  placeholder="Enter any amount…"
-                  autoFocus
-                  style={{ flex:1, background:"transparent", border:"none", outline:"none",
-                    color:COLORS.gold, fontSize:16, fontWeight:800, width:"100%" }}
-                />
-                {customTip && parseInt(customTip) > tokens && (
-                  <span style={{ fontSize:11, color:"#ff6666", whiteSpace:"nowrap" }}>Not enough 🪙</span>
-                )}
-              </div>
-            )}
-
-            {/* Send button + balance */}
-            <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-              <Btn onClick={sendTip} variant="gold"
-                disabled={tokens < effectiveTip || effectiveTip < 1}
-                style={{ flex:1 }}>
-                Send 🪙 {effectiveTip > 0 ? effectiveTip : "—"}
-              </Btn>
-              <div style={{ fontSize:12, color:COLORS.muted, whiteSpace:"nowrap" }}>
-                Balance: <span style={{ color:COLORS.gold, fontWeight:700 }}>🪙 {tokens}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Private show button */}
-          {!spyMode && (
-            <div style={{ display:"flex", gap:8, marginTop:12 }}>
-              <button
-                onClick={() => setSpyMode(true)}
-                style={{ flex:1, background:"transparent", border:`1px solid ${COLORS.gold}44`, borderRadius:10, padding:"9px 10px", color:COLORS.gold, fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s" }}
-                onMouseEnter={e => e.target.style.background=COLORS.gold+"18"}
-                onMouseLeave={e => e.target.style.background="transparent"}
-              >👁 Spy · 🪙 30/min</button>
-              <button
-                onClick={() => onNavigate("private-show")}
-                style={{ flex:1, background:"transparent", border:`1px solid ${COLORS.accent}55`, borderRadius:10, padding:"9px 10px", color:COLORS.accent, fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s" }}
-                onMouseEnter={e => e.target.style.background=COLORS.accent+"18"}
-                onMouseLeave={e => e.target.style.background="transparent"}
-              >🔒 Private Show</button>
-            </div>
-          )}
-          {spyMode && (
-            <button
-              onClick={() => setSpyMode(false)}
-              style={{ width:"100%", marginTop:12, background:"transparent", border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"9px 14px", color:COLORS.muted, fontSize:13, cursor:"pointer" }}
-            >
-              ✕ Leave Private Show
-            </button>
-          )}
-
-          {/* ── Subscription status / subscribe button ── */}
-          <div style={{ marginTop:12 }}>
-            {currentSub ? (
-              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:currentSub.tierColor+"18", border:`1px solid ${currentSub.tierColor}44`, borderRadius:10 }}>
-                <span style={{ fontSize:20 }}>{currentSub.tierBadge}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:currentSub.tierColor }}>{currentSub.tierName} Subscriber</div>
-                  <div style={{ fontSize:11, color:COLORS.muted }}>Since {currentSub.since}</div>
-                </div>
-                <button onClick={() => setShowSubModal(true)} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:11, textDecoration:"underline" }}>Manage</button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowSubModal(true)}
-                style={{ width:"100%", background:`linear-gradient(135deg,${COLORS.gold}22,${COLORS.gold}11)`, border:`1px solid ${COLORS.gold}55`, borderRadius:10, padding:"10px 14px", color:COLORS.gold, fontSize:13, fontWeight:700, cursor:"pointer", transition:"all 0.2s" }}
-                onMouseEnter={e => e.currentTarget.style.background = `linear-gradient(135deg,${COLORS.gold}33,${COLORS.gold}22)`}
-                onMouseLeave={e => e.currentTarget.style.background = `linear-gradient(135deg,${COLORS.gold}22,${COLORS.gold}11)`}
-              >
-                👑 Subscribe from $4.99/mo
-              </button>
-            )}
-          </div>
         </Card>
       </div>
 
@@ -7460,7 +7467,7 @@ export default function App() {
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
       case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} />;
-      case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} />;
+      case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} following={following} onFollow={onFollow} />;
       case "buy-tokens":         return <BuyTokensScreen onNavigate={navigate} viewerTokens={viewerTokens} onPurchase={onPurchase} />;
       case "kyc-streamer":       return <KYCScreen role="streamer" onNavigate={navigate} />;
       case "kyc-viewer":         return <KYCScreen role="viewer"   onNavigate={navigate} />;
