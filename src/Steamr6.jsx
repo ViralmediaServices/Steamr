@@ -966,8 +966,8 @@ function LoginScreen({ onNavigate, onLogin }) {
 
         {/* Forgot password */}
         <div style={{ textAlign:"center", marginTop:14 }}>
-          <button onClick={() => {}} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
-            Forgot your password? <span style={{ color:COLORS.accent, fontWeight:700 }}>Contact support</span>
+          <button onClick={() => onNavigate("forgot-password")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
+            Forgot your password? <span style={{ color:COLORS.accent, fontWeight:700 }}>Reset it</span>
           </button>
         </div>
       </Card>
@@ -987,6 +987,182 @@ function LoginScreen({ onNavigate, onLogin }) {
     </div>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FORGOT PASSWORD SCREEN
+// ══════════════════════════════════════════════════════════════════════════════
+function ForgotPasswordScreen({ onNavigate }) {
+  const [email,    setEmail]    = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [sent,     setSent]     = useState(false);
+  const [error,    setError]    = useState("");
+
+  const handleSubmit = () => {
+    setError("");
+    if (!email.trim()) { setError("Please enter your email address."); return; }
+    setLoading(true);
+    fetch("/api/auth-login", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ action: "forgot", email: email.trim() }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      setLoading(false);
+      if (data.ok) { setSent(true); }
+      else { setError(data.error || "Could not send reset email. Try again."); }
+    })
+    .catch(() => { setLoading(false); setError("Could not connect. Try again."); });
+  };
+
+  return (
+    <div style={{ maxWidth:420, margin:"0 auto", padding:"60px 24px" }}>
+      <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
+        <SteamrLogo height={120} glow />
+      </div>
+
+      {!sent ? (<>
+        <h2 style={{ margin:"0 0 6px", fontSize:26, fontWeight:900, textAlign:"center" }}>Reset Password</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, textAlign:"center", marginBottom:32, lineHeight:1.6 }}>
+          Enter the email address on your account and we'll send you a reset link.
+        </p>
+        <Card>
+          <div style={{ marginBottom:20 }}>
+            <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>Email Address</label>
+            <input
+              type="email" value={email} onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleSubmit()}
+              placeholder="you@example.com"
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+            />
+          </div>
+          {error && (
+            <div style={{ marginBottom:16, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>
+              ⚠️ {error}
+            </div>
+          )}
+          <Btn onClick={handleSubmit} style={{ width:"100%", fontSize:15, padding:"13px", fontWeight:900 }} disabled={loading}>
+            {loading ? "Sending…" : "Send Reset Link →"}
+          </Btn>
+          <div style={{ textAlign:"center", marginTop:14 }}>
+            <button onClick={() => onNavigate("login")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
+              ← Back to Login
+            </button>
+          </div>
+        </Card>
+      </>) : (
+        <Card style={{ textAlign:"center", padding:"40px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>📧</div>
+          <h3 style={{ margin:"0 0 10px", fontSize:20, fontWeight:900, color:COLORS.green }}>Check your email!</h3>
+          <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+            We sent a password reset link to <strong style={{ color:COLORS.text }}>{email}</strong>.
+            It expires in 30 minutes.
+          </p>
+          <p style={{ color:COLORS.muted, fontSize:12, marginBottom:24 }}>
+            Didn't receive it? Check your spam folder or try again.
+          </p>
+          <Btn onClick={() => { setSent(false); setEmail(""); }} variant="ghost" style={{ width:"100%" }}>
+            Try a Different Email
+          </Btn>
+          <div style={{ marginTop:12 }}>
+            <button onClick={() => onNavigate("login")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
+              ← Back to Login
+            </button>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RESET PASSWORD SCREEN — accessed via steamr.app?reset=TOKEN
+// ══════════════════════════════════════════════════════════════════════════════
+function ResetPasswordScreen({ resetToken, onNavigate }) {
+  const [password,  setPassword]  = useState("");
+  const [confirm,   setConfirm]   = useState("");
+  const [showPass,  setShowPass]  = useState(false);
+  const [loading,   setLoading]   = useState(false);
+  const [done,      setDone]      = useState(false);
+  const [error,     setError]     = useState("");
+
+  const handleReset = () => {
+    setError("");
+    if (password.length < 6)          { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm)         { setError("Passwords do not match."); return; }
+    setLoading(true);
+    fetch("/api/auth-login", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ action: "reset", token: resetToken, newPassword: password }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      setLoading(false);
+      if (data.ok) { setDone(true); }
+      else { setError(data.error || "Reset failed. The link may have expired."); }
+    })
+    .catch(() => { setLoading(false); setError("Could not connect. Try again."); });
+  };
+
+  return (
+    <div style={{ maxWidth:420, margin:"0 auto", padding:"60px 24px" }}>
+      <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
+        <SteamrLogo height={120} glow />
+      </div>
+
+      {!done ? (<>
+        <h2 style={{ margin:"0 0 6px", fontSize:26, fontWeight:900, textAlign:"center" }}>Set New Password</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, textAlign:"center", marginBottom:32 }}>Choose a strong password for your account.</p>
+        <Card>
+          <div style={{ marginBottom:16 }}>
+            <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>New Password</label>
+            <div style={{ position:"relative" }}>
+              <input
+                type={showPass?"text":"password"} value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 44px 12px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+              />
+              <button onClick={() => setShowPass(s => !s)}
+                style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:COLORS.muted, fontSize:16, padding:0 }}>
+                {showPass ? "🙈" : "👁"}
+              </button>
+            </div>
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>Confirm Password</label>
+            <input
+              type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleReset()}
+              placeholder="Repeat your new password"
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"12px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+            />
+          </div>
+          {error && (
+            <div style={{ marginBottom:16, padding:"10px 14px", background:"#ff444422", border:"1px solid #ff444444", borderRadius:8, fontSize:13, color:"#ff6666" }}>
+              ⚠️ {error}
+            </div>
+          )}
+          <Btn onClick={handleReset} style={{ width:"100%", fontSize:15, padding:"13px", fontWeight:900 }} disabled={loading}>
+            {loading ? "Saving…" : "Set New Password →"}
+          </Btn>
+        </Card>
+      </>) : (
+        <Card style={{ textAlign:"center", padding:"40px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>🔑</div>
+          <h3 style={{ margin:"0 0 10px", fontSize:20, fontWeight:900, color:COLORS.green }}>Password Updated!</h3>
+          <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+            Your password has been reset successfully. You can now log in with your new password.
+          </p>
+          <Btn onClick={() => onNavigate("login")} style={{ width:"100%" }}>
+            Go to Login →
+          </Btn>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 
 function LandingScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
@@ -7054,11 +7230,17 @@ export default function App() {
     setScreen("landing");
   };
 
-  // ── Admin access via URL ─────────────────────────────────────────────────────
+  // ── URL param handlers (admin + password reset) ──────────────────────────────
+  const [resetToken, setResetToken] = useState(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("admin") === "true") {
       setScreen("admin");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("reset")) {
+      setResetToken(params.get("reset"));
+      setScreen("reset-password");
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -7209,6 +7391,8 @@ export default function App() {
     switch (screen) {
       case "landing":            return <LandingScreen onNavigate={navigate} />;
       case "login":              return <LoginScreen onNavigate={navigate} onLogin={onLogin} />;
+      case "forgot-password":    return <ForgotPasswordScreen onNavigate={navigate} />;
+      case "reset-password":     return <ResetPasswordScreen resetToken={resetToken} onNavigate={navigate} />;
       case "admin":              return <AdminScreen onNavigate={navigate} />;
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
