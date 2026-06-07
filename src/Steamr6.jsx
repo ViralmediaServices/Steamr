@@ -967,7 +967,7 @@ function LoginScreen({ onNavigate, onLogin }) {
         {/* Forgot password */}
         <div style={{ textAlign:"center", marginTop:14 }}>
           <button onClick={() => onNavigate("forgot-password")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:12 }}>
-            Forgot your password? <span style={{ color:COLORS.accent, fontWeight:700 }}>Reset it</span>
+            Forgot your password? <span style={{ color:COLORS.accent, fontWeight:700 }}>Click Here</span>
           </button>
         </div>
       </Card>
