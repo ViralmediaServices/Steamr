@@ -117,5 +117,23 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── PATCH — update token balance ──────────────────────────────────────────
+  if (req.method === "PATCH") {
+    try {
+      const { tokenBalance } = req.body;
+      if (tokenBalance === undefined) return res.status(400).json({ error: "tokenBalance required" });
+
+      const key = activityKey;
+      const { result: actResult } = await kvCommand("GET", key);
+      const activity = parse(actResult) || {};
+      activity.tokenBalance = Math.max(0, Number(tokenBalance));
+      await kvCommand("SET", key, JSON.stringify(activity));
+
+      return res.status(200).json({ ok: true, tokenBalance: activity.tokenBalance });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   return res.status(405).end();
 }
