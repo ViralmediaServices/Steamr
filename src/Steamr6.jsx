@@ -2071,7 +2071,7 @@ function WishlistSection({ wishlist, viewerTokens, onGift, isOwn }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // VIEWER PROFILE SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
-function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewerTokens = 350 }) {
+function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewerTokens = 350, onCancelSub }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [tab,      setTab]     = useState("overview");
   const [profile,  setProfile] = useState(null);
@@ -2277,17 +2277,54 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
           <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
           {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
             const streamer = STREAMERS.find(s => s.id===Number(id));
+            const [confirm, setConfirm] = React.useState(false);
             return (
-              <div key={id} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
-                style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`,cursor:"pointer" }}>
-                <div style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44` }}>
-                  {streamer?.avatar||"🎭"}
+              <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
+                {/* Subscription row */}
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
+                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
+                    {streamer?.avatar||"🎭"}
+                  </div>
+                  <div style={{ flex:1, cursor:"pointer" }} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}>
+                    <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
+                    <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
+                  </div>
+                  <SubBadge tierName={sub.tierName} />
+                  <button onClick={() => setConfirm(true)}
+                    style={{ background:"none",border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.muted,
+                      cursor:"pointer",fontSize:11,padding:"5px 10px",fontWeight:600,whiteSpace:"nowrap",
+                      transition:"all 0.2s",flexShrink:0 }}
+                    onMouseEnter={e=>{ e.currentTarget.style.borderColor="#ff6666"; e.currentTarget.style.color="#ff6666"; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.borderColor=COLORS.border; e.currentTarget.style.color=COLORS.muted; }}>
+                    Cancel
+                  </button>
                 </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
-                  <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since}</div>
-                </div>
-                <SubBadge tierName={sub.tierName} />
+
+                {/* Confirm cancel panel */}
+                {confirm && (
+                  <div style={{ marginTop:12, padding:"14px 16px", background:COLORS.surface,
+                    border:`1px solid #ff666644`, borderRadius:10 }}>
+                    <div style={{ fontWeight:700, fontSize:13, marginBottom:6 }}>
+                      Cancel {streamer?.name||"Streamer"} subscription?
+                    </div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginBottom:14, lineHeight:1.5 }}>
+                      You'll lose access to their Fan Club and subscriber perks at the end of the current billing period.
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={() => setConfirm(false)}
+                        style={{ flex:1, padding:"8px", background:COLORS.card, border:`1px solid ${COLORS.border}`,
+                          borderRadius:8, color:COLORS.text, cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                        Keep Subscription
+                      </button>
+                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirm(false); }}
+                        style={{ flex:1, padding:"8px", background:"#ff4444", border:"none",
+                          borderRadius:8, color:"#fff", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                        Yes, Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           }) : (
@@ -7174,7 +7211,7 @@ export default function App() {
       case "leaderboard":        return <LeaderboardScreen onNavigate={navigate} />;
       case "discovery":          return <DiscoveryScreen onNavigate={navigate} />;
       case "analytics":          return <AnalyticsScreen onNavigate={navigate} />;
-      case "viewer-profile":       return <ViewerProfileScreen onNavigate={navigate} subscriptions={subscriptions} following={following} viewerTokens={viewerTokens} />;
+      case "viewer-profile":       return <ViewerProfileScreen onNavigate={navigate} subscriptions={subscriptions} following={following} viewerTokens={viewerTokens} onCancelSub={onCancelSub} />;
       case "viewer-dashboard":    return <ViewerDashboardScreen onNavigate={navigate} viewerTokens={viewerTokens} following={following} subscriptions={subscriptions} addToast={addToast} />;
       case "viewer-edit-profile": return <ViewerEditProfileScreen onNavigate={navigate} addToast={addToast} />;
       case "notifications":     return <NotificationsCenterScreen onNavigate={navigate} />;
