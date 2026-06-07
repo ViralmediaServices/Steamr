@@ -6993,7 +6993,7 @@ export default function App() {
           const token = localStorage.getItem("steamr_token");
           if (token) {
             // Update following list in user profile
-            fetch("/api/user-profile/follow", {
+            fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
               body: JSON.stringify({ streamerId: id, action: "follow" }),
@@ -7022,7 +7022,7 @@ export default function App() {
         try {
           const token = localStorage.getItem("steamr_token");
           if (token) {
-            fetch("/api/user-profile/follow", {
+            fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
               body: JSON.stringify({ streamerId: id, action: "unfollow" }),
