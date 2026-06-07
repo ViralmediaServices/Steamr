@@ -50,7 +50,7 @@ const DEFAULT_WISHLIST = [
 // ── PPV / MONETIZATION DATA ──────────────────────────────────────────────────
 const PPV_CONTENT = [
   {id:1, streamer:"Luna Vex",      avatar:"🎵", title:"Acoustic Night Special — Members Only", price:500, duration:"47 min", thumbnail:"🎸", category:"Music",   purchased:false},
-  {id:2, streamer:"Storm Rider",   avatar:"🎮", title:"Pro Gaming Sessions — Uncut",            price:300, duration:"1h 22m",thumbnail:"🎮", category:"Gaming",  purchased:true },
+  {id:2, streamer:"Storm Rider",   avatar:"🎮", title:"Pro Gaming Sessions — Uncut",            price:300, duration:"1h 22m",thumbnail:"🎮", category:"Gaming",  purchased:false},
   {id:3, streamer:"Crystal Wave",  avatar:"🌊", title:"ASMR Luxury Pack (3 Videos)",            price:800, duration:"2h 10m",thumbnail:"🎧", category:"ASMR",    purchased:false},
   {id:4, streamer:"Rex Nova",      avatar:"💪", title:"Extreme Workout Compilation",            price:250, duration:"38 min", thumbnail:"💪", category:"Fitness", purchased:false},
   {id:5, streamer:"Aria Storm",    avatar:"🌟", title:"Behind the Scenes: Studio Day",          price:400, duration:"1h 05m",thumbnail:"📹", category:"Exclusive",purchased:false},
@@ -59,7 +59,7 @@ const PPV_CONTENT = [
 
 const CLIP_PURCHASES = [
   {id:1, streamer:"Luna Vex",     avatar:"🎵", title:"Best Moments — June 2026",  price:80,  duration:"4:20", thumbnail:"🎬", purchased:false},
-  {id:2, streamer:"Storm Rider",  avatar:"🎮", title:"Epic Win Compilation #12",  price:50,  duration:"2:45", thumbnail:"🏆", purchased:true },
+  {id:2, streamer:"Storm Rider",  avatar:"🎮", title:"Epic Win Compilation #12",  price:50,  duration:"2:45", thumbnail:"🏆", purchased:false},
   {id:3, streamer:"Crystal Wave", avatar:"🌊", title:"ASMR Highlight Reel",       price:60,  duration:"6:00", thumbnail:"🌊", purchased:false},
   {id:4, streamer:"Aria Storm",   avatar:"🌟", title:"Funniest Stream Moments",   price:40,  duration:"3:15", thumbnail:"😂", purchased:false},
 ];
@@ -6125,13 +6125,40 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
   const [tab, setTab]             = useState("videos");
   const [buying, setBuying]       = useState(null);
   const [purchasedIds, setPurchased] = useState(new Set());
+  const [loading, setLoading]     = useState(true);
+
+  // Load purchased IDs from Upstash on mount
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok && Array.isArray(data.activity?.ppvPurchased)) {
+        setPurchased(new Set(data.activity.ppvPurchased));
+      }
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+  }, []);
 
   const confirmPurchase = (item) => {
     onSpendTokens && onSpendTokens(item.price);
-    setPurchased(s => new Set([...s, item.id]));
+    const newSet = new Set([...purchasedIds, `${tab}:${item.id}`]);
+    setPurchased(newSet);
     setBuying(null);
+    // Save to Upstash
+    const token = localStorage.getItem("steamr_token");
+    if (token) {
+      fetch("/api/user-profile", {
+        method: "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({ token, action: "ppv-purchase", itemId: `${tab}:${item.id}`, item: { id: item.id, tab, title: item.title, streamer: item.streamer, price: item.price, purchasedAt: new Date().toISOString() } }),
+      }).catch(() => {});
+    }
   };
-  const isPurchased = (item) => item.purchased || purchasedIds.has(item.id);
+
+  const isPurchased = (item) => purchasedIds.has(`${tab}:${item.id}`);
 
   const ContentCard = ({item, isMini=false}) => {
     const bought = isPurchased(item);
@@ -6169,11 +6196,18 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
         <div style={{fontSize:13,color:COLORS.muted,display:"flex",alignItems:"center"}}>Balance: <strong style={{color:COLORS.gold,marginLeft:4}}>🪙 {viewerTokens?.toLocaleString()}</strong></div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${isMobile?"160px":"256px"},1fr))`,gap:14}}>
-        {(tab==="videos"?PPV_CONTENT:CLIP_PURCHASES).map(item=>(
-          <ContentCard key={item.id} item={item} isMini={isMobile}/>
-        ))}
-      </div>
+      {loading ? (
+        <div style={{textAlign:"center",padding:"60px 24px",color:COLORS.muted}}>
+          <div style={{fontSize:32,marginBottom:12}}>⏳</div>
+          <div>Loading content…</div>
+        </div>
+      ) : (
+        <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${isMobile?"160px":"256px"},1fr))`,gap:14}}>
+          {(tab==="videos"?PPV_CONTENT:CLIP_PURCHASES).map(item=>(
+            <ContentCard key={item.id} item={item} isMini={isMobile}/>
+          ))}
+        </div>
+      )}
 
       {/* Purchase modal */}
       {buying && (
