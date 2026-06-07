@@ -78,7 +78,8 @@ export default async function handler(req, res) {
           tipHistory:    activity.tipHistory    || [],
           giftsCount:    activity.giftsCount    || 0,
           achievements:  activity.achievements  || [],
-          subscriptions: activity.subscriptions || {},
+          subscriptions:  activity.subscriptions  || {},
+          ppvPurchased:   activity.ppvPurchased   || [],
         },
       });
     } catch (err) {
@@ -121,6 +122,21 @@ export default async function handler(req, res) {
         const activity  = parse(actResult) || {};
         activity.subscriptions = activity.subscriptions || {};
         delete activity.subscriptions[streamerId];
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
+      }
+
+      // PPV purchase action
+      if (action === "ppv-purchase" && req.body.itemId) {
+        const actResult = (await kvCommand("GET", activityKey)).result;
+        const activity  = parse(actResult) || {};
+        activity.ppvPurchased = activity.ppvPurchased || [];
+        if (!activity.ppvPurchased.includes(req.body.itemId)) {
+          activity.ppvPurchased.push(req.body.itemId);
+          activity.ppvHistory = activity.ppvHistory || [];
+          activity.ppvHistory.unshift(req.body.item || { itemId: req.body.itemId });
+          activity.ppvHistory = activity.ppvHistory.slice(0, 100);
+        }
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
