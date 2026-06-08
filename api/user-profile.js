@@ -69,6 +69,7 @@ export default async function handler(req, res) {
           joinDate:     account.createdAt    ? new Date(account.createdAt).toLocaleDateString("en-US", { month:"long", year:"numeric" }) : "Recently",
           verified:     account.verified     || false,
           verifiedAt:   account.verifiedAt   || null,
+          kycStatus:    account.kycStatus    || null,
           following:       account.following       || [],
           streamerProfile: account.streamerProfile || null,
         },
