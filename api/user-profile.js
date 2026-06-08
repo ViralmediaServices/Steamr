@@ -210,10 +210,26 @@ export default async function handler(req, res) {
       // ── Follow / unfollow ────────────────────────────────────────────────
       if (streamerId && action === "follow" || action === "unfollow") {
         const following = new Set(account.following || []);
+        const wasFollowing = following.has(Number(streamerId));
         if (action === "follow")   following.add(Number(streamerId));
         if (action === "unfollow") following.delete(Number(streamerId));
         account.following = [...following];
         await kvCommand("SET", accountKey, JSON.stringify(account));
+
+        // Also update the streamer's real-time follower counter
+        const streamerEmail = req.body.streamerEmail;
+        if (streamerEmail) {
+          const sKey = `activity:${streamerEmail}`;
+          const { result: sRes } = await kvCommand("GET", sKey);
+          const sActivity = parse(sRes) || {};
+          if (action === "follow" && !wasFollowing) {
+            sActivity.followers = (sActivity.followers || 0) + 1;
+          } else if (action === "unfollow" && wasFollowing) {
+            sActivity.followers = Math.max(0, (sActivity.followers || 0) - 1);
+          }
+          await kvCommand("SET", sKey, JSON.stringify(sActivity));
+        }
+
         return res.status(200).json({ ok: true, following: account.following });
       }
 
