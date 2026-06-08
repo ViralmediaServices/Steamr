@@ -4437,6 +4437,8 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
 function EditProfileScreen({ profileData, onSave, onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [form, setForm] = useState({
+    displayName:     profileData.name || profileData.displayName || "",
+    username:        profileData.username || "",
     avatar:          profileData.avatar,
     avatarImg:       profileData.avatarImg  || null,
     bannerColor:     profileData.bannerColor,
@@ -4451,6 +4453,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     socialTikTok:    profileData.socialLinks.tiktok    || "",
     newTag: "",
   });
+  const [nameError, setNameError] = useState("");
 
   // Load real avatar + bio from Upstash on mount
   useEffect(() => {
@@ -4462,8 +4465,10 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       if (data.ok) {
         setForm(f => ({
           ...f,
-          avatarImg: data.profile.avatarImg || f.avatarImg,
-          bio:       data.profile.bio       || f.bio,
+          displayName: data.profile.displayName || data.profile.name || f.displayName,
+          username:    data.profile.username    || f.username,
+          avatarImg:   data.profile.avatarImg   || f.avatarImg,
+          bio:         data.profile.bio         || f.bio,
           ...(data.profile.streamerProfile || {}),
           tags:    data.profile.streamerProfile?.tags    || f.tags,
           tipMenu: data.profile.streamerProfile?.tipMenu || f.tipMenu,
@@ -4512,8 +4517,20 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     ));
 
   const handleSave = () => {
+    // Validate name fields
+    const cleanName     = form.displayName.trim();
+    const cleanUsername = form.username.trim().toLowerCase().replace(/[^a-z0-9_\-]/g, "");
+    if (!cleanName) { setNameError("Screen name cannot be empty."); return; }
+    if (cleanName.length > 50) { setNameError("Screen name must be 50 characters or less."); return; }
+    if (cleanUsername.length > 0 && cleanUsername.length < 3) { setNameError("Username must be at least 3 characters."); return; }
+    if (cleanUsername.length > 30) { setNameError("Username must be 30 characters or less."); return; }
+    setNameError("");
+
     const updated = {
       ...profileData,
+      name:        cleanName,
+      displayName: cleanName,
+      username:    cleanUsername || profileData.username,
       avatar:      form.avatar,
       avatarImg:   form.avatarImg,
       bannerColor: form.bannerColor,
@@ -4539,6 +4556,8 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
         headers: { "x-auth-token": token, "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
+          displayName: form.displayName.trim(),
+          username:    form.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ""),
           avatarImg:   form.avatarImg,
           bio:         form.bio,
           // Streamer-specific fields stored in account
@@ -4556,6 +4575,14 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       }).catch(() => {});
     }
 
+    // Update localStorage session so nav greeting refreshes immediately
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (session) {
+        session.name = form.displayName.trim();
+        localStorage.setItem("steamr_session", JSON.stringify(session));
+      }
+    } catch {}
     setSaved(true);
     setTimeout(() => { setSaved(false); onNavigate("streamer-dashboard"); }, 1200);
   };
@@ -4581,6 +4608,67 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Screen name & username */}
+      <Card style={{ marginBottom:20 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted, marginBottom:16 }}>👤 SCREEN NAME & USERNAME</div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          {/* Display / Screen name */}
+          <div>
+            <label style={{ fontSize:12, color:COLORS.muted, fontWeight:600, display:"block", marginBottom:6 }}>
+              Screen Name <span style={{ color:COLORS.accent }}>*</span>
+            </label>
+            <input
+              value={form.displayName}
+              onChange={e => { update("displayName", e.target.value); setNameError(""); }}
+              placeholder="Your display name…"
+              maxLength={50}
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${nameError && !form.displayName.trim() ? COLORS.accent : COLORS.border}`,
+                borderRadius:10, padding:"11px 14px", color:COLORS.text, fontSize:14,
+                fontWeight:600, outline:"none", boxSizing:"border-box", transition:"border-color 0.2s" }}
+              onFocus={e => e.target.style.borderColor = COLORS.accent}
+              onBlur={e  => e.target.style.borderColor = COLORS.border}
+            />
+            <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>
+              This is how your name appears to viewers — {50 - form.displayName.length} characters remaining
+            </div>
+          </div>
+
+          {/* Username / handle */}
+          <div>
+            <label style={{ fontSize:12, color:COLORS.muted, fontWeight:600, display:"block", marginBottom:6 }}>
+              Username <span style={{ color:COLORS.muted, fontWeight:400 }}>(optional)</span>
+            </label>
+            <div style={{ position:"relative" }}>
+              <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)",
+                color:COLORS.muted, fontSize:14, fontWeight:700, pointerEvents:"none" }}>@</span>
+              <input
+                value={form.username}
+                onChange={e => { update("username", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "")); setNameError(""); }}
+                placeholder="yourhandle"
+                maxLength={30}
+                style={{ width:"100%", background:COLORS.surface, border:`1px solid ${nameError && form.username.length > 0 && form.username.length < 3 ? COLORS.accent : COLORS.border}`,
+                  borderRadius:10, padding:"11px 14px 11px 30px", color:COLORS.text, fontSize:14,
+                  outline:"none", boxSizing:"border-box", transition:"border-color 0.2s",
+                  fontFamily:"monospace" }}
+                onFocus={e => e.target.style.borderColor = COLORS.accent}
+                onBlur={e  => e.target.style.borderColor = COLORS.border}
+              />
+            </div>
+            <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>
+              Letters, numbers, _ and - only · shown as @{form.username || "yourhandle"} on your profile
+            </div>
+          </div>
+        </div>
+
+        {nameError && (
+          <div style={{ marginTop:12, padding:"10px 14px", background:COLORS.accent+"18",
+            border:`1px solid ${COLORS.accent}44`, borderRadius:8, fontSize:12, color:COLORS.accent }}>
+            ⚠️ {nameError}
+          </div>
+        )}
+      </Card>
 
       {/* Avatar upload */}
       <Card style={{ marginBottom:20 }}>
