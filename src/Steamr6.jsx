@@ -1193,18 +1193,25 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
   const [activeTag,  setActiveTag]  = useState("");
   const [showSugg,   setShowSugg]   = useState(false);
 
-  // ── Fetch all streamers (live + offline) from API ────────────────────────────
+  // ── Fetch all streamers (live + offline) — refresh every 30s ────────────────
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
     const headers = token ? { "x-auth-token": token } : {};
-    fetch("/api/user-profile?all=true", { headers })
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) setStreamers(data.streamers || []);
-        else setFetchErr("Could not load streamers.");
-      })
-      .catch(() => setFetchErr("Connection error — please refresh."))
-      .finally(() => setLoading(false));
+
+    const fetchStreamers = () => {
+      fetch("/api/user-profile?all=true", { headers })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) setStreamers(data.streamers || []);
+          else setFetchErr("Could not load streamers.");
+        })
+        .catch(() => setFetchErr("Connection error — please refresh."))
+        .finally(() => setLoading(false));
+    };
+
+    fetchStreamers();
+    const iv = setInterval(fetchStreamers, 30_000);
+    return () => clearInterval(iv);
   }, []);
 
   // ── Filter + sort pipeline ────────────────────────────────────────────────
@@ -1545,6 +1552,24 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     .catch(() => {});
   }, [selectedStreamerId]);
 
+  // ── Poll streamer live status every 30s — detect when stream ends ────────────
+  const [streamEnded, setStreamEnded] = useState(false);
+  useEffect(() => {
+    if (!selectedStreamerId) return;
+    const poll = () => {
+      fetch(`/api/user-profile?publicId=${encodeURIComponent(selectedStreamerId)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && data.activity?.isLive === false) setStreamEnded(true);
+          else if (data.ok && data.activity?.isLive === true) setStreamEnded(false);
+        })
+        .catch(() => {});
+    };
+    // Wait 30s before first poll — give time for stream to fully start
+    const iv = setInterval(poll, 30_000);
+    return () => clearInterval(iv);
+  }, [selectedStreamerId]);
+
   // ── Geo-blocking check ────────────────────────────────────────────────────
   const [geoBlocked,  setGeoBlocked]  = useState(false);
   const [geoChecking, setGeoChecking] = useState(true);
@@ -1695,6 +1720,27 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         <div>
           <Btn onClick={() => onNavigate("viewer-browse")} variant="secondary" style={{ fontSize:13 }}>
             ← Back to Browse
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Stream ended gate ─────────────────────────────────────────────────────
+  if (streamEnded) return (
+    <div style={{ maxWidth:520, margin:"80px auto", padding:"0 24px", textAlign:"center" }}>
+      <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:20, padding:"48px 36px" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>📴</div>
+        <h2 style={{ margin:"0 0 12px", fontSize:22, fontWeight:900 }}>Stream Ended</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:28 }}>
+          {streamerName} has ended their stream. Check back later or browse other live streamers.
+        </p>
+        <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+          <Btn onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })} variant="secondary" style={{ fontSize:13 }}>
+            👤 View Profile
+          </Btn>
+          <Btn onClick={() => onNavigate("viewer-browse")} style={{ fontSize:13 }}>
+            Browse Live Streams →
           </Btn>
         </div>
       </div>
@@ -6076,10 +6122,18 @@ function DiscoveryScreen({ onNavigate }) {
 
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
-    fetch("/api/user-profile?live=true", { headers: token ? { "x-auth-token": token } : {} })
-      .then(r => r.json())
-      .then(data => { if (data.ok) setLiveStreamers(data.streamers || []); })
-      .catch(() => {});
+    const headers = token ? { "x-auth-token": token } : {};
+
+    const fetchLive = () => {
+      fetch("/api/user-profile?live=true", { headers })
+        .then(r => r.json())
+        .then(data => { if (data.ok) setLiveStreamers(data.streamers || []); })
+        .catch(() => {});
+    };
+
+    fetchLive();
+    const iv = setInterval(fetchLive, 30_000);
+    return () => clearInterval(iv);
   }, []);
 
   const filteredStreamers = query.trim()
