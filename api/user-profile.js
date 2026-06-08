@@ -69,7 +69,8 @@ export default async function handler(req, res) {
           joinDate:     account.createdAt    ? new Date(account.createdAt).toLocaleDateString("en-US", { month:"long", year:"numeric" }) : "Recently",
           verified:     account.verified     || false,
           verifiedAt:   account.verifiedAt   || null,
-          following:    account.following    || [],
+          following:       account.following       || [],
+          streamerProfile: account.streamerProfile || null,
         },
         activity: {
           tokenBalance:  activity.tokenBalance  || 350,
@@ -80,6 +81,17 @@ export default async function handler(req, res) {
           achievements:  activity.achievements  || [],
           subscriptions:  activity.subscriptions  || {},
           ppvPurchased:   activity.ppvPurchased   || [],
+          // Streamer stats
+          todayTokens:    activity.todayTokens    || 0,
+          weekTokens:     activity.weekTokens     || 0,
+          monthTokens:    activity.monthTokens    || 0,
+          allTimeTokens:  activity.allTimeTokens  || 0,
+          totalStreams:    activity.totalStreams    || 0,
+          hoursStreamed:   activity.hoursStreamed   || 0,
+          peakViewers:    activity.peakViewers     || 0,
+          followers:      activity.followers       || 0,
+          subscribers:    activity.subscribers     || 0,
+          payoutHistory:  activity.payoutHistory   || [],
         },
       });
     } catch (err) {
@@ -126,6 +138,31 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      // Stream start — increment total streams counter
+      if (action === "stream-start") {
+        const actResult = (await kvCommand("GET", activityKey)).result;
+        const activity  = parse(actResult) || {};
+        activity.totalStreams = (activity.totalStreams || 0) + 1;
+        activity.lastStreamAt = new Date().toISOString();
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
+      }
+
+      // Stream end — save duration + tokens earned
+      if (action === "stream-end") {
+        const { durationSecs = 0, tokensEarned = 0 } = req.body;
+        const actResult  = (await kvCommand("GET", activityKey)).result;
+        const activity   = parse(actResult) || {};
+        const hoursAdded = Math.round((durationSecs / 3600) * 10) / 10;
+        activity.hoursStreamed   = Math.round(((activity.hoursStreamed || 0) + hoursAdded) * 10) / 10;
+        activity.allTimeTokens   = (activity.allTimeTokens  || 0) + tokensEarned;
+        activity.weekTokens      = (activity.weekTokens     || 0) + tokensEarned;
+        activity.monthTokens     = (activity.monthTokens    || 0) + tokensEarned;
+        activity.todayTokens     = (activity.todayTokens    || 0) + tokensEarned;
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
+      }
+
       // PPV purchase action
       if (action === "ppv-purchase" && req.body.itemId) {
         const actResult = (await kvCommand("GET", activityKey)).result;
@@ -159,10 +196,11 @@ export default async function handler(req, res) {
       }
 
       // Update profile fields
-      if (displayName !== undefined) account.displayName = displayName;
-      if (bio         !== undefined) account.bio         = bio;
-      if (avatarImg   !== undefined) account.avatarImg   = avatarImg;
-      if (username    !== undefined) account.username    = username;
+      if (displayName     !== undefined) account.displayName     = displayName;
+      if (bio             !== undefined) account.bio             = bio;
+      if (avatarImg       !== undefined) account.avatarImg       = avatarImg;
+      if (username        !== undefined) account.username        = username;
+      if (req.body.streamerProfile !== undefined) account.streamerProfile = req.body.streamerProfile;
 
       await kvCommand("SET", accountKey, JSON.stringify(account));
       return res.status(200).json({ ok: true });
