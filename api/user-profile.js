@@ -175,7 +175,7 @@ export default async function handler(req, res) {
           todayTokens,
           weekTokens,
           monthTokens,
-          allTimeTokens:  activity.allTimeTokens  || 0,
+          allTimeTokens:  daily.reduce((s, d) => s + (d.tokens || 0), 0),
           availableTokens: activity.availableTokens || 0,
           dailyEarnings:  daily.slice(0, 30),
           // Streamer stats
@@ -261,7 +261,7 @@ export default async function handler(req, res) {
         } else {
           activity.dailyEarnings.unshift({ day: todayStr, tokens: tokensEarned });
         }
-        activity.dailyEarnings = activity.dailyEarnings.slice(0, 60); // keep 60 days
+        activity.dailyEarnings = activity.dailyEarnings.slice(0, 730); // keep ~2 years
 
         // Update all-time peak viewers
         if (peakViewers > (activity.peakViewers || 0)) {
