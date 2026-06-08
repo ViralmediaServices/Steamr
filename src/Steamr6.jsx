@@ -4143,6 +4143,23 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
   const currentSub  = subscriptions[profile.id] || null;
   const [showModal, setShowModal] = useState(false);
 
+  // Real-time follower count — fetched fresh from API when viewing own profile
+  const [realFollowers, setRealFollowers] = useState(null);
+  useEffect(() => {
+    if (!isOwnProfile) return;
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setRealFollowers(data.activity?.followers ?? 0); })
+      .catch(() => {});
+  }, [isOwnProfile]);
+
+  // Own profile → real count from API; other profiles → profile data (static for now)
+  const displayFollowers = isOwnProfile
+    ? (realFollowers ?? profile.followers ?? 0)
+    : (profile.followers ?? 0);
+
   const backScreen = isOwnProfile ? "streamer-dashboard" : "viewer-browse";
 
   return (
@@ -4191,7 +4208,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
                 <Btn onClick={() => onNavigate("stream-room")} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
               )}
               <Btn
-                onClick={() => onFollow(profile.id)}
+                onClick={() => onFollow(profile.id, profile.email)}
                 variant={isFollowing ? "ghost" : "secondary"}
                 style={{ fontSize:13, padding:"8px 18px" }}
               >
@@ -4234,7 +4251,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         {/* Stats */}
         <div style={{ display:"flex", gap:32, marginTop:16 }}>
           {[
-            { label:"Followers", value: profile.followers.toLocaleString() },
+            { label:"Followers", value: displayFollowers.toLocaleString() },
           ].map(stat => (
             <div key={stat.label}>
               <div style={{ fontSize:22, fontWeight:900 }}>{stat.value}</div>
@@ -8275,6 +8292,15 @@ export default function App() {
             if (data.activity?.subscriptions) {
               setSubscriptions(data.activity.subscriptions);
             }
+            // Sync real follower count + email into profileData
+            if (data.activity?.followers !== undefined || data.profile?.email) {
+              setProfileData(prev => ({
+                ...prev,
+                ...(data.profile?.email    && { email:     data.profile.email     }),
+                ...(data.profile?.name     && { name:      data.profile.name      }),
+                ...(data.activity?.followers !== undefined && { followers: data.activity.followers }),
+              }));
+            }
           }
         })
         .catch(() => {});
@@ -8350,7 +8376,7 @@ export default function App() {
   };
 
   // ── Follow — fires toast + notification ──
-  const onFollow = (id) => {
+  const onFollow = (id, streamerEmailOverride) => {
     setFollowing(prev => {
       const next = new Set(prev);
       const wasFollowing = prev.has(id);
@@ -8364,10 +8390,13 @@ export default function App() {
           const token = localStorage.getItem("steamr_token");
           if (token) {
             // Update following list in user profile
+            // Use the real email if passed (e.g. from ProfileScreen), else derive from STREAMERS or id
+            const followedStreamer = STREAMERS.find(x => x.id === id);
+            const streamerEmail = streamerEmailOverride || followedStreamer?.email || `streamer_${id}@steamr.app`;
             fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
-              body: JSON.stringify({ streamerId: id, action: "follow" }),
+              body: JSON.stringify({ streamerId: id, action: "follow", streamerEmail }),
             }).catch(() => {});
           }
         } catch {}
@@ -8393,10 +8422,12 @@ export default function App() {
         try {
           const token = localStorage.getItem("steamr_token");
           if (token) {
+            const unfollowedStreamer = STREAMERS.find(x => x.id === id);
+            const streamerEmail = streamerEmailOverride || unfollowedStreamer?.email || `streamer_${id}@steamr.app`;
             fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
-              body: JSON.stringify({ streamerId: id, action: "unfollow" }),
+              body: JSON.stringify({ streamerId: id, action: "unfollow", streamerEmail }),
             }).catch(() => {});
           }
         } catch {}
