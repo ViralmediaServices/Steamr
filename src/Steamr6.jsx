@@ -3802,7 +3802,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
                   style={{ background:testingAudio?COLORS.green:COLORS.surface,border:`1px solid ${testingAudio?COLORS.green:COLORS.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:testingAudio?"#000":COLORS.muted,fontWeight:700 }}>
                   {testingAudio ? "⏹ Stop" : "▶ Test"}
                 </button>
-                <AudioMeter active={testingAudio} />
+                <AudioMeter active={testingAudio} selectedMic={selectedMic} />
               </div>
             </div>
           </div>
@@ -5829,23 +5829,89 @@ function BarChart({ data, color, height = 100 }) {
 }
 
 // ── AUDIO METER ──────────────────────────────────────────────────────────────
-function AudioMeter({ active }) {
-  const [levels, setLevels] = useState(() => Array.from({length:14}, () => 0.2 + Math.random()*0.5));
+function AudioMeter({ active, selectedMic }) {
+  const [levels,  setLevels] = useState(Array.from({length:14}, () => 0));
+  const [micErr,  setMicErr] = useState(false);
+  const audioCtxRef          = useRef(null);
+  const micStreamRef         = useRef(null);
+  const rafRef               = useRef(null);
+
   useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() =>
-      setLevels(Array.from({length:14}, () => 0.1 + Math.random()*0.9))
-    , 110);
-    return () => clearInterval(t);
+    if (!active) {
+      // ── Tear down ────────────────────────────────────────────────────────
+      if (rafRef.current)       { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
+      if (audioCtxRef.current)  { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
+      setLevels(Array.from({length:14}, () => 0));
+      setMicErr(false);
+      return;
+    }
+
+    // ── Start real mic analysis ──────────────────────────────────────────
+    let cancelled = false;
+    (async () => {
+      try {
+        // Ignore fake static-list IDs like "mic0", "mic1" — use real device IDs only
+        const FAKE_IDS = new Set(["mic0","mic1","mic2","mic3"]);
+        const audioConstraint = (selectedMic && !FAKE_IDS.has(selectedMic))
+          ? { deviceId: { exact: selectedMic } }
+          : true;
+
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint, video: false });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+        micStreamRef.current = stream;
+
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        audioCtxRef.current = ctx;
+
+        const source   = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize              = 128;   // 64 frequency bins
+        analyser.smoothingTimeConstant = 0.6;
+        source.connect(analyser);
+
+        const data = new Uint8Array(analyser.frequencyBinCount); // 64 bins
+
+        const tick = () => {
+          if (cancelled) return;
+          analyser.getByteFrequencyData(data);
+          // Map 14 bars across the lower 48 bins (covers voice + music range)
+          const newLevels = Array.from({length:14}, (_, i) => {
+            const start = Math.floor(i * 48 / 14);
+            const end   = Math.max(start + 1, Math.floor((i + 1) * 48 / 14));
+            let sum = 0;
+            for (let j = start; j < end; j++) sum += data[j];
+            return (sum / (end - start)) / 255;
+          });
+          setLevels(newLevels);
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch (_) {
+        if (!cancelled) setMicErr(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (rafRef.current)       { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      if (micStreamRef.current) { micStreamRef.current.getTracks().forEach(t => t.stop()); micStreamRef.current = null; }
+      if (audioCtxRef.current)  { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
+    };
   }, [active]);
+
+  if (micErr) return (
+    <div style={{ fontSize:10, color:COLORS.accent, flex:1 }}>⚠️ Mic access denied — check browser settings</div>
+  );
 
   return (
     <div style={{ display:"flex", gap:2, alignItems:"center", height:22, flex:1 }}>
       {levels.map((l, i) => (
-        <div key={i} style={{ flex:1, borderRadius:2,
-          background: l > 0.7 ? COLORS.accent : l > 0.4 ? COLORS.green : COLORS.green,
-          height: active ? `${Math.max(3, l*22)}px` : "3px",
-          transition:"height 0.09s ease, background 0.2s",
+        <div key={i} style={{
+          flex:1, borderRadius:2,
+          background: l > 0.75 ? COLORS.accent : COLORS.green,
+          height: active ? `${Math.max(3, l * 22)}px` : "3px",
+          transition:"height 0.06s ease, background 0.12s",
           opacity: active ? 1 : 0.3,
         }} />
       ))}
