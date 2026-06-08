@@ -76,6 +76,18 @@ async function viewerCount_leave(streamId, sessionId) {
 }
 
 export default async function handler(req, res) {
+  // ── Public geo-block fetch — no auth needed ────────────────────────────────
+  const geoBlockId = req.query?.geoBlockId;
+  if (geoBlockId) {
+    try {
+      const { result } = await kvCommand("GET", `geo:block:${geoBlockId}`);
+      const geoBlocking = parse(result) || { enabled: false, blocked: [] };
+      return res.status(200).json({ ok: true, geoBlocking });
+    } catch {
+      return res.status(200).json({ ok: true, geoBlocking: { enabled: false, blocked: [] } });
+    }
+  }
+
   // ── Viewer count — no auth needed ─────────────────────────────────────────
   const streamId = req.query?.streamId;
   if (streamId) {
@@ -405,7 +417,14 @@ export default async function handler(req, res) {
       if (bio         !== undefined) account.bio         = bio;
       if (avatarImg   !== undefined) account.avatarImg   = avatarImg;
       if (username    !== undefined) account.username    = username;
-      if (req.body.streamerProfile !== undefined) account.streamerProfile = req.body.streamerProfile;
+      if (req.body.streamerProfile !== undefined) {
+        account.streamerProfile = req.body.streamerProfile;
+        // Save geo-blocking to a public key so StreamRoomScreen can check it without auth
+        if (req.body.profileId && req.body.streamerProfile.geoBlocking) {
+          await kvCommand("SET", `geo:block:${req.body.profileId}`,
+            JSON.stringify(req.body.streamerProfile.geoBlocking));
+        }
+      }
 
       await kvCommand("SET", accountKey, JSON.stringify(account));
       return res.status(200).json({ ok: true });
