@@ -8286,7 +8286,12 @@ export default function App() {
       const session     = JSON.parse(localStorage.getItem("steamr_session") || "null");
       const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
-        return savedScreen || (session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+        const _default = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
+        // Don't restore screens that need streamer context on fresh load
+        if (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen)) {
+          return savedScreen;
+        }
+        return _default;
       }
     } catch {}
     return "landing";
@@ -8387,7 +8392,10 @@ export default function App() {
         setUserRole(session.role);
         // Restore the last visited screen, fall back to dashboard
         const defaultScreen = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
-        setScreen(savedScreen || defaultScreen);
+        // Don't restore context-dependent screens — they need selectedStreamerId
+        const safeScreen = (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen))
+          ? savedScreen : defaultScreen;
+        setScreen(safeScreen);
         // Load real following list, token balance + subscriptions from Upstash
         fetch("/api/user-profile", { headers: { "x-auth-token": token } })
         .then(r => r.json())
@@ -8486,12 +8494,17 @@ export default function App() {
   }, []);
 
   const [seenOnboarding, setSeenOnboarding] = useState(false);
+  // Screens that need selectedStreamerId context — not safe to restore on refresh alone
+  const NO_PERSIST_SCREENS = new Set(["stream-room","profile","edit-profile","private-show"]);
+
   const navigate = (s, opts = {}) => {
     setScreen(s);
     setShowOnboarding(false); // always close modal when navigating
     if (opts.streamerId != null) setSelectedStreamerId(opts.streamerId);
-    // Save current screen so refresh restores it
-    try { localStorage.setItem("steamr_screen", s); } catch {}
+    // Only persist screens that can load without extra context
+    if (!NO_PERSIST_SCREENS.has(s)) {
+      try { localStorage.setItem("steamr_screen", s); } catch {}
+    }
     // Trigger onboarding only on first visit to main home screens
     if (!seenOnboarding && (s === "viewer-browse" || s === "streamer-dashboard")) {
       setSeenOnboarding(true);
