@@ -312,7 +312,7 @@ const SUBSCRIPTION_TIERS = [
 const STREAMER_PROFILES = {
   1: {
     id: 1, name: "Streamer", avatar: "🎭",
-    category: "Female", region: "North American",
+    category: "Female", region: "",
     bannerColor: "#1a0a2e",
     bio: "",
     roomSubject: "",
@@ -4233,7 +4233,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         </div>
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           <Pill color={CAT_COLOR[profile.category] || COLORS.accentB}>{profile.category}</Pill>
-          <Pill color={COLORS.muted + "99"}>{profile.region}</Pill>
+          {profile.region && <Pill color={COLORS.muted + "99"}>{profile.region}</Pill>}
         </div>
         {profile.roomSubject && (
           <div style={{ color:COLORS.muted, fontSize:14, fontStyle:"italic", maxWidth:560, lineHeight:1.6 }}>
@@ -4439,6 +4439,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
   const [form, setForm] = useState({
     displayName:     profileData.name || profileData.displayName || "",
     username:        profileData.username || "",
+    region:          profileData.region || "",
     avatar:          profileData.avatar,
     avatarImg:       profileData.avatarImg  || null,
     bannerColor:     profileData.bannerColor,
@@ -4467,6 +4468,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           ...f,
           displayName: data.profile.displayName || data.profile.name || f.displayName,
           username:    data.profile.username    || f.username,
+          region:      data.profile.streamerProfile?.region || f.region,
           avatarImg:   data.profile.avatarImg   || f.avatarImg,
           bio:         data.profile.bio         || f.bio,
           ...(data.profile.streamerProfile || {}),
@@ -4531,6 +4533,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       name:        cleanName,
       displayName: cleanName,
       username:    cleanUsername || profileData.username,
+      region:      form.region,
       avatar:      form.avatar,
       avatarImg:   form.avatarImg,
       bannerColor: form.bannerColor,
@@ -4562,6 +4565,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           bio:         form.bio,
           // Streamer-specific fields stored in account
           streamerProfile: {
+            region:      form.region,
             bannerColor: form.bannerColor,
             bannerImg:   form.bannerImg,
             roomSubject: form.roomSubject,
@@ -4658,6 +4662,28 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             </div>
             <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>
               Letters, numbers, _ and - only · shown as @{form.username || "yourhandle"} on your profile
+            </div>
+          </div>
+
+          {/* Region */}
+          <div>
+            <label style={{ fontSize:12, color:COLORS.muted, fontWeight:600, display:"block", marginBottom:6 }}>
+              Region
+            </label>
+            <select
+              value={form.region}
+              onChange={e => update("region", e.target.value)}
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                borderRadius:10, padding:"11px 14px", color:form.region ? COLORS.text : COLORS.muted,
+                fontSize:14, outline:"none", cursor:"pointer", appearance:"auto" }}
+            >
+              <option value="">Select your region…</option>
+              {REGIONS.filter(r => r !== "All Regions").map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>
+              Helps viewers find you in regional Browse filters
             </div>
           </div>
         </div>
@@ -8375,6 +8401,7 @@ export default function App() {
               ...(data.profile?.displayName && { name:        data.profile.displayName }),
               ...(data.profile?.avatarImg   && { avatarImg:   data.profile.avatarImg   }),
               ...(data.profile?.bio         !== undefined && { bio:         data.profile.bio         }),
+              ...(sp.region                 && { region:      sp.region      }),
               ...(sp.bannerColor            && { bannerColor: sp.bannerColor }),
               ...(sp.bannerImg              !== undefined && { bannerImg:   sp.bannerImg   }),
               ...(sp.roomSubject            !== undefined && { roomSubject: sp.roomSubject }),
