@@ -3364,7 +3364,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
     onStreamingChange && onStreamingChange(true);
-    addToast("live", "You're live! 🔴 Notifying your followers…");
+    addToast("live", "You're live! 🔴 Notifying your followers and subscribers…");
     addNotification("live", `Your stream "${title}" started — goal: ${goalLabel}`);
 
     // Record stream start in Upstash
@@ -3377,22 +3377,23 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       }).catch(() => {});
     }
 
-    // Email all followers
+    // Email all followers AND subscribers
     try {
       const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
       fetch("/api/notify-followers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          streamerId:    session?.id || 1,
-          streamerEmail: session?.email || "streamer@steamr.app",
+          streamerEmail: session?.email || "",
           streamerName:  session?.name  || "Your favourite streamer",
           streamTitle:   title,
           streamUrl:     typeof window !== "undefined" ? window.location.origin : "https://steamr.app",
         }),
       })
       .then(r => r.json())
-      .then(d => { if (d.sent > 0) addToast("success", `📧 ${d.sent} follower${d.sent===1?"":"s"} notified!`); })
+      .then(d => {
+        if (d.sent > 0) addToast("success", `📧 ${d.sent} follower${d.sent===1?"":"s"} & subscriber${d.sent===1?"":"s"} notified!`);
+      })
       .catch(() => {});
     } catch {}
   };
