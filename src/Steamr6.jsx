@@ -3244,11 +3244,11 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
             Full Analytics →
           </button>
         </div>
-        {allTimeTokens > 0 ? (
-          <AreaChart data={ANALYTICS_DAILY.map(d => ({ label:d.day, value:d.tokens }))} color={COLORS.accent} height={70} />
+        {activity?.dailyEarnings?.length > 0 ? (
+          <AreaChart data={activity.dailyEarnings.map(d => ({ label:d.day, value:d.tokens }))} color={COLORS.accent} height={70} />
         ) : (
           <div style={{ height:70, display:"flex", alignItems:"center", justifyContent:"center", color:COLORS.muted, fontSize:13 }}>
-            📡 Earnings chart will appear once you go live and receive tips
+            📡 Earnings chart will appear once you start receiving tips
           </div>
         )}
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:8, fontSize:11, color:COLORS.muted }}>
@@ -6811,8 +6811,45 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
 
   const subCount    = Object.keys(subscriptions).length;
   const followCount = following?.size || 0;
-  const liveFollowed = STREAMERS.filter(s => s.live && following?.has(s.id));
-  const recommended  = STREAMERS.filter(s => s.live && !following?.has(s.id)).slice(0, 4);
+
+  // Real live streamers — fetched from API
+  const [liveFollowed,  setLiveFollowed]  = useState([]);
+  const [recommended,   setRecommended]   = useState([]);
+  const [subProfiles,   setSubProfiles]   = useState({});
+  const [liveLoading,   setLiveLoading]   = useState(true);
+
+  useEffect(() => {
+    // Fetch live followed streamers
+    const token = localStorage.getItem("steamr_token");
+    const headers = token ? { "x-auth-token": token } : {};
+    setLiveLoading(true);
+    fetch("/api/live-streamers", { headers })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          const followedIds = following || new Set();
+          setLiveFollowed((data.streamers || []).filter(s => followedIds.has(s.id)));
+          setRecommended((data.streamers || []).filter(s => !followedIds.has(s.id)).slice(0, 4));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLiveLoading(false));
+  }, [following]);
+
+  // Fetch profiles for subscribed streamers so we can show real names
+  useEffect(() => {
+    const ids = Object.keys(subscriptions);
+    if (ids.length === 0) return;
+    const token = localStorage.getItem("steamr_token");
+    ids.forEach(id => {
+      fetch(`/api/user-profile?id=${id}`, { headers: { "x-auth-token": token || "" } })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) setSubProfiles(prev => ({ ...prev, [id]: data.profile }));
+        })
+        .catch(() => {});
+    });
+  }, [subscriptions]);
 
   const STATS = [
     { label:"Token Balance", value:`🪙 ${viewerTokens.toLocaleString()}`, color:COLORS.gold,    action:() => onNavigate("buy-tokens"),    cta:"Top Up"  },
@@ -6866,7 +6903,11 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
               <div style={{ fontWeight:800, fontSize:16 }}>🔴 Live Now — People You Follow</div>
               <button onClick={() => onNavigate("viewer-browse")} style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:12, fontWeight:700 }}>See all →</button>
             </div>
-            {liveFollowed.length === 0 ? (
+            {liveLoading ? (
+              <div style={{ background:COLORS.surface, borderRadius:12, padding:"24px", textAlign:"center", color:COLORS.muted, fontSize:13 }}>
+                Loading live streams…
+              </div>
+            ) : liveFollowed.length === 0 ? (
               <div style={{ background:COLORS.surface, borderRadius:12, padding:"24px", textAlign:"center", color:COLORS.muted }}>
                 <div style={{ fontSize:32, marginBottom:8 }}>😴</div>
                 <div style={{ fontSize:13 }}>None of your followed streamers are live right now</div>
@@ -6885,20 +6926,25 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
               <div style={{ fontWeight:800, fontSize:16, marginBottom:12 }}>⭐ Your Subscriptions</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {Object.entries(subscriptions).map(([id, sub]) => {
-                  const streamer = STREAMERS.find(s => s.id === Number(id));
+                  const profile = subProfiles[id];
+                  const displayName = profile?.displayName || profile?.name || sub.streamerName || "Streamer";
+                  const avatarImg   = profile?.avatarImg || null;
                   return (
                     <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
                         display:"flex", alignItems:"center", justifyContent:"center", fontSize:22, flexShrink:0,
-                        border:`2px solid ${sub.tierColor}44` }}>{streamer?.avatar || "🎭"}</div>
+                        border:`2px solid ${sub.tierColor}44`, overflow:"hidden" }}>
+                        {avatarImg
+                          ? <img src={avatarImg} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                          : "🎭"}
+                      </div>
                       <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:700, fontSize:13 }}>{streamer?.name || "Streamer"}</div>
+                        <div style={{ fontWeight:700, fontSize:13 }}>{displayName}</div>
                         <div style={{ fontSize:11, color:COLORS.muted }}>Since {sub.since}</div>
                       </div>
                       <SubBadge tierName={sub.tierName} />
-                      {streamer?.live && <Pill color={COLORS.accent} style={{ fontSize:10, padding:"2px 7px" }}>LIVE</Pill>}
                     </div>
                   );
                 })}
@@ -6967,18 +7013,28 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
           {/* Recommended */}
           <Card>
             <div style={{ fontWeight:800, fontSize:14, marginBottom:12 }}>✨ Recommended for You</div>
-            {recommended.length === 0 ? (
-              <div style={{ fontSize:12, color:COLORS.muted, textAlign:"center", padding:"16px 0" }}>Follow more streamers to get recommendations</div>
+            {liveLoading ? (
+              <div style={{ fontSize:12, color:COLORS.muted, textAlign:"center", padding:"16px 0" }}>Loading…</div>
+            ) : recommended.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"16px 8px" }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>🔍</div>
+                <div style={{ fontSize:12, color:COLORS.muted, marginBottom:12, lineHeight:1.5 }}>
+                  Discover streamers you'll love
+                </div>
+                <Btn onClick={() => onNavigate("viewer-browse")} variant="ghost" style={{ fontSize:12, width:"100%" }}>Browse Live Now →</Btn>
+              </div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 {recommended.map(s => (
                   <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId:s.id })}
                     style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer", padding:"8px", borderRadius:10, transition:"background 0.15s" }}>
-                    <div style={{ width:40, height:40, borderRadius:10, background:s.preview||COLORS.surface,
-                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{s.avatar}</div>
+                    <div style={{ width:40, height:40, borderRadius:10, background:COLORS.surface, overflow:"hidden",
+                      display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>
+                      {s.avatarImg ? <img src={s.avatarImg} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : "🎭"}
+                    </div>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
-                      <div style={{ fontSize:10, color:COLORS.muted }}>{s.viewers?.toLocaleString()} viewers</div>
+                      <div style={{ fontWeight:700, fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.displayName || s.name}</div>
+                      <div style={{ fontSize:10, color:COLORS.muted }}>{(s.viewers||0).toLocaleString()} viewers</div>
                     </div>
                     <Pill color={COLORS.accent} style={{ fontSize:9, padding:"2px 6px" }}>LIVE</Pill>
                   </div>
