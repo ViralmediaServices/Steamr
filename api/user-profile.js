@@ -79,7 +79,7 @@ export default async function handler(req, res) {
   // ── Public streamer profile — no auth needed ─────────────────────────────
   // Called by ProfileScreen and StreamRoomScreen when viewing another streamer.
   // ?publicId={email} returns the public fields for that streamer.
-  const publicId = req.query?.publicId;
+  const publicId = req.query?.publicId || req.query?.id;
   if (publicId) {
     try {
       const lookupEmail = decodeURIComponent(publicId).toLowerCase().trim();
@@ -486,8 +486,20 @@ export default async function handler(req, res) {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
         activity.subscriptions = activity.subscriptions || {};
+
+        const alreadySubscribed = !!activity.subscriptions[streamerId];
         activity.subscriptions[streamerId] = req.body.sub;
         await kvCommand("SET", activityKey, JSON.stringify(activity));
+
+        // Increment the streamer's subscriber count (only if new subscription)
+        if (!alreadySubscribed && streamerId) {
+          const sKey = `activity:${streamerId}`;
+          const { result: sRes } = await kvCommand("GET", sKey);
+          const sActivity = parse(sRes) || {};
+          sActivity.subscribers = (sActivity.subscribers || 0) + 1;
+          await kvCommand("SET", sKey, JSON.stringify(sActivity));
+        }
+
         return res.status(200).json({ ok: true });
       }
 
@@ -495,8 +507,20 @@ export default async function handler(req, res) {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
         activity.subscriptions = activity.subscriptions || {};
+
+        const wasSubscribed = !!activity.subscriptions[streamerId];
         delete activity.subscriptions[streamerId];
         await kvCommand("SET", activityKey, JSON.stringify(activity));
+
+        // Decrement the streamer's subscriber count (only if was subscribed)
+        if (wasSubscribed && streamerId) {
+          const sKey = `activity:${streamerId}`;
+          const { result: sRes } = await kvCommand("GET", sKey);
+          const sActivity = parse(sRes) || {};
+          sActivity.subscribers = Math.max(0, (sActivity.subscribers || 0) - 1);
+          await kvCommand("SET", sKey, JSON.stringify(sActivity));
+        }
+
         return res.status(200).json({ ok: true });
       }
 
