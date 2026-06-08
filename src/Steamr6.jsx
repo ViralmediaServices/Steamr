@@ -4109,25 +4109,39 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           {/* Social links — always show on own profile; on public only if links exist */}
           {(isOwnProfile || Object.keys(profile.socialLinks || {}).length > 0) && (
             <Card style={{ marginBottom:16 }}>
-              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Social</div>
+              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>🔗 Social</div>
               {Object.keys(profile.socialLinks || {}).length > 0 ? (
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                   {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
                     if (!handle) return null;
-                    const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
                     const cleanHandle = handle.replace(/^@/, "");
-                    const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
-                              : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
-                              : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
-                              : handle;
+                    const meta = platform === "twitter"
+                      ? { icon:"𝕏",  label:"Twitter / X", color:"#1DA1F2", url:`https://twitter.com/${cleanHandle}` }
+                      : platform === "instagram"
+                      ? { icon:"📸", label:"Instagram",    color:"#E1306C", url:`https://instagram.com/${cleanHandle}` }
+                      : platform === "tiktok"
+                      ? { icon:"🎵", label:"TikTok",       color:"#00f2ea", url:`https://tiktok.com/@${cleanHandle}` }
+                      : { icon:"🔗", label:platform,       color:COLORS.muted, url:handle };
                     return (
-                      <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
-                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+                      <a key={platform} href={meta.url} target="_blank" rel="noopener noreferrer"
+                        style={{ textDecoration:"none", display:"flex", alignItems:"center", gap:12,
+                          background: meta.color + "11",
+                          border: `1px solid ${meta.color}33`,
+                          borderRadius: 10, padding:"11px 14px",
+                          transition:"border-color 0.15s, background 0.15s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color + "88"; e.currentTarget.style.background = meta.color + "1e"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = meta.color + "33"; e.currentTarget.style.background = meta.color + "11"; }}
                       >
-                        <span>{icon}</span>
-                        <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
+                        <span style={{ width:32, height:32, borderRadius:8, background: meta.color + "22",
+                          border:`1px solid ${meta.color}44`, display:"flex", alignItems:"center",
+                          justifyContent:"center", fontSize:15, flexShrink:0 }}>
+                          {meta.icon}
+                        </span>
+                        <div>
+                          <div style={{ fontSize:11, fontWeight:700, color:meta.color, textTransform:"uppercase", letterSpacing:0.8 }}>{meta.label}</div>
+                          <div style={{ fontSize:13, fontWeight:600, color:COLORS.text }}>@{cleanHandle}</div>
+                        </div>
+                        <span style={{ marginLeft:"auto", fontSize:16, color:meta.color, opacity:0.6 }}>↗</span>
                       </a>
                     );
                   })}
