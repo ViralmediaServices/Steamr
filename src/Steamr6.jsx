@@ -1499,10 +1499,10 @@ const QUALITY_PRESETS = [
   {id:"480p", label:"480p SD",  sub:"Standard", bitrate:"1,000 kbps",fps:"30 fps",note:"Low bandwidth",color:"#aa8890"},
 ];
 const CAMERA_DEVICES = [
-  {id:"cam0",label:"FaceTime HD Camera",      icon:"📷",res:"1080p"},
-  {id:"cam1",label:"iPhone (Continuity)",     icon:"📱",res:"4K"},
-  {id:"cam2",label:"OBS Virtual Camera",      icon:"🎥",res:"1080p"},
-  {id:"cam3",label:"Snap Camera",             icon:"✨",res:"720p"},
+  {id:"cam0",label:"Web Cam",              icon:"📷",res:"1080p",note:"Auto-connects to your system camera"},
+  {id:"cam2",label:"OBS Virtual Camera",   icon:"🎥",res:"1080p"},
+  {id:"cam1",label:"iPhone (Continuity)",  icon:"📱",res:"4K"},
+  {id:"cam3",label:"Android",              icon:"🤖",res:"1080p",note:"Connect via DroidCam or USB"},
 ];
 const MIC_DEVICES = [
   {id:"mic0",label:"Built-in Microphone",     icon:"🎙️",type:"Built-in"},
