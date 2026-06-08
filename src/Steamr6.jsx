@@ -7057,11 +7057,18 @@ function AdminScreen({ onNavigate }) {
   const fetchAccounts = async (key) => {
     setLoading(true); setError("");
     try {
-      const res  = await fetch("/api/admin-cleanup", { headers: { "x-admin-key": key } });
-      const data = await res.json();
+      const res  = await fetch("/api/admin-cleanup", {
+        headers: { "x-admin-key": key, "Content-Type": "application/json" },
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); }
+      catch { setError(`Server returned: ${text.slice(0,200)}`); setLoading(false); return; }
       if (data.error) { setError(data.error); setAuthed(false); }
-      else { setAccounts(data.accounts); setAuthed(true); }
-    } catch { setError("Could not connect to server."); }
+      else { setAccounts(data.accounts || []); setAuthed(true); }
+    } catch (err) {
+      setError(`Could not connect: ${err.message}`);
+    }
     setLoading(false);
   };
 
