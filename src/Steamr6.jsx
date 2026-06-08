@@ -3580,6 +3580,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
       <video ref={videoRef} autoPlay muted playsInline
         style={{ position:"absolute", inset:0, width:"100%", height:"100%",
           objectFit:"cover", borderRadius:14,
+          transform:"scaleX(-1)",
           display: permStatus === "granted" ? "block" : "none" }}
       />
 
