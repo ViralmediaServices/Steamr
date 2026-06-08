@@ -486,7 +486,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
 
   // Live → stream room, Offline → profile page
   const handleCardClick = () => {
-    if (s.live && !s.isPrivate) onNavigate("stream-room", { streamerId: s.id });
+    if (s.live && !s.isPrivate) onNavigate("stream-room");
     else if (!s.live) onNavigate("profile", { streamerId: s.id });
   };
 
@@ -561,7 +561,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
         {/* Spy overlay on private hover */}
         {s.isPrivate && hovered && (
           <div
-            onClick={e => { e.stopPropagation(); onNavigate("stream-room", { streamerId: s.id }); }}
+            onClick={e => { e.stopPropagation(); onNavigate("stream-room"); }}
             style={{
               position: "absolute", inset: 0, background: "#00000099",
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -1156,18 +1156,18 @@ const MIC_DEVICES = [
 
 // ── DISCOVERY DATA ────────────────────────────────────────────────────────────
 const DISCOVERY_CATS = [
-  {name:"Female",   icon:"🌸",gradient:"linear-gradient(135deg,#ff2d55,#c0163a)", hot:true},
-  {name:"Male",     icon:"⚡",gradient:"linear-gradient(135deg,#4a9edd,#2d6ea8)"},
-  {name:"Couples",  icon:"💑",gradient:"linear-gradient(135deg,#00e5a0,#00966a)"},
-  {name:"Trans",    icon:"🦋",gradient:"linear-gradient(135deg,#b06fd8,#7040a8)"},
-  {name:"Gaming",   icon:"🎮",gradient:"linear-gradient(135deg,#6c5ce7,#4a3ea8)", hot:true},
-  {name:"Music",    icon:"🎵",gradient:"linear-gradient(135deg,#fd79a8,#c0163a)"},
-  {name:"Fitness",  icon:"💪",gradient:"linear-gradient(135deg,#e17055,#c0392b)"},
-  {name:"Art",      icon:"🎨",gradient:"linear-gradient(135deg,#00b894,#007a60)"},
-  {name:"Cooking",  icon:"🍳",gradient:"linear-gradient(135deg,#fdcb6e,#e17055)"},
-  {name:"Comedy",   icon:"😂",gradient:"linear-gradient(135deg,#a29bfe,#6c5ce7)"},
-  {name:"ASMR",     icon:"🎙️",gradient:"linear-gradient(135deg,#74b9ff,#0984e3)", hot:true},
-  {name:"Wellness", icon:"🧘",gradient:"linear-gradient(135deg,#55efc4,#00b894)"},
+  {name:"Female",   icon:"🌸",gradient:"linear-gradient(135deg,#ff2d55,#c0163a)", count:6240,hot:true},
+  {name:"Male",     icon:"⚡",gradient:"linear-gradient(135deg,#4a9edd,#2d6ea8)", count:3180},
+  {name:"Couples",  icon:"💑",gradient:"linear-gradient(135deg,#00e5a0,#00966a)", count:1840},
+  {name:"Trans",    icon:"🦋",gradient:"linear-gradient(135deg,#b06fd8,#7040a8)", count:920},
+  {name:"Gaming",   icon:"🎮",gradient:"linear-gradient(135deg,#6c5ce7,#4a3ea8)", count:2100,hot:true},
+  {name:"Music",    icon:"🎵",gradient:"linear-gradient(135deg,#fd79a8,#c0163a)", count:1560},
+  {name:"Fitness",  icon:"💪",gradient:"linear-gradient(135deg,#e17055,#c0392b)", count:840},
+  {name:"Art",      icon:"🎨",gradient:"linear-gradient(135deg,#00b894,#007a60)", count:720},
+  {name:"Cooking",  icon:"🍳",gradient:"linear-gradient(135deg,#fdcb6e,#e17055)", count:480},
+  {name:"Comedy",   icon:"😂",gradient:"linear-gradient(135deg,#a29bfe,#6c5ce7)", count:390},
+  {name:"ASMR",     icon:"🎙️",gradient:"linear-gradient(135deg,#74b9ff,#0984e3)", count:1240,hot:true},
+  {name:"Wellness", icon:"🧘",gradient:"linear-gradient(135deg,#55efc4,#00b894)", count:560},
 ];
 const DISCOVERY_TAGS = [
   {tag:"lovense",count:4820,hot:true},{tag:"interactive",count:3910,hot:true},{tag:"new",count:2100,hot:true},
@@ -1375,7 +1375,7 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
           </div>
           <div style={{ display:"flex", gap:12, overflowX:"auto", paddingBottom:6 }}>
             {justLive.map(s => (
-              <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId: s.id })} style={{ cursor:"pointer", flexShrink:0, width:128 }}>
+              <div key={s.id} onClick={() => onNavigate("stream-room")} style={{ cursor:"pointer", flexShrink:0, width:128 }}>
                 <div style={{ width:128, height:72, background:s.preview, borderRadius:10, border:`2px solid ${COLORS.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, marginBottom:6, position:"relative" }}>
                   {s.avatar}
                   <div style={{ position:"absolute", top:5, left:5, background:COLORS.accent, color:"#fff", fontSize:8, fontWeight:800, borderRadius:4, padding:"2px 6px", letterSpacing:0.5 }}>NEW</div>
@@ -2347,7 +2347,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                         style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Keep Subscription
                       </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(id); setConfirmId(null); }}
+                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
                         style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Yes, Cancel
                       </button>
@@ -4027,7 +4027,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           ) : (
             <>
               {isLiveNow && (
-                <Btn onClick={() => onNavigate("stream-room", { streamerId })} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
+                <Btn onClick={() => onNavigate("stream-room")} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
               )}
               <Btn
                 onClick={() => {
@@ -6090,7 +6090,7 @@ function DiscoveryScreen({ onNavigate }) {
             ) : (
               <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(180px,1fr))", gap:12 }}>
                 {filteredStreamers.map(s => (
-                  <div key={s.id} onClick={() => s.live?onNavigate("stream-room",{streamerId:s.id}):onNavigate("profile",{streamerId:s.id})}
+                  <div key={s.id} onClick={() => s.live?onNavigate("stream-room"):onNavigate("profile",{streamerId:s.id})}
                     style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12, padding:14, cursor:"pointer", transition:"all 0.2s" }}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=COLORS.accent;e.currentTarget.style.transform="translateY(-2px)"}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=COLORS.border;e.currentTarget.style.transform="none"}}>
@@ -6153,7 +6153,7 @@ function DiscoveryScreen({ onNavigate }) {
                   </div>
                   <div style={{ display:"flex", gap:10, overflowX:"auto" }}>
                     {fs.map(s => (
-                      <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId: s.id })}
+                      <div key={s.id} onClick={() => onNavigate("stream-room")}
                         style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12,
                           padding:12, cursor:"pointer", flexShrink:0, width:140, transition:"all 0.2s" }}
                         onMouseEnter={e=>e.currentTarget.style.borderColor=COLORS.accent}
@@ -7497,7 +7497,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
                   const displayName = profile?.displayName || profile?.name || sub.streamerName || "Streamer";
                   const avatarImg   = profile?.avatarImg || null;
                   return (
-                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId: id })}
+                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
@@ -7751,6 +7751,7 @@ function AdminScreen({ onNavigate }) {
   const [loading,   setLoading]   = useState(false);
   const [status,    setStatus]    = useState("");
   const [error,     setError]     = useState("");
+  const [verifying, setVerifying] = useState({}); // { email: true/false }
 
   const fetchAccounts = async (key) => {
     setLoading(true); setError("");
@@ -7768,6 +7769,29 @@ function AdminScreen({ onNavigate }) {
       setError(`Could not connect: ${err.message}`);
     }
     setLoading(false);
+  };
+
+  const verifyAccount = async (email) => {
+    if (!window.confirm(`Approve KYC and mark verified: ${email}?`)) return;
+    setVerifying(v => ({ ...v, [email]: true }));
+    setError(""); setStatus("");
+    try {
+      const res  = await fetch("/api/admin-cleanup", {
+        method:  "PATCH",
+        headers: { "x-admin-key": adminKey, "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "verify", email }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setStatus(`✅ ${email} is now verified and can go live`);
+        fetchAccounts(adminKey); // refresh list to show new status
+      } else {
+        setError(data.error || "Verification failed");
+      }
+    } catch (err) {
+      setError(`Could not verify: ${err.message}`);
+    }
+    setVerifying(v => ({ ...v, [email]: false }));
   };
 
   const deleteAccount = async (email) => {
@@ -7798,10 +7822,17 @@ function AdminScreen({ onNavigate }) {
     } catch { setError("Delete failed."); }
   };
 
+  // KYC badge helper
+  const KycBadge = ({ verified, kycStatus }) => {
+    if (verified) return <span style={{ fontSize:10, fontWeight:700, background:COLORS.green+"22", color:COLORS.green, border:`1px solid ${COLORS.green}44`, borderRadius:20, padding:"2px 8px" }}>✅ Verified</span>;
+    if (kycStatus === "pending") return <span style={{ fontSize:10, fontWeight:700, background:COLORS.gold+"22", color:COLORS.gold, border:`1px solid ${COLORS.gold}44`, borderRadius:20, padding:"2px 8px" }}>⏳ Pending</span>;
+    return <span style={{ fontSize:10, fontWeight:700, background:COLORS.muted+"22", color:COLORS.muted, border:`1px solid ${COLORS.muted}44`, borderRadius:20, padding:"2px 8px" }}>No KYC</span>;
+  };
+
   return (
-    <div style={{ maxWidth:640, margin:"0 auto", padding:"40px 24px 60px" }}>
+    <div style={{ maxWidth:720, margin:"0 auto", padding:"40px 24px 60px" }}>
       <h2 style={{ margin:"0 0 6px", fontSize:24, fontWeight:900 }}>🛡️ Admin Panel</h2>
-      <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage Upstash accounts. Keep this page private.</p>
+      <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage accounts and approve identity verification. Keep this page private.</p>
 
       {!authed ? (
         <Card>
@@ -7828,12 +7859,33 @@ function AdminScreen({ onNavigate }) {
             {accounts.length === 0 ? (
               <div style={{ padding:"32px", textAlign:"center", color:COLORS.muted }}>No accounts found</div>
             ) : accounts.map((a, i) => (
-              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}22` }}>
-                <div>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{a.email || a.key}</div>
-                  <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{a.name} · {a.role} · {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown"}</div>
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}22`, gap:12, flexWrap:"wrap" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                    {a.email || a.key}
+                    <KycBadge verified={a.verified} kycStatus={a.kycStatus} />
+                  </div>
+                  <div style={{ fontSize:11, color:COLORS.muted, marginTop:3 }}>
+                    {a.name} · {a.role} · Joined {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown"}
+                    {a.kycStatus === "pending" && !a.verified && (
+                      <span style={{ color:COLORS.gold, marginLeft:8 }}>· KYC documents submitted</span>
+                    )}
+                  </div>
                 </div>
-                <Btn onClick={() => deleteAccount(a.email)} variant="ghost" style={{ fontSize:11, color:"#ff6666", padding:"5px 10px" }}>Delete</Btn>
+                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  {/* Show Verify button for streamer accounts with pending KYC OR no KYC (admin override) */}
+                  {a.role === "streamer" && !a.verified && (
+                    <Btn
+                      onClick={() => verifyAccount(a.email)}
+                      disabled={verifying[a.email]}
+                      variant="green"
+                      style={{ fontSize:11, padding:"5px 10px" }}
+                    >
+                      {verifying[a.email] ? "…" : "✅ Verify"}
+                    </Btn>
+                  )}
+                  <Btn onClick={() => deleteAccount(a.email)} variant="ghost" style={{ fontSize:11, color:"#ff6666", padding:"5px 10px" }}>Delete</Btn>
+                </div>
               </div>
             ))}
           </Card>
