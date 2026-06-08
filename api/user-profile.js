@@ -100,12 +100,6 @@ export default async function handler(req, res) {
       const { result: bannerResult } = await kvCommand("GET", `banner:${lookupEmail}`);
       sp.bannerImg = bannerResult || null;
 
-            // Load bannerImg from its own Redis key
-      const { result: authBannerResult } = await kvCommand("GET", `banner:${email}`);
-      if (account.streamerProfile) {
-        account.streamerProfile.bannerImg = authBannerResult || null;
-      }
-
       return res.status(200).json({
         ok: true,
         profile: {
