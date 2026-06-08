@@ -3018,86 +3018,201 @@ function PendingKYC({ isStreamer, onNavigate, inline=false }) {
 // ── STREAMER DASHBOARD ────────────────────────────────────────────────────────
 function StreamerDashboard({ onNavigate, addToast, addNotification }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [cashedOut, setCashedOut] = useState(false);
-  const [cashoutAmount, setCashoutAmount] = useState("");
-  const earnings = [
-    { label:"Today",      tokens:8920,   usd:Number(tokensToStreamerUSD(8920))   },
-    { label:"This Week",  tokens:41200,  usd:Number(tokensToStreamerUSD(41200))  },
-    { label:"This Month", tokens:183000, usd:Number(tokensToStreamerUSD(183000)) },
-    { label:"All Time",   tokens:920000, usd:Number(tokensToStreamerUSD(920000)) },
+  const [profile,    setProfile]    = useState(null);
+  const [activity,   setActivity]   = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [cashedOut,  setCashedOut]  = useState(false);
+  const [cashoutAmt, setCashoutAmt] = useState("");
+
+  const hour     = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) { setProfile(data.profile); setActivity(data.activity); }
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+    // Fallback from localStorage
+    try {
+      const s = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (s?.name) setProfile(p => p || { name: s.name, displayName: s.name, avatarImg: null, verified: false });
+    } catch {}
+  }, []);
+
+  const name           = profile?.displayName || profile?.name || "Streamer";
+  const avatarImg      = profile?.avatarImg || null;
+  const verified       = profile?.verified || false;
+  const joinDate       = profile?.joinDate || "";
+
+  // Real earnings from activity
+  const todayTokens    = activity?.todayTokens    || 0;
+  const weekTokens     = activity?.weekTokens     || 0;
+  const monthTokens    = activity?.monthTokens    || 0;
+  const allTimeTokens  = activity?.allTimeTokens  || 0;
+  const followers      = activity?.followers      || 0;
+  const subscribers    = activity?.subscribers    || 0;
+  const totalStreams    = activity?.totalStreams   || 0;
+  const hoursStreamed   = activity?.hoursStreamed  || 0;
+  const peakViewers    = activity?.peakViewers    || 0;
+  const payoutHistory  = activity?.payoutHistory  || [];
+
+  const availableUSD   = Number(tokensToStreamerUSD(weekTokens));
+
+  const EARNINGS = [
+    { label:"Today",      tokens:todayTokens,   usd:Number(tokensToStreamerUSD(todayTokens))   },
+    { label:"This Week",  tokens:weekTokens,     usd:Number(tokensToStreamerUSD(weekTokens))   },
+    { label:"This Month", tokens:monthTokens,    usd:Number(tokensToStreamerUSD(monthTokens))  },
+    { label:"All Time",   tokens:allTimeTokens,  usd:Number(tokensToStreamerUSD(allTimeTokens)) },
   ];
-  const availableUSD = earnings[1].usd;
-  const weeklyTokens = earnings[1].tokens;
 
   return (
     <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
-      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:12 }}>
-        <div><h2 style={{ margin:"0 0 4px",fontSize:26,fontWeight:800 }}>Streamer Dashboard</h2><div style={{ color:COLORS.muted,fontSize:14 }}>Welcome back, Luna Vex 👋</div></div>
-        <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+          <div style={{ width:52, height:52, borderRadius:"50%", background:COLORS.card, border:`2px solid ${COLORS.border}`,
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, overflow:"hidden", flexShrink:0 }}>
+            {avatarImg ? <img src={avatarImg} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }}/> : "🎭"}
+          </div>
+          <div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <h2 style={{ margin:0, fontSize:22, fontWeight:900 }}>{greeting}, {name} 👋</h2>
+              {verified && <span style={{ fontSize:11, background:COLORS.green+"22", color:COLORS.green, border:`1px solid ${COLORS.green}44`, borderRadius:20, padding:"2px 8px", fontWeight:700 }}>✅ Verified</span>}
+            </div>
+            <div style={{ color:COLORS.muted, fontSize:13, marginTop:2 }}>{joinDate && `Member since ${joinDate}`}</div>
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <Btn onClick={() => onNavigate("edit-profile")} variant="secondary" style={{ fontSize:13 }}>✏️ Edit Profile</Btn>
           <Btn onClick={() => onNavigate("analytics")} variant="secondary" style={{ fontSize:13 }}>📊 Analytics</Btn>
           <Btn onClick={() => onNavigate("kyc-streamer")} variant="secondary" style={{ fontSize:13 }}>🛡️ ID Status</Btn>
           <Btn onClick={() => onNavigate("go-live")} style={{ fontSize:15 }}>🔴 Go Live</Btn>
         </div>
       </div>
+
       <PendingKYC isStreamer inline onNavigate={onNavigate} />
-      <div style={{ display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:12,marginBottom:24 }}>
-        {earnings.map(e => (
+
+      {/* Earnings cards */}
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:24 }}>
+        {EARNINGS.map(e => (
           <Card key={e.label} style={{ padding:"16px 18px" }}>
-            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:1 }}>{e.label}</div>
-            <div style={{ fontSize:20,fontWeight:900,color:COLORS.gold,margin:"6px 0 2px" }}>🪙 {e.tokens.toLocaleString()}</div>
-            <div style={{ color:COLORS.green,fontWeight:700,fontSize:15 }}>${fmtUSD(e.usd)}</div>
-            <div style={{ color:COLORS.muted,fontSize:10,marginTop:1 }}>at $0.05/token</div>
+            <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:1 }}>{e.label}</div>
+            <div style={{ fontSize:20, fontWeight:900, color:COLORS.gold, margin:"6px 0 2px" }}>🪙 {e.tokens.toLocaleString()}</div>
+            <div style={{ color:COLORS.green, fontWeight:700, fontSize:15 }}>${fmtUSD(e.usd)}</div>
+            <div style={{ color:COLORS.muted, fontSize:10, marginTop:1 }}>at $0.05/token</div>
           </Card>
         ))}
       </div>
-      {/* ── Mini sparkline preview ── */}
+
+      {/* Sparkline */}
       <Card style={{ marginBottom:20, padding:"16px 18px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
           <div style={{ fontWeight:700, fontSize:14 }}>📈 Earnings — Last 30 Days</div>
-          <button onClick={() => onNavigate("analytics")}
-            style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:12, fontWeight:700, padding:0 }}>
+          <button onClick={() => onNavigate("analytics")} style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:12, fontWeight:700, padding:0 }}>
             Full Analytics →
           </button>
         </div>
-        <AreaChart data={ANALYTICS_DAILY.map(d => ({ label:d.day, value:d.tokens }))} color={COLORS.accent} height={70} />
+        {allTimeTokens > 0 ? (
+          <AreaChart data={ANALYTICS_DAILY.map(d => ({ label:d.day, value:d.tokens }))} color={COLORS.accent} height={70} />
+        ) : (
+          <div style={{ height:70, display:"flex", alignItems:"center", justifyContent:"center", color:COLORS.muted, fontSize:13 }}>
+            📡 Earnings chart will appear once you go live and receive tips
+          </div>
+        )}
         <div style={{ display:"flex", justifyContent:"space-between", marginTop:8, fontSize:11, color:COLORS.muted }}>
-          <span>May 6</span><span>Jun 4</span>
+          <span>30 days ago</span><span>Today</span>
         </div>
       </Card>
 
-      <div style={{ display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:20 }}>
+      {/* Stats grid */}
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:24 }}>
+        {[
+          { label:"Followers",      value:followers.toLocaleString(),              color:COLORS.accent  },
+          { label:"Subscribers",    value:subscribers.toLocaleString(),            color:COLORS.gold    },
+          { label:"Total Streams",  value:totalStreams.toLocaleString(),            color:COLORS.accentC },
+          { label:"Hours Streamed", value:`${hoursStreamed}h`,                     color:COLORS.green   },
+        ].map(s => (
+          <Card key={s.label} style={{ padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:22, fontWeight:900, color:s.color }}>{s.value}</div>
+            <div style={{ fontSize:11, color:COLORS.muted, marginTop:4 }}>{s.label}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:20 }}>
+        {/* Cash Out */}
         <Card>
-          <h3 style={{ margin:"0 0 4px",fontSize:18,fontWeight:800 }}>💸 Cash Out</h3>
-          <p style={{ color:COLORS.muted,fontSize:13,marginBottom:20 }}>Minimum $20. Sent within 2 business days.</p>
-          <div style={{ background:COLORS.surface,borderRadius:10,padding:"12px 16px",marginBottom:16 }}>
-            <div style={{ fontSize:11,color:COLORS.muted }}>Available Balance</div>
-            <div style={{ fontSize:26,fontWeight:900,color:COLORS.green }}>${fmtUSD(availableUSD)}</div>
-            <div style={{ fontSize:12,color:COLORS.muted }}>🪙 {weeklyTokens.toLocaleString()} tokens × $0.05</div>
+          <h3 style={{ margin:"0 0 4px", fontSize:18, fontWeight:800 }}>💸 Cash Out</h3>
+          <p style={{ color:COLORS.muted, fontSize:13, marginBottom:20 }}>Minimum $20. Sent within 2 business days.</p>
+          <div style={{ background:COLORS.surface, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+            <div style={{ fontSize:11, color:COLORS.muted }}>Available Balance</div>
+            <div style={{ fontSize:26, fontWeight:900, color:COLORS.green }}>${fmtUSD(availableUSD)}</div>
+            <div style={{ fontSize:12, color:COLORS.muted }}>🪙 {weekTokens.toLocaleString()} tokens × $0.05</div>
           </div>
-          {!cashedOut ? (<>
-            <Input label="Amount to withdraw ($)" value={cashoutAmount} onChange={setCashoutAmount} placeholder="e.g. 500" />
-            <div style={{ fontSize:12,color:COLORS.muted,marginTop:-8,marginBottom:12 }}>To: Chase Bank •••• 4821</div>
+          {weekTokens === 0 ? (
+            <div style={{ textAlign:"center", padding:"16px 0", color:COLORS.muted, fontSize:13 }}>
+              💡 Go live and earn tokens to unlock payouts
+            </div>
+          ) : !cashedOut ? (<>
+            <Input label="Amount to withdraw ($)" value={cashoutAmt} onChange={setCashoutAmt} placeholder={`e.g. ${fmtUSD(availableUSD)}`} />
             <Btn onClick={() => {
               setCashedOut(true);
-              const amt = cashoutAmount ? `$${cashoutAmount}` : `$${fmtUSD(availableUSD)}`;
+              const amt = cashoutAmt ? `$${cashoutAmt}` : `$${fmtUSD(availableUSD)}`;
               addToast("payout", `Payout of ${amt} requested ✓`);
               addNotification("payout", `Payout of ${amt} is processing — arrives in 1-2 business days`);
             }} variant="green" style={{ width:"100%" }}>Request Payout →</Btn>
           </>) : (
-            <div style={{ textAlign:"center",padding:"16px 0" }}><div style={{ fontSize:36,marginBottom:8 }}>✅</div><div style={{ fontWeight:700,color:COLORS.green }}>Payout Requested!</div><div style={{ color:COLORS.muted,fontSize:13 }}>Arrives in 1-2 business days</div></div>
+            <div style={{ textAlign:"center", padding:"16px 0" }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
+              <div style={{ fontWeight:700, color:COLORS.green }}>Payout Requested!</div>
+              <div style={{ color:COLORS.muted, fontSize:13 }}>Arrives in 1-2 business days</div>
+            </div>
           )}
         </Card>
+
+        {/* Stats detail */}
         <Card>
-          <h3 style={{ margin:"0 0 16px",fontSize:18,fontWeight:800 }}>📊 Your Stats</h3>
-          {[{label:"Total Hours Streamed",value:"142 hrs"},{label:"Peak Viewers",value:"6,291"},{label:"Avg Viewers / Stream",value:"1,842"},{label:"Top Tippers",value:"darkwing99, starfish22"},{label:"Conversion Rate",value:"18.4%"}].map(stat => (
-            <div key={stat.label} style={{ display:"flex",justifyContent:"space-between",padding:"10px 0",borderBottom:`1px solid ${COLORS.border}` }}><span style={{ color:COLORS.muted,fontSize:13 }}>{stat.label}</span><span style={{ fontWeight:700,fontSize:13 }}>{stat.value}</span></div>
-          ))}
-          <div style={{ marginTop:20 }}>
-            <div style={{ fontSize:12,color:COLORS.muted,marginBottom:8 }}>Payout History</div>
-            {[{date:"May 28",tokens:8240},{date:"May 14",tokens:5750},{date:"Apr 30",tokens:3960}].map(p => (
-              <div key={p.date} style={{ display:"flex",justifyContent:"space-between",fontSize:13,padding:"6px 0",alignItems:"center" }}><span style={{ color:COLORS.muted }}>{p.date}</span><span style={{ fontWeight:700 }}>${fmtUSD(tokensToStreamerUSD(p.tokens))}</span><Pill color={COLORS.green}>Paid</Pill></div>
-            ))}
-          </div>
+          <h3 style={{ margin:"0 0 16px", fontSize:18, fontWeight:800 }}>📊 Your Stats</h3>
+          {peakViewers === 0 && totalStreams === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px 0", color:COLORS.muted }}>
+              <div style={{ fontSize:36, marginBottom:12 }}>📡</div>
+              <div style={{ fontWeight:700, marginBottom:6 }}>No streams yet</div>
+              <div style={{ fontSize:13 }}>Your stats will appear here after your first live stream</div>
+              <Btn onClick={() => onNavigate("go-live")} style={{ marginTop:16 }}>🔴 Go Live Now</Btn>
+            </div>
+          ) : (
+            <>
+              {[
+                { label:"Total Hours Streamed", value:`${hoursStreamed} hrs` },
+                { label:"Peak Viewers",          value:peakViewers.toLocaleString() },
+                { label:"Total Followers",       value:followers.toLocaleString() },
+                { label:"Active Subscribers",    value:subscribers.toLocaleString() },
+              ].map(stat => (
+                <div key={stat.label} style={{ display:"flex", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${COLORS.border}` }}>
+                  <span style={{ color:COLORS.muted, fontSize:13 }}>{stat.label}</span>
+                  <span style={{ fontWeight:700, fontSize:13 }}>{stat.value}</span>
+                </div>
+              ))}
+              <div style={{ marginTop:20 }}>
+                <div style={{ fontSize:12, color:COLORS.muted, marginBottom:8 }}>Payout History</div>
+                {payoutHistory.length === 0 ? (
+                  <div style={{ fontSize:12, color:COLORS.muted }}>No payouts yet</div>
+                ) : payoutHistory.slice(0,3).map((p, i) => (
+                  <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:13, padding:"6px 0", alignItems:"center" }}>
+                    <span style={{ color:COLORS.muted }}>{p.date}</span>
+                    <span style={{ fontWeight:700 }}>${fmtUSD(p.amount)}</span>
+                    <Pill color={COLORS.green}>Paid</Pill>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </Card>
       </div>
     </div>
@@ -3211,6 +3326,17 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     setStreaming(true);
     addToast("live", "You're live! 🔴 Notifying your followers…");
     addNotification("live", `Your stream "${title}" started — goal: ${goalLabel}`);
+
+    // Record stream start in Upstash
+    const token = localStorage.getItem("steamr_token");
+    if (token) {
+      fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body:    JSON.stringify({ token, action: "stream-start", streamTitle: title }),
+      }).catch(() => {});
+    }
+
     // Email all followers
     try {
       const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
@@ -3232,12 +3358,27 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   };
 
   const endStream = () => {
+    // Save session stats to Upstash
+    const token = localStorage.getItem("steamr_token");
+    if (token && seconds > 0) {
+      fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          token,
+          action:        "stream-end",
+          durationSecs:  seconds,
+          tokensEarned:  sessionTokens,
+        }),
+      }).catch(() => {});
+    }
     stopStream();
     setStreaming(false);
     setSeconds(0);
     setSessionTokens(0);
     setGoal(null);
     setPermStatus("idle");
+    addToast("success", `Stream ended · ${sessionTokens} tokens earned this session!`);
   };
 
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -4030,6 +4171,29 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     socialTikTok:    profileData.socialLinks.tiktok    || "",
     newTag: "",
   });
+
+  // Load real avatar + bio from Upstash on mount
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        setForm(f => ({
+          ...f,
+          avatarImg: data.profile.avatarImg || f.avatarImg,
+          bio:       data.profile.bio       || f.bio,
+          ...(data.profile.streamerProfile || {}),
+          tags:    data.profile.streamerProfile?.tags    || f.tags,
+          tipMenu: data.profile.streamerProfile?.tipMenu || f.tipMenu,
+          socialTwitter:   data.profile.streamerProfile?.socialLinks?.twitter   || f.socialTwitter,
+          socialInstagram: data.profile.streamerProfile?.socialLinks?.instagram || f.socialInstagram,
+          socialTikTok:    data.profile.streamerProfile?.socialLinks?.tiktok    || f.socialTikTok,
+        }));
+      }
+    }).catch(() => {});
+  }, []);
   const [saved,    setSaved]    = useState(false);
   const [dragIdx,  setDragIdx]  = useState(null);
   const [wishlist, setWishlist] = useState((profileData.wishlist || DEFAULT_WISHLIST).map(i=>({...i})));
@@ -4082,8 +4246,33 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       },
     };
     onSave(updated);
+
+    // Save to Upstash
+    const token = localStorage.getItem("steamr_token");
+    if (token) {
+      fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          avatarImg:   form.avatarImg,
+          bio:         form.bio,
+          // Streamer-specific fields stored in account
+          streamerProfile: {
+            bannerColor: form.bannerColor,
+            bannerImg:   form.bannerImg,
+            roomSubject: form.roomSubject,
+            welcomeMsg:  form.welcomeMsg,
+            tags:        form.tags,
+            tipMenu:     form.tipMenu.filter(i => i.action.trim()),
+            socialLinks: updated.socialLinks,
+          },
+        }),
+      }).catch(() => {});
+    }
+
     setSaved(true);
-    setTimeout(() => { setSaved(false); onNavigate("profile", { streamerId: 1 }); }, 1200);
+    setTimeout(() => { setSaved(false); onNavigate("streamer-dashboard"); }, 1200);
   };
 
   return (
