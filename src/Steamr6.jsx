@@ -1912,7 +1912,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         <SubscribeModal
           profile={streamerProfile}
           currentSub={currentSub}
-          onSubscribe={(tier) => onSubscribe(selectedStreamerId, tier)}
+          onSubscribe={(tier) => onSubscribe(selectedStreamerId, tier, streamerProfile?.displayName || streamerProfile?.name, streamerProfile?.avatarImg)}
           onClose={() => setShowSubModal(false)}
         />
       )}
@@ -2112,15 +2112,35 @@ function WishlistSection({ wishlist, viewerTokens, onGift, isOwn }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewerTokens = 350, onCancelSub }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [tab,      setTab]     = useState("overview");
-  const [profile,  setProfile] = useState(null);
-  const [activity, setActivity]= useState(null);
-  const [loading,  setLoading] = useState(true);
-  const [error,    setError]   = useState("");
+  const [tab,         setTab]        = useState("overview");
+  const [profile,     setProfile]    = useState(null);
+  const [activity,    setActivity]   = useState(null);
+  const [loading,     setLoading]    = useState(true);
+  const [error,       setError]      = useState("");
+  const [subProfiles, setSubProfiles] = useState({});
 
   const subCount    = Object.keys(subscriptions).length;
   const followCount = following ? following.size : 0;
   const [confirmId, setConfirmId] = useState(null); // tracks which sub has cancel open
+
+  // Fetch real streamer profiles for subscriptions — no auth token, public lookup only
+  useEffect(() => {
+    const ids = Object.keys(subscriptions);
+    if (ids.length === 0) return;
+    ids.forEach(id => {
+      const sub = subscriptions[id];
+      const lookupId = sub?.streamerEmail || id;
+      if (!lookupId) return;
+      fetch(`/api/user-profile?publicId=${encodeURIComponent(lookupId)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && data.profile) {
+            setSubProfiles(prev => ({ ...prev, [id]: data.profile }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [subscriptions]);
 
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
@@ -2316,16 +2336,22 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
         <Card>
           <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
           {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
-            const isConfirm = confirmId === id;
+            const isConfirm   = confirmId === id;
+            const sp          = subProfiles[id];
+            const displayName = sp?.displayName || sp?.name || sub.streamerName || "Streamer";
+            const avatarImg   = sp?.avatarImg   || sub.streamerAvatar || null;
+            const streamerNav = sub.streamerEmail || id;
             return (
               <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div onClick={() => onNavigate("profile",{streamerId:id})}
-                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
-                    {"🎭"}
+                  <div onClick={() => onNavigate("profile",{streamerId:streamerNav})}
+                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0,overflow:"hidden" }}>
+                    {avatarImg
+                      ? <img src={avatarImg} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                      : "🎭"}
                   </div>
-                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:id})}>
-                    <div style={{ fontWeight:700,fontSize:13 }}>{sub.streamerName || "Streamer"}</div>
+                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:streamerNav})}>
+                    <div style={{ fontWeight:700,fontSize:13 }}>{displayName}</div>
                     <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
                   </div>
                   <SubBadge tierName={sub.tierName} />
@@ -2347,7 +2373,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                         style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Keep Subscription
                       </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
+                      <button onClick={() => { onCancelSub && onCancelSub(id); setConfirmId(null); }}
                         style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Yes, Cancel
                       </button>
@@ -4279,7 +4305,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         <SubscribeModal
           profile={profile}
           currentSub={currentSub}
-          onSubscribe={(tier) => onSubscribe(profile.id, tier)}
+          onSubscribe={(tier) => onSubscribe(profile.id, tier, profile.displayName || profile.name, profile.avatarImg)}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -7403,16 +7429,22 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
       .finally(() => setLiveLoading(false));
   }, [following]);
 
-  // Fetch profiles for subscribed streamers so we can show real names
+  // Fetch profiles for subscribed streamers so we can show real names + avatars
   useEffect(() => {
     const ids = Object.keys(subscriptions);
     if (ids.length === 0) return;
-    const token = localStorage.getItem("steamr_token");
     ids.forEach(id => {
-      fetch(`/api/user-profile?id=${id}`, { headers: { "x-auth-token": token || "" } })
+      const sub = subscriptions[id];
+      // Use the stored streamerEmail from the sub object — more reliable than the key
+      const lookupId = sub?.streamerEmail || id;
+      if (!lookupId) return;
+      // No auth token — this is a public profile lookup, not a viewer profile request
+      fetch(`/api/user-profile?publicId=${encodeURIComponent(lookupId)}`)
         .then(r => r.json())
         .then(data => {
-          if (data.ok) setSubProfiles(prev => ({ ...prev, [id]: data.profile }));
+          if (data.ok && data.profile) {
+            setSubProfiles(prev => ({ ...prev, [id]: data.profile }));
+          }
         })
         .catch(() => {});
     });
@@ -7493,11 +7525,12 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
               <div style={{ fontWeight:800, fontSize:16, marginBottom:12 }}>⭐ Your Subscriptions</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                 {Object.entries(subscriptions).map(([id, sub]) => {
-                  const profile = subProfiles[id];
+                  const profile     = subProfiles[id];
                   const displayName = profile?.displayName || profile?.name || sub.streamerName || "Streamer";
-                  const avatarImg   = profile?.avatarImg || null;
+                  const avatarImg   = profile?.avatarImg   || sub.streamerAvatar || null;
+                  const streamerNav = sub.streamerEmail    || id;
                   return (
-                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
+                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId: streamerNav })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
@@ -8305,9 +8338,8 @@ export default function App() {
       const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
         const _default = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
-        // Only restore screens that are fully authenticated and don't need streamer context
-        const CONTEXT_SCREENS = new Set(["stream-room","profile","edit-profile","private-show"]);
-        if (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT_SCREENS.has(savedScreen)) {
+        // Don't restore screens that need streamer context on fresh load
+        if (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen)) {
           return savedScreen;
         }
         return _default;
@@ -8412,8 +8444,7 @@ export default function App() {
         // Restore the last visited screen, fall back to dashboard
         const defaultScreen = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
         // Don't restore context-dependent screens — they need selectedStreamerId
-        const CONTEXT_SCREENS = new Set(["stream-room","profile","edit-profile","private-show"]);
-        const safeScreen = (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT_SCREENS.has(savedScreen))
+        const safeScreen = (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen))
           ? savedScreen : defaultScreen;
         setScreen(safeScreen);
         // Load real following list, token balance + subscriptions from Upstash
@@ -8602,12 +8633,15 @@ export default function App() {
   };
 
   // ── Subscribe — fires toast + notification ──
-  const onSubscribe = (streamerId, tier, streamerNameOverride) => {
+  const onSubscribe = (streamerId, tier, streamerNameOverride, streamerAvatarOverride) => {
     const newSub = {
-      tierName:  tier.name,
-      tierBadge: tier.badge,
-      tierPrice: tier.price,
-      tierColor: tier.color,
+      tierName:       tier.name,
+      tierBadge:      tier.badge,
+      tierPrice:      tier.price,
+      tierColor:      tier.color,
+      streamerEmail:  streamerId         || null,
+      streamerName:   streamerNameOverride  || null,
+      streamerAvatar: streamerAvatarOverride || null,
       since: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
     };
     setSubscriptions(prev => {
