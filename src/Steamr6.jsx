@@ -8323,8 +8323,8 @@ export default function App() {
       const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
         const _default = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
-        // Don't restore screens that need streamer context on fresh load
-        if (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen)) {
+        const CONTEXT   = new Set(["stream-room","profile","edit-profile","private-show"]);
+        if (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT.has(savedScreen)) {
           return savedScreen;
         }
         return _default;
@@ -8429,7 +8429,8 @@ export default function App() {
         // Restore the last visited screen, fall back to dashboard
         const defaultScreen = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
         // Don't restore context-dependent screens — they need selectedStreamerId
-        const safeScreen = (savedScreen && !["stream-room","profile","edit-profile","private-show"].includes(savedScreen))
+        const CONTEXT    = new Set(["stream-room","profile","edit-profile","private-show"]);
+        const safeScreen = (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT.has(savedScreen))
           ? savedScreen : defaultScreen;
         setScreen(safeScreen);
         // Load real following list, token balance + subscriptions from Upstash
@@ -8531,7 +8532,7 @@ export default function App() {
 
   const [seenOnboarding, setSeenOnboarding] = useState(false);
   // Screens that need selectedStreamerId context — not safe to restore on refresh alone
-  const NO_PERSIST_SCREENS = new Set(["stream-room","profile","edit-profile","private-show"]);
+  const NO_PERSIST_SCREENS = new Set(["stream-room","profile","edit-profile","private-show","landing","signup-streamer","signup-viewer","forgot-password","reset-password","admin"]);
 
   const navigate = (s, opts = {}) => {
     setScreen(s);
