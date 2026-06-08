@@ -1837,6 +1837,57 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const streamer = STREAMERS.find(s => s.id === selectedStreamerId);
   const streamerName = streamer?.name || "Streamer";
 
+  // ── Geo-blocking check ────────────────────────────────────────────────────
+  const [geoBlocked,  setGeoBlocked]  = useState(false);
+  const [geoChecking, setGeoChecking] = useState(true);
+  const [geoInfo,     setGeoInfo]     = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const runGeoCheck = async () => {
+      try {
+        // Fetch this streamer's geo-blocking settings (public, no auth needed)
+        const blockRes = await fetch(`/api/user-profile?geoBlockId=${selectedStreamerId}`);
+        const blockData = await blockRes.json();
+        const gb = blockData.geoBlocking;
+
+        if (!gb?.enabled || !gb.blocked?.length) {
+          if (!cancelled) setGeoChecking(false);
+          return; // No blocking configured — allow access
+        }
+
+        // Fetch viewer's location via IP geolocation
+        const locRes  = await fetch("https://ipapi.co/json/");
+        const loc     = await locRes.json();
+        if (cancelled) return;
+
+        const country = (loc.country_name || "").toLowerCase();
+        const state   = (loc.region       || "").toLowerCase();
+        const city    = (loc.city         || "").toLowerCase();
+
+        const blocked = gb.blocked.some(b => {
+          const val = b.value.toLowerCase().trim();
+          if (b.type === "country") return country.includes(val) || val.includes(country);
+          if (b.type === "state")   return state.includes(val)   || val.includes(state);
+          if (b.type === "city")    return city.includes(val)     || val.includes(city);
+          return false;
+        });
+
+        if (!cancelled) {
+          setGeoInfo({ country: loc.country_name, state: loc.region, city: loc.city });
+          setGeoBlocked(blocked);
+          setGeoChecking(false);
+        }
+      } catch {
+        if (!cancelled) setGeoChecking(false); // On error, allow access
+      }
+    };
+
+    runGeoCheck();
+    return () => { cancelled = true; };
+  }, [selectedStreamerId]);
+
   // ── Viewer presence heartbeat ─────────────────────────────────────────────
   useEffect(() => {
     // Generate a stable session ID for this viewing session
@@ -1909,6 +1960,38 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     setChatInput("");
     if (chatRef.current) setTimeout(() => chatRef.current.scrollTop = chatRef.current.scrollHeight, 50);
   };
+
+  // ── Geo-blocking gates ────────────────────────────────────────────────────
+  if (geoChecking) return (
+    <div style={{ maxWidth:500, margin:"80px auto", padding:"0 24px", textAlign:"center", color:COLORS.muted }}>
+      <div style={{ fontSize:40, marginBottom:16 }}>🌍</div>
+      <div style={{ fontSize:15 }}>Checking your location…</div>
+    </div>
+  );
+
+  if (geoBlocked) return (
+    <div style={{ maxWidth:520, margin:"80px auto", padding:"0 24px", textAlign:"center" }}>
+      <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`,
+        borderRadius:20, padding:"48px 36px" }}>
+        <div style={{ fontSize:56, marginBottom:20 }}>🚫</div>
+        <h2 style={{ margin:"0 0 12px", fontSize:22, fontWeight:900 }}>Content Not Available</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:8 }}>
+          This stream is not available in your region.
+        </p>
+        {geoInfo && (
+          <div style={{ display:"inline-block", background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+            borderRadius:10, padding:"8px 18px", fontSize:12, color:COLORS.muted, marginBottom:24 }}>
+            📍 {[geoInfo.city, geoInfo.state, geoInfo.country].filter(Boolean).join(", ")}
+          </div>
+        )}
+        <div>
+          <Btn onClick={() => onNavigate("viewer-browse")} variant="secondary" style={{ fontSize:13 }}>
+            ← Back to Browse
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 1150, margin: "0 auto", padding: isMobile?"12px":"24px", display: "grid", gridTemplateColumns: isMobile?"1fr":"1fr 320px", gap: 20 }}>
@@ -4482,12 +4565,37 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
         if (Array.isArray(data.profile.streamerProfile?.wishlist)) {
           setWishlist(data.profile.streamerProfile.wishlist.map(i => ({...i})));
         }
+        // Load geo-blocking settings
+        if (data.profile.streamerProfile?.geoBlocking) {
+          setGeoBlocking(data.profile.streamerProfile.geoBlocking);
+        }
       }
     }).catch(() => {});
   }, []);
   const [saved,    setSaved]    = useState(false);
   const [dragIdx,  setDragIdx]  = useState(null);
   const [wishlist, setWishlist] = useState((profileData.wishlist || []).map(i=>({...i})));
+  const [geoBlocking, setGeoBlocking] = useState(
+    profileData.geoBlocking || { enabled: false, blocked: [] }
+  );
+  const [geoInput, setGeoInput] = useState({ type: "country", value: "" });
+
+  const addGeoBlock = () => {
+    const val = geoInput.value.trim();
+    if (!val) return;
+    const already = geoBlocking.blocked.some(
+      b => b.type === geoInput.type && b.value.toLowerCase() === val.toLowerCase()
+    );
+    if (already) return;
+    setGeoBlocking(g => ({
+      ...g,
+      blocked: [...g.blocked, { id: Date.now(), type: geoInput.type, value: val }],
+    }));
+    setGeoInput(g => ({ ...g, value: "" }));
+  };
+  const removeGeoBlock = (id) =>
+    setGeoBlocking(g => ({ ...g, blocked: g.blocked.filter(b => b.id !== id) }));
+
   const addWishItem    = () => setWishlist(w => [...w, {id:Date.now(),emoji:"🎁",name:"",tokens:100,fulfilled:false,desc:""}]);
   const removeWishItem = (id) => setWishlist(w => w.filter(i => i.id !== id));
   const updateWishItem = (id, field, val) => setWishlist(w => w.map(i => i.id===id ? {...i,[field]:field==="tokens"?Number(val)||0:val} : i));
@@ -4564,6 +4672,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           avatarImg:   form.avatarImg,
           bio:         form.bio,
           // Streamer-specific fields stored in account
+          profileId:   profileData.id || 1,
           streamerProfile: {
             region:      form.region,
             bannerColor: form.bannerColor,
@@ -4574,6 +4683,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             tipMenu:     form.tipMenu,
             socialLinks: updated.socialLinks,
             wishlist:    wishlist,
+            geoBlocking: geoBlocking,
           },
         }),
       }).catch(() => {});
@@ -4983,6 +5093,94 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           ))}
         </div>
         <Btn onClick={addWishItem} variant="ghost" style={{ fontSize:13,padding:"9px 16px" }}>+ Add Item</Btn>
+      </Card>
+
+      {/* Geo Blocking */}
+      <Card style={{ marginBottom:20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted }}>🌍 GEO BLOCKING</div>
+          <Toggle checked={geoBlocking.enabled}
+            onChange={v => setGeoBlocking(g => ({ ...g, enabled: v }))} />
+        </div>
+        <div style={{ fontSize:12, color:COLORS.muted, marginBottom:geoBlocking.enabled ? 18 : 0, lineHeight:1.5 }}>
+          Block viewers from specific countries, states, or cities from accessing your stream.
+        </div>
+
+        {geoBlocking.enabled && (<>
+          {/* Add block input */}
+          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+            <select value={geoInput.type}
+              onChange={e => setGeoInput(g => ({ ...g, type: e.target.value }))}
+              style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                borderRadius:9, padding:"9px 12px", color:COLORS.text,
+                fontSize:13, outline:"none", cursor:"pointer", flexShrink:0 }}>
+              <option value="country">🌍 Country</option>
+              <option value="state">🏛 State / Province</option>
+              <option value="city">🏙 City / Town</option>
+            </select>
+            <input
+              value={geoInput.value}
+              onChange={e => setGeoInput(g => ({ ...g, value: e.target.value }))}
+              onKeyDown={e => e.key === "Enter" && addGeoBlock()}
+              placeholder={
+                geoInput.type === "country" ? "e.g. United States" :
+                geoInput.type === "state"   ? "e.g. California" :
+                                              "e.g. Los Angeles"
+              }
+              style={{ flex:1, minWidth:140, background:COLORS.surface,
+                border:`1px solid ${COLORS.border}`, borderRadius:9,
+                padding:"9px 12px", color:COLORS.text, fontSize:13,
+                outline:"none" }}
+            />
+            <Btn onClick={addGeoBlock} variant="secondary"
+              style={{ fontSize:13, padding:"9px 16px", flexShrink:0 }}
+              disabled={!geoInput.value.trim()}>
+              + Block
+            </Btn>
+          </div>
+
+          {/* Blocked locations list */}
+          {geoBlocking.blocked.length === 0 ? (
+            <div style={{ fontSize:12, color:COLORS.muted, textAlign:"center",
+              padding:"16px", background:COLORS.surface, borderRadius:10, border:`1px dashed ${COLORS.border}` }}>
+              No locations blocked yet — add one above
+            </div>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {/* Group by type */}
+              {["country","state","city"].map(type => {
+                const items = geoBlocking.blocked.filter(b => b.type === type);
+                if (!items.length) return null;
+                const label = type === "country" ? "🌍 Countries" : type === "state" ? "🏛 States / Provinces" : "🏙 Cities / Towns";
+                const color = type === "country" ? COLORS.accent : type === "state" ? COLORS.gold : COLORS.accentC;
+                return (
+                  <div key={type}>
+                    <div style={{ fontSize:10, color:COLORS.muted, fontWeight:700,
+                      textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {items.map(b => (
+                        <div key={b.id} style={{ display:"flex", alignItems:"center", gap:6,
+                          background:color+"18", border:`1px solid ${color}44`,
+                          borderRadius:20, padding:"5px 10px 5px 12px", fontSize:12, fontWeight:600 }}>
+                          <span style={{ color }}>{b.value}</span>
+                          <button onClick={() => removeGeoBlock(b.id)}
+                            style={{ background:"none", border:"none", color:COLORS.muted,
+                              cursor:"pointer", fontSize:14, lineHeight:1, padding:0,
+                              display:"flex", alignItems:"center" }}>✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ marginTop:14, padding:"10px 14px", background:COLORS.gold+"14",
+            border:`1px solid ${COLORS.gold}33`, borderRadius:8, fontSize:11, color:COLORS.gold, lineHeight:1.6 }}>
+            ⚠️ Geo-blocking uses IP detection and is a strong deterrent — it cannot block determined VPN users.
+          </div>
+        </>)}
       </Card>
 
       {/* Social links */}
@@ -8410,6 +8608,7 @@ export default function App() {
               ...(sp.tipMenu                && { tipMenu:     sp.tipMenu     }),
               ...(sp.socialLinks            && { socialLinks: sp.socialLinks }),
               ...(sp.wishlist               && { wishlist:    sp.wishlist    }),
+              ...(sp.geoBlocking            && { geoBlocking: sp.geoBlocking }),
               ...(data.activity?.followers  !== undefined && { followers:   data.activity.followers }),
             }));
           }
