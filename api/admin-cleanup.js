@@ -1,158 +1,162 @@
 // api/admin-cleanup.js
-// Admin panel — list, delete accounts from Upstash
-// Protected by ADMIN_SECRET_KEY env var
+// Admin-only endpoint. Requires x-admin-key header matching ADMIN_SECRET_KEY env var.
+//
+// GET  → list all user accounts (with verified/kycStatus fields)
+// DELETE { email } → delete one account
+// POST { action:"delete-all-test" } → delete all accounts
+// PATCH { action:"verify", email } → mark account as verified / approve KYC
 
-const KV_URL   = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const KV_URL    = process.env.KV_REST_API_URL;
+const KV_TOKEN  = process.env.KV_REST_API_TOKEN;
 const ADMIN_KEY = process.env.ADMIN_SECRET_KEY;
 
-async function kvCommand(command, ...args) {
-  try {
-    const res = await fetch(KV_URL, {
-      method:  "POST",
-      headers: {
-        Authorization:  `Bearer ${KV_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify([command, ...args]),
-    });
-    if (!res.ok) throw new Error(`Upstash HTTP ${res.status}`);
-    return res.json();
-  } catch (err) {
-    console.error(`kvCommand ${command} failed:`, err.message);
-    throw err;
-  }
+async function kvCommand(cmd, ...args) {
+  const res = await fetch(KV_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${KV_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify([cmd, ...args]),
+  });
+  const json = await res.json();
+  return json.result;
 }
 
-function parse(result) {
-  if (!result) return null;
-  if (typeof result === "object") return result;
-  try { return JSON.parse(result); } catch { return null; }
-}
-
-// Use SCAN to list all user:* keys (safer than KEYS for large datasets)
-async function getAllUserKeys() {
-  const keys = [];
-  let cursor = "0";
-  do {
-    const { result } = await kvCommand("SCAN", cursor, "MATCH", "user:*", "COUNT", "100");
-    if (!result || !Array.isArray(result)) break;
-    cursor = result[0];
-    if (Array.isArray(result[1])) keys.push(...result[1]);
-  } while (cursor !== "0");
-  return keys;
+function parseAccount(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw); } catch { return null; }
 }
 
 export default async function handler(req, res) {
-  // Allow CORS for same-origin requests
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "x-admin-key, Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-  // ── Auth check ─────────────────────────────────────────────────────────────
-  const adminKey = req.headers["x-admin-key"] || req.body?.adminKey;
-
-  if (!ADMIN_KEY) {
-    console.error("ADMIN_SECRET_KEY env var not set");
-    return res.status(500).json({ error: "Admin key not configured on server" });
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  const adminKey = req.headers["x-admin-key"];
+  if (!ADMIN_KEY || adminKey !== ADMIN_KEY) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!adminKey || adminKey !== ADMIN_KEY) {
-    return res.status(401).json({ error: "Unauthorized — invalid admin key" });
-  }
-
-  // ── GET — list all accounts ────────────────────────────────────────────────
+  // ── GET — list all accounts ───────────────────────────────────────────────
   if (req.method === "GET") {
     try {
-      const keys = await getAllUserKeys();
+      // SCAN for all user:* keys
+      let cursor = "0";
+      const userKeys = [];
+      do {
+        const result = await kvCommand("SCAN", cursor, "MATCH", "user:*", "COUNT", "100");
+        cursor   = Array.isArray(result) ? result[0] : "0";
+        const keys = Array.isArray(result) ? result[1] : [];
+        userKeys.push(...keys);
+      } while (cursor !== "0");
 
-      if (keys.length === 0) {
-        return res.status(200).json({ accounts: [], total: 0 });
-      }
-
-      const accounts = await Promise.all(
-        keys.map(async (key) => {
-          try {
-            const { result } = await kvCommand("GET", key);
-            const account = parse(result);
+      // Fetch each account in parallel
+      const accounts = (
+        await Promise.all(
+          userKeys.map(async (key) => {
+            const raw  = await kvCommand("GET", key);
+            const acct = parseAccount(raw);
+            if (!acct) return null;
             return {
               key,
-              email:     account?.email     || key.replace("user:", ""),
-              name:      account?.name      || "Unknown",
-              role:      account?.role      || "unknown",
-              createdAt: account?.createdAt || null,
-              verified:  account?.verified  || false,
-              kycStatus: account?.kycStatus || null,
+              email:      acct.email     || key.replace("user:", ""),
+              name:       acct.name      || acct.displayName || "",
+              role:       acct.role      || "viewer",
+              createdAt:  acct.createdAt || null,
+              verified:   acct.verified  || false,
+              kycStatus:  acct.kycStatus || null,
             };
-          } catch {
-            return { key, email: key.replace("user:", ""), error: "Could not parse" };
-          }
-        })
-      );
+          })
+        )
+      ).filter(Boolean);
 
-      return res.status(200).json({ accounts, total: accounts.length });
+      // Sort: streamer first, then by email
+      accounts.sort((a, b) => {
+        if (a.role === "streamer" && b.role !== "streamer") return -1;
+        if (a.role !== "streamer" && b.role === "streamer") return 1;
+        return (a.email || "").localeCompare(b.email || "");
+      });
 
+      return res.status(200).json({ ok: true, accounts });
     } catch (err) {
       console.error("admin-cleanup GET error:", err.message);
-      return res.status(500).json({ error: `Server error: ${err.message}` });
+      return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── DELETE — remove one account ────────────────────────────────────────────
-  if (req.method === "DELETE") {
-    const email = req.body?.email;
-    if (!email) return res.status(400).json({ error: "Email required" });
-
+  // ── PATCH — verify / approve KYC for an account ───────────────────────────
+  if (req.method === "PATCH") {
     try {
-      const emailKey = `user:${email.toLowerCase().trim()}`;
-      const { result } = await kvCommand("GET", emailKey);
-      if (result) {
-        const account = parse(result);
-        if (account?.token) await kvCommand("DEL", `token:${account.token}`);
-        // Also clean up activity and notifications
-        await kvCommand("DEL", `activity:${email.toLowerCase().trim()}`);
-        await kvCommand("DEL", `notifications:${email.toLowerCase().trim()}`);
+      const { action, email } = req.body || {};
+      if (action !== "verify" || !email) {
+        return res.status(400).json({ error: "Missing action:verify or email" });
       }
-      await kvCommand("DEL", emailKey);
-      return res.status(200).json({ ok: true, deleted: email });
 
+      const emailKey = `user:${email.toLowerCase().trim()}`;
+      const raw      = await kvCommand("GET", emailKey);
+      const account  = parseAccount(raw);
+
+      if (!account) {
+        return res.status(404).json({ error: `Account not found: ${email}` });
+      }
+
+      // Mark verified and approve KYC
+      account.verified      = true;
+      account.verifiedAt    = new Date().toISOString();
+      account.kycStatus     = "approved";
+      account.kycApprovedAt = new Date().toISOString();
+
+      await kvCommand("SET", emailKey, JSON.stringify(account));
+
+      console.log(`Admin verified account: ${email}`);
+      return res.status(200).json({ ok: true, email, verified: true });
+    } catch (err) {
+      console.error("admin-cleanup PATCH error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── DELETE — remove one account ───────────────────────────────────────────
+  if (req.method === "DELETE") {
+    try {
+      const { email } = req.body || {};
+      if (!email) return res.status(400).json({ error: "Missing email" });
+
+      const emailKey = `user:${email.toLowerCase().trim()}`;
+      await kvCommand("DEL", emailKey);
+
+      return res.status(200).json({ ok: true, deleted: email });
     } catch (err) {
       console.error("admin-cleanup DELETE error:", err.message);
       return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── POST — delete all (nuclear) ────────────────────────────────────────────
-  if (req.method === "POST" && req.body?.action === "delete-all-test") {
+  // ── POST — bulk delete all test accounts ──────────────────────────────────
+  if (req.method === "POST") {
     try {
-      const userKeys         = await getAllUserKeys();
-      const { result: toks } = await kvCommand("SCAN", "0", "MATCH", "token:*",        "COUNT", "200");
-      const { result: acts } = await kvCommand("SCAN", "0", "MATCH", "activity:*",     "COUNT", "200");
-      const { result: nots } = await kvCommand("SCAN", "0", "MATCH", "notifications:*","COUNT", "200");
-      const { result: ress } = await kvCommand("SCAN", "0", "MATCH", "reset:*",        "COUNT", "200");
-
-      const allKeys = [
-        ...userKeys,
-        ...(Array.isArray(toks?.[1]) ? toks[1] : []),
-        ...(Array.isArray(acts?.[1]) ? acts[1] : []),
-        ...(Array.isArray(nots?.[1]) ? nots[1] : []),
-        ...(Array.isArray(ress?.[1]) ? ress[1] : []),
-      ];
-
-      if (allKeys.length === 0) return res.status(200).json({ ok: true, deleted: 0 });
-
-      // Delete in batches of 10
-      for (let i = 0; i < allKeys.length; i += 10) {
-        const batch = allKeys.slice(i, i + 10);
-        await kvCommand("DEL", ...batch);
+      const { action } = req.body || {};
+      if (action !== "delete-all-test") {
+        return res.status(400).json({ error: "Unknown action" });
       }
 
-      return res.status(200).json({ ok: true, deleted: allKeys.length });
+      let cursor = "0";
+      const userKeys = [];
+      do {
+        const result = await kvCommand("SCAN", cursor, "MATCH", "user:*", "COUNT", "100");
+        cursor   = Array.isArray(result) ? result[0] : "0";
+        const keys = Array.isArray(result) ? result[1] : [];
+        userKeys.push(...keys);
+      } while (cursor !== "0");
 
+      let deleted = 0;
+      for (const key of userKeys) {
+        await kvCommand("DEL", key);
+        deleted++;
+      }
+
+      return res.status(200).json({ ok: true, deleted });
     } catch (err) {
-      console.error("admin-cleanup DELETE-ALL error:", err.message);
+      console.error("admin-cleanup POST error:", err.message);
       return res.status(500).json({ error: err.message });
     }
   }
