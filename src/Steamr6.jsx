@@ -3411,7 +3411,7 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
 }
 
 // ── GO LIVE ───────────────────────────────────────────────────────────────────
-function GoLiveScreen({ onNavigate, addToast, addNotification }) {
+function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
@@ -3562,6 +3562,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   const startStream = () => {
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
+    onStreamingChange && onStreamingChange(true);
     addToast("live", "You're live! 🔴 Notifying your followers…");
     addNotification("live", `Your stream "${title}" started — goal: ${goalLabel}`);
 
@@ -3614,6 +3615,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     }
     stopStream();
     setStreaming(false);
+    onStreamingChange && onStreamingChange(false);
     setSeconds(0);
     setSessionTokens(0);
     setGoal(null);
@@ -4132,10 +4134,11 @@ const BANNER_PRESETS = [
 ];
 
 // ── PROFILE SCREEN ────────────────────────────────────────────────────────────
-function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, following, onFollow, subscriptions = {}, onSubscribe, onCancelSub }) {
+function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, following, onFollow, subscriptions = {}, onSubscribe, onCancelSub, isStreamerLive = false }) {
   const w = useWindowWidth(); const isMobile = w < 768;
   const profile = isOwnProfile ? profileData : (STREAMER_PROFILES[streamerId] || STREAMER_PROFILES[1]);
   const streamer = STREAMERS.find(s => s.id === profile.id) || STREAMERS[0];
+  const isLiveNow = isOwnProfile ? isStreamerLive : streamer.live;
   const isFollowing = following.has(profile.id);
   const currentSub  = subscriptions[profile.id] || null;
   const [showModal, setShowModal] = useState(false);
@@ -4173,8 +4176,8 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             ? <img src={profile.avatarImg} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:"50%"}}/>
             : profile.avatar}
           {/* Online dot */}
-          {streamer.live && (
-            <div style={{ position:"absolute", bottom:3, right:3, width:16, height:16, borderRadius:"50%", background:COLORS.accent, border:`2px solid ${COLORS.card}` }} />
+          {isLiveNow && (
+            <div style={{ position:"absolute", bottom:3, right:3, width:16, height:16, borderRadius:"50%", background:COLORS.accent, border:`2px solid ${COLORS.card}`, animation:"pulse 1.4s ease-in-out infinite" }} />
           )}
         </div>
 
@@ -4184,7 +4187,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             <Btn onClick={() => onNavigate("edit-profile")} variant="secondary" style={{ fontSize:13, padding:"8px 16px" }}>✏️ Edit Profile</Btn>
           ) : (
             <>
-              {streamer.live && (
+              {isLiveNow && (
                 <Btn onClick={() => onNavigate("stream-room")} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
               )}
               <Btn
@@ -4215,7 +4218,9 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       <div style={{ padding:isMobile?"0 16px":"0 28px", marginBottom:28 }}>
         <div style={{ display:"flex", alignItems:"baseline", gap:12, flexWrap:"wrap", marginBottom:6 }}>
           <h2 style={{ margin:0, fontSize:26, fontWeight:900 }}>{profile.name}</h2>
-          {streamer.live && <Pill color={COLORS.accent}>🔴 LIVE NOW</Pill>}
+          {isLiveNow
+          ? <Pill color={COLORS.accent}>🔴 LIVE NOW</Pill>
+          : (isOwnProfile && <Pill color={COLORS.muted}>⚫ Offline</Pill>)}
         </div>
         <div style={{ display:"flex", gap:8, marginBottom:10 }}>
           <Pill color={CAT_COLOR[profile.category] || COLORS.accentB}>{profile.category}</Pill>
@@ -7974,7 +7979,7 @@ function OnboardingModal({ role, onClose }) {
 }
 
 
-function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme }) {
+function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMarkRead, onMarkAllRead, isDark, onToggleTheme, isStreamerLive = false }) {
   const w          = useWindowWidth();
   const isMobile   = w < 640;
   const [open, setOpen] = useState(false);
@@ -8000,7 +8005,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
   const STREAMER_LINKS = [
     { label:"Dashboard",    screen:"streamer-dashboard", onClick:() => go("streamer-dashboard") },
     { label:"📊 Analytics", screen:"analytics",          onClick:() => go("analytics")          },
-    { label:"🔴 Go Live",  screen:"go-live",            onClick:() => go("go-live")            },
+    { label:isStreamerLive ? "🔴 Live Now ●" : "🔴 Go Live",  screen:"go-live", onClick:() => go("go-live") },
     { label:"📅 Schedule", screen:"schedule",           onClick:() => go("schedule")           },
     { label:"💰 Earnings", screen:"earnings",           onClick:() => go("earnings")           },
     { label:"👤 Profile",  screen:"profile",            onClick:() => go("profile",{streamerId:1}) },
@@ -8096,7 +8101,18 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
         {isStreamer && <>
           <Btn onClick={() => onNavigate("streamer-dashboard")} variant={screen==="streamer-dashboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Dashboard</Btn>
           <Btn onClick={() => onNavigate("analytics")} variant={screen==="analytics"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>📊</Btn>
-          <Btn onClick={() => onNavigate("go-live")} variant={screen==="go-live"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🔴 Go Live</Btn>
+          <button onClick={() => onNavigate("go-live")}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+              background:isStreamerLive ? COLORS.accent : screen==="go-live" ? COLORS.accent+"33" : "transparent",
+              border:`1px solid ${isStreamerLive ? COLORS.accent : screen==="go-live" ? COLORS.accent : COLORS.border+"66"}`,
+              borderRadius:10, cursor:"pointer", fontWeight:700, fontSize:13,
+              color:isStreamerLive ? "#fff" : COLORS.text, transition:"all 0.2s" }}>
+            {isStreamerLive && (
+              <span style={{ width:8, height:8, borderRadius:"50%", background:"#fff",
+                display:"inline-block", animation:"pulse 1.4s ease-in-out infinite" }} />
+            )}
+            {isStreamerLive ? "🔴 Live Now" : "🔴 Go Live"}
+          </button>
           <Btn onClick={() => onNavigate("schedule")} variant={screen==="schedule"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>📅 Schedule</Btn>
           <Btn onClick={() => onNavigate("earnings")} variant={screen==="earnings"?"green":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>💰</Btn>
           <Btn onClick={() => onNavigate("profile", { streamerId:1 })} variant={["profile","edit-profile"].includes(screen)?"secondary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👤 Profile</Btn>
@@ -8171,6 +8187,7 @@ export default function App() {
   const [showOnboarding,     setShowOnboarding]     = useState(false);
   const [onboardingRole,     setOnboardingRole]     = useState("viewer");
   const [viewerTokens,       setViewerTokens]       = useState(350);
+  const [isStreamerLive,     setIsStreamerLive]      = useState(false);
   const [searchQuery,        setSearchQuery]        = useState("");
 
   const syncTokenBalance = (newBalance) => {
@@ -8251,6 +8268,9 @@ export default function App() {
             }
             if (data.activity?.tokenBalance !== undefined) {
               setViewerTokens(data.activity.tokenBalance);
+            }
+            if (data.activity?.isLive !== undefined) {
+              setIsStreamerLive(data.activity.isLive);
             }
             if (data.activity?.subscriptions) {
               setSubscriptions(data.activity.subscriptions);
@@ -8457,8 +8477,8 @@ export default function App() {
       case "kyc-status":         return <KYCStatusScreen onNavigate={navigate} />;
       case "kyc-viewer":         return <KYCScreen role="viewer"   onNavigate={navigate} />;
       case "streamer-dashboard": return <StreamerDashboard onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
-      case "go-live":            return <GoLiveScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
-      case "profile":            return <ProfileScreen streamerId={selectedStreamerId} profileData={profileData} isOwnProfile={selectedStreamerId === 1} onNavigate={navigate} following={following} onFollow={onFollow} subscriptions={subscriptions} onSubscribe={onSubscribe} onCancelSub={onCancelSub} />;
+      case "go-live":            return <GoLiveScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} onStreamingChange={setIsStreamerLive} />;
+      case "profile":            return <ProfileScreen streamerId={selectedStreamerId} profileData={profileData} isOwnProfile={selectedStreamerId === 1} onNavigate={navigate} following={following} onFollow={onFollow} subscriptions={subscriptions} onSubscribe={onSubscribe} onCancelSub={onCancelSub} isStreamerLive={isStreamerLive} />;
       case "edit-profile":       return <EditProfileScreen profileData={profileData} onSave={setProfileData} onNavigate={navigate} />;
       case "settings":           return <SettingsScreen onNavigate={navigate} addToast={addToast} isStreamer={true} isDark={isDark} onToggleTheme={toggleTheme} />;
       case "fan-club":           return <FanClubFeed subscriptions={subscriptions} onNavigate={navigate} addToast={addToast} />;
@@ -8517,7 +8537,7 @@ export default function App() {
 
         <Nav screen={screen} onNavigate={navigate} onSignOut={onSignOut} userRole={userRole}
           notifications={notifications} onMarkRead={markNotifRead} onMarkAllRead={markAllRead}
-          isDark={isDark} onToggleTheme={toggleTheme} />
+          isDark={isDark} onToggleTheme={toggleTheme} isStreamerLive={isStreamerLive} />
         <ToastContainer toasts={toasts} />
 
         <div style={{ position:"relative",zIndex:1,paddingTop:AUTHED.includes(screen)?0:64 }}>
