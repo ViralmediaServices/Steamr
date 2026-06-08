@@ -3166,6 +3166,7 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
   const weekTokens     = activity?.weekTokens     || 0;
   const monthTokens    = activity?.monthTokens    || 0;
   const allTimeTokens  = activity?.allTimeTokens  || 0;
+  const availableTokens = activity?.availableTokens || 0;
   const followers      = activity?.followers      || 0;
   const subscribers    = activity?.subscribers    || 0;
   const totalStreams    = activity?.totalStreams   || 0;
@@ -3173,7 +3174,7 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
   const peakViewers    = activity?.peakViewers    || 0;
   const payoutHistory  = activity?.payoutHistory  || [];
 
-  const availableUSD   = Number(tokensToStreamerUSD(weekTokens));
+  const availableUSD   = Number(tokensToStreamerUSD(availableTokens));
 
   const EARNINGS = [
     { label:"Today",      tokens:todayTokens,   usd:Number(tokensToStreamerUSD(todayTokens))   },
@@ -3279,25 +3280,58 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
           <div style={{ background:COLORS.surface, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
             <div style={{ fontSize:11, color:COLORS.muted }}>Available Balance</div>
             <div style={{ fontSize:26, fontWeight:900, color:COLORS.green }}>${fmtUSD(availableUSD)}</div>
-            <div style={{ fontSize:12, color:COLORS.muted }}>🪙 {weekTokens.toLocaleString()} tokens × $0.05</div>
+            <div style={{ fontSize:12, color:COLORS.muted }}>🪙 {availableTokens.toLocaleString()} tokens × $0.05</div>
           </div>
-          {weekTokens === 0 ? (
+          {availableTokens === 0 ? (
             <div style={{ textAlign:"center", padding:"16px 0", color:COLORS.muted, fontSize:13 }}>
               💡 Go live and earn tokens to unlock payouts
             </div>
           ) : !cashedOut ? (<>
             <Input label="Amount to withdraw ($)" value={cashoutAmt} onChange={setCashoutAmt} placeholder={`e.g. ${fmtUSD(availableUSD)}`} />
-            <Btn onClick={() => {
-              setCashedOut(true);
-              const amt = cashoutAmt ? `$${cashoutAmt}` : `$${fmtUSD(availableUSD)}`;
-              addToast("payout", `Payout of ${amt} requested ✓`);
-              addNotification("payout", `Payout of ${amt} is processing — arrives in 1-2 business days`);
+            {Number(cashoutAmt) > 0 && Number(cashoutAmt) < 20 && (
+              <div style={{ fontSize:11, color:COLORS.accent, marginBottom:8 }}>⚠️ Minimum withdrawal is $20.00</div>
+            )}
+            <Btn onClick={async () => {
+              const requestedAmt = cashoutAmt ? Number(cashoutAmt) : availableUSD;
+              if (requestedAmt < 20) {
+                addToast("error", "Minimum payout is $20.00");
+                return;
+              }
+              if (requestedAmt > availableUSD + 0.01) {
+                addToast("error", "Amount exceeds your available balance");
+                return;
+              }
+              const token = localStorage.getItem("steamr_token");
+              try {
+                const r = await fetch("/api/user-profile", {
+                  method:  "POST",
+                  headers: { "x-auth-token": token, "Content-Type": "application/json" },
+                  body:    JSON.stringify({ token, action: "payout-request", amountUSD: requestedAmt }),
+                });
+                const data = await r.json();
+                if (data.ok) {
+                  setCashedOut(true);
+                  // Refresh activity so balance updates immediately
+                  fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+                    .then(r2 => r2.json())
+                    .then(d2 => { if (d2.ok) setActivity(d2.activity); })
+                    .catch(() => {});
+                  addToast("payout", `Payout of $${fmtUSD(requestedAmt)} requested ✓`);
+                  addNotification("payout", `Payout of $${fmtUSD(requestedAmt)} is processing — arrives in 1-2 business days`);
+                } else {
+                  addToast("error", data.error || "Payout request failed. Please try again.");
+                }
+              } catch {
+                addToast("error", "Connection error. Please try again.");
+              }
             }} variant="green" style={{ width:"100%" }}>Request Payout →</Btn>
           </>) : (
             <div style={{ textAlign:"center", padding:"16px 0" }}>
               <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
               <div style={{ fontWeight:700, color:COLORS.green }}>Payout Requested!</div>
               <div style={{ color:COLORS.muted, fontSize:13 }}>Arrives in 1-2 business days</div>
+              <Btn onClick={() => { setCashedOut(false); setCashoutAmt(""); }} variant="ghost"
+                style={{ marginTop:12, fontSize:12 }}>Request Another</Btn>
             </div>
           )}
         </Card>
@@ -3459,11 +3493,6 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     if (!streaming) return;
     const t = setInterval(() => {
       setSeconds(s => s + 1);
-      if (Math.random() < 0.05) {
-        const tip = Math.floor(Math.random() * 50 + 10);
-        setSessionTokens(t => t + tip);
-        setGoal(g => g ? { ...g, current: Math.min(g.target, g.current + tip) } : g);
-      }
     }, 1000);
     return () => clearInterval(t);
   }, [streaming]);
