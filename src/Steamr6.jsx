@@ -39,13 +39,7 @@ const VIEWER_ACHIEVEMENTS = [
 ];
 
 // ── STREAMER WISHLIST ─────────────────────────────────────────────────────────
-const DEFAULT_WISHLIST = [
-  {id:1, emoji:"☕", name:"Coffee & Snacks Fund",     tokens:150,  usd:15.00,  fulfilled:false, desc:"Fuel for long streams!"},
-  {id:2, emoji:"🎵", name:"Amazon Music (3 months)", tokens:1000, usd:10.00,  fulfilled:true,  desc:"Background music for streams"},
-  {id:3, emoji:"🎸", name:"Ernie Ball Guitar Strings",tokens:130,  usd:12.99,  fulfilled:false, desc:"D'Addario EXL110 regular"},
-  {id:4, emoji:"💻", name:"Stream Upgrade Fund",      tokens:500,  usd:50.00,  fulfilled:false, desc:"Toward a new capture card"},
-  {id:5, emoji:"🎤", name:"Shure SM7B Microphone",   tokens:3990, usd:399.00, fulfilled:false, desc:"The mic all the pros use"},
-];
+const DEFAULT_WISHLIST = []; // streamer fills in their own wishlist items
 
 // ── PPV / MONETIZATION DATA ──────────────────────────────────────────────────
 const PPV_CONTENT = [
@@ -317,26 +311,26 @@ const SUBSCRIPTION_TIERS = [
 // Full profile for Luna Vex (the logged-in streamer — fully editable)
 const STREAMER_PROFILES = {
   1: {
-    id: 1, name: "Luna Vex", avatar: "🎵",
+    id: 1, name: "Streamer", avatar: "🎭",
     category: "Female", region: "North American",
     bannerColor: "#1a0a2e",
-    bio: "Singer-songwriter streaming live acoustic sets and original music 🎸 Taking requests, sharing originals, and making magic one note at a time. Been performing for 8 years and streaming for 2. Come chill with me! 💕",
-    roomSubject: "♪ Tip 🪙10 for a song request — taking requests all night! ♪",
-    welcomeMsg: "Hey gorgeous, welcome to my room! 💕 Check out my tip menu below and don't forget to follow!",
-    tags: ["singer", "acoustic", "chill", "music", "guitar"],
-    socialLinks: { twitter: "@lunavex", instagram: "@luna.vex", tiktok: "@lunavexmusic" },
-    followers: 4821,
-    totalStreams: 47,
-    avgViewers: 1284,
+    bio: "",
+    roomSubject: "",
+    welcomeMsg: "",
+    tags: [],
+    socialLinks: {},
+    followers: 0,
+    totalStreams: 0,
+    avgViewers: 0,
     tipMenu: [
-      { tokens: 10,  action: "Song request 🎵" },
-      { tokens: 25,  action: "Shoutout in stream 📢" },
-      { tokens: 50,  action: "Follow back on socials 💛" },
-      { tokens: 100, action: "Personal voice message 💌" },
-      { tokens: 250, action: "Custom song dedication 🎶" },
-      { tokens: 500, action: "30-min private show 🎭" },
+      { tokens: 10,  action: "" },
+      { tokens: 25,  action: "" },
+      { tokens: 50,  action: "" },
+      { tokens: 100, action: "" },
+      { tokens: 250, action: "" },
+      { tokens: 500, action: "" },
     ],
-    wishlist: DEFAULT_WISHLIST.map(i => ({...i})),
+    wishlist: [],
     streamHistory: [
       { date: "May 30", title: "Acoustic Friday Night 🎸", viewers: 1284, tokens: 8920,  duration: "2h 15m" },
       { date: "May 28", title: "Covers & Requests 🎵",     viewers: 1102, tokens: 7340,  duration: "1h 45m" },
@@ -2183,7 +2177,6 @@ function GiftModal({ item, viewerTokens, onConfirm, onClose }) {
                 <div style={{ fontSize:12,color:COLORS.muted,marginBottom:6 }}>{item.desc}</div>
                 <div style={{ display:"flex",gap:8,alignItems:"center" }}>
                   <span style={{ fontWeight:800,color:COLORS.gold,fontSize:14 }}>🪙 {item.tokens.toLocaleString()}</span>
-                  <span style={{ fontSize:11,color:COLORS.muted }}>${fmtUSD(item.usd)} value</span>
                 </div>
               </div>
             </div>
@@ -2292,10 +2285,9 @@ function WishlistSection({ wishlist, viewerTokens, onGift, isOwn }) {
                 {item.desc && <div style={{ fontSize:11,color:COLORS.muted }}>{item.desc}</div>}
               </div>
               <div style={{ textAlign:"right",flexShrink:0 }}>
-                <div style={{ fontWeight:800,color:COLORS.gold,fontSize:13,marginBottom:4 }}>
+                <div style={{ fontWeight:800,color:COLORS.gold,fontSize:13 }}>
                   🪙 {item.tokens.toLocaleString()}
                 </div>
-                <div style={{ fontSize:10,color:COLORS.muted }}>${fmtUSD(item.usd)}</div>
               </div>
               {!isOwn && (
                 <div style={{ marginLeft:4,flexShrink:0 }}>
@@ -4479,15 +4471,19 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           socialInstagram: data.profile.streamerProfile?.socialLinks?.instagram || f.socialInstagram,
           socialTikTok:    data.profile.streamerProfile?.socialLinks?.tiktok    || f.socialTikTok,
         }));
+        // Load wishlist separately (stored in streamerProfile)
+        if (Array.isArray(data.profile.streamerProfile?.wishlist)) {
+          setWishlist(data.profile.streamerProfile.wishlist.map(i => ({...i})));
+        }
       }
     }).catch(() => {});
   }, []);
   const [saved,    setSaved]    = useState(false);
   const [dragIdx,  setDragIdx]  = useState(null);
-  const [wishlist, setWishlist] = useState((profileData.wishlist || DEFAULT_WISHLIST).map(i=>({...i})));
-  const addWishItem    = () => setWishlist(w => [...w, {id:Date.now(),emoji:"🎁",name:"",tokens:100,usd:10.00,fulfilled:false,desc:""}]);
+  const [wishlist, setWishlist] = useState((profileData.wishlist || []).map(i=>({...i})));
+  const addWishItem    = () => setWishlist(w => [...w, {id:Date.now(),emoji:"🎁",name:"",tokens:100,fulfilled:false,desc:""}]);
   const removeWishItem = (id) => setWishlist(w => w.filter(i => i.id !== id));
-  const updateWishItem = (id, field, val) => setWishlist(w => w.map(i => i.id===id ? {...i,[field]:field==="tokens"||field==="usd"?Number(val)||0:val} : i));
+  const updateWishItem = (id, field, val) => setWishlist(w => w.map(i => i.id===id ? {...i,[field]:field==="tokens"?Number(val)||0:val} : i));
   const [dragOver, setDragOver] = useState(null);
 
   const update = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -4526,7 +4522,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       roomSubject: form.roomSubject,
       welcomeMsg:  form.welcomeMsg,
       tags:        form.tags,
-      tipMenu:     form.tipMenu.filter(i => i.action.trim()),
+      tipMenu:     form.tipMenu,
       socialLinks: {
         ...(form.socialTwitter   ? { twitter:   form.socialTwitter   } : {}),
         ...(form.socialInstagram ? { instagram: form.socialInstagram } : {}),
@@ -4552,8 +4548,9 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             roomSubject: form.roomSubject,
             welcomeMsg:  form.welcomeMsg,
             tags:        form.tags,
-            tipMenu:     form.tipMenu.filter(i => i.action.trim()),
+            tipMenu:     form.tipMenu,
             socialLinks: updated.socialLinks,
+            wishlist:    wishlist,
           },
         }),
       }).catch(() => {});
@@ -4848,20 +4845,9 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
                       color:COLORS.gold,fontSize:12,pointerEvents:"none" }}>🪙</span>
                     <input type="number" value={item.tokens}
                       onChange={e => updateWishItem(item.id,"tokens",e.target.value)}
-                      placeholder="Tokens"
+                      placeholder="Token amount"
                       style={{ width:"100%",background:COLORS.card,border:`1px solid ${COLORS.border}`,
                         borderRadius:8,padding:"8px 8px 8px 28px",color:COLORS.gold,
-                        fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box" }}
-                    />
-                  </div>
-                  <div style={{ position:"relative",flex:1 }}>
-                    <span style={{ position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",
-                      color:COLORS.green,fontSize:11,pointerEvents:"none" }}>$</span>
-                    <input type="number" value={item.usd} step="0.01"
-                      onChange={e => updateWishItem(item.id,"usd",e.target.value)}
-                      placeholder="Value USD"
-                      style={{ width:"100%",background:COLORS.card,border:`1px solid ${COLORS.border}`,
-                        borderRadius:8,padding:"8px 8px 8px 18px",color:COLORS.green,
                         fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box" }}
                     />
                   </div>
@@ -8292,15 +8278,25 @@ export default function App() {
             if (data.activity?.subscriptions) {
               setSubscriptions(data.activity.subscriptions);
             }
-            // Sync real follower count + email into profileData
-            if (data.activity?.followers !== undefined || data.profile?.email) {
-              setProfileData(prev => ({
-                ...prev,
-                ...(data.profile?.email    && { email:     data.profile.email     }),
-                ...(data.profile?.name     && { name:      data.profile.name      }),
-                ...(data.activity?.followers !== undefined && { followers: data.activity.followers }),
-              }));
-            }
+            // Sync real profile data into profileData (overrides STREAMER_PROFILES defaults)
+            const sp = data.profile?.streamerProfile || {};
+            setProfileData(prev => ({
+              ...prev,
+              ...(data.profile?.email       && { email:       data.profile.email       }),
+              ...(data.profile?.name        && { name:        data.profile.name        }),
+              ...(data.profile?.displayName && { name:        data.profile.displayName }),
+              ...(data.profile?.avatarImg   && { avatarImg:   data.profile.avatarImg   }),
+              ...(data.profile?.bio         !== undefined && { bio:         data.profile.bio         }),
+              ...(sp.bannerColor            && { bannerColor: sp.bannerColor }),
+              ...(sp.bannerImg              !== undefined && { bannerImg:   sp.bannerImg   }),
+              ...(sp.roomSubject            !== undefined && { roomSubject: sp.roomSubject }),
+              ...(sp.welcomeMsg             !== undefined && { welcomeMsg:  sp.welcomeMsg  }),
+              ...(sp.tags                   && { tags:        sp.tags        }),
+              ...(sp.tipMenu                && { tipMenu:     sp.tipMenu     }),
+              ...(sp.socialLinks            && { socialLinks: sp.socialLinks }),
+              ...(sp.wishlist               && { wishlist:    sp.wishlist    }),
+              ...(data.activity?.followers  !== undefined && { followers:   data.activity.followers }),
+            }));
           }
         })
         .catch(() => {});
