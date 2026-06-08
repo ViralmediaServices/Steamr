@@ -96,6 +96,16 @@ export default async function handler(req, res) {
 
       const sp = account.streamerProfile || {};
 
+      // Load bannerImg from its own Redis key (kept separate to avoid large account objects)
+      const { result: bannerResult } = await kvCommand("GET", `banner:${lookupEmail}`);
+      sp.bannerImg = bannerResult || null;
+
+            // Load bannerImg from its own Redis key
+      const { result: authBannerResult } = await kvCommand("GET", `banner:${email}`);
+      if (account.streamerProfile) {
+        account.streamerProfile.bannerImg = authBannerResult || null;
+      }
+
       return res.status(200).json({
         ok: true,
         profile: {
@@ -547,7 +557,17 @@ export default async function handler(req, res) {
       if (avatarImg   !== undefined) account.avatarImg   = avatarImg;
       if (username    !== undefined) account.username    = username;
       if (req.body.streamerProfile !== undefined) {
-        account.streamerProfile = req.body.streamerProfile;
+        // Strip bannerImg out of the main account — it's a base64 data URL (can be 500KB+)
+        // which makes the account object too large for Redis and silently kills all saves.
+        // Store it in its own key so social links, tags, etc. always save reliably.
+        const { bannerImg, ...spWithoutBanner } = req.body.streamerProfile;
+        account.streamerProfile = spWithoutBanner;
+
+        // Persist bannerImg to its own Redis key (empty string = cleared)
+        if (bannerImg !== undefined) {
+          await kvCommand("SET", `banner:${email}`, bannerImg || "");
+        }
+
         // Save geo-blocking to a public key so StreamRoomScreen can check it without auth
         if (req.body.profileId && req.body.streamerProfile.geoBlocking) {
           await kvCommand("SET", `geo:block:${req.body.profileId}`,
