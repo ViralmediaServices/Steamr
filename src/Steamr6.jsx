@@ -1,63 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from "react";
 
-// ── VIEWER DATA ───────────────────────────────────────────────────────────────
-const VIEWER_PROFILE_DATA = {
-  id:          99,
-  username:    "darkwing99",
-  displayName: "Darkwing",
-  avatar:      "🦇",
-  avatarImg:   null,
-  joinDate:    "May 2024",
-  email:       "d****9@gmail.com",
-  tokens:      350,
-  bio:         "Night owl, big tipper, here for the vibes 🦇✨",
-  totalTipped: 1450,
-};
-
-const VIEWER_TIP_HISTORY = [
-  {id:1, streamer:"Luna Vex",     avatar:"🎵", tokens:200, date:"Jun 4",  note:"Amazing stream! 🔥"},
-  {id:2, streamer:"Storm Rider",  avatar:"🎮", tokens:50,  date:"Jun 2"},
-  {id:3, streamer:"Crystal Wave", avatar:"🌊", tokens:100, date:"May 31", note:"Song request 🎸"},
-  {id:4, streamer:"Luna Vex",     avatar:"🎵", tokens:25,  date:"May 28"},
-  {id:5, streamer:"Rex Nova",     avatar:"💪", tokens:150, date:"May 22"},
-  {id:6, streamer:"Luna Vex",     avatar:"🎵", tokens:500, date:"May 18", note:"Birthday treat! 🎂"},
-  {id:7, streamer:"Aria Storm",   avatar:"🌟", tokens:75,  date:"May 14"},
-  {id:8, streamer:"Storm Rider",  avatar:"🎮", tokens:200, date:"May 10"},
-  {id:9, streamer:"Crystal Wave", avatar:"🌊", tokens:50,  date:"May 6"},
-  {id:10,streamer:"Luna Vex",     avatar:"🎵", tokens:100, date:"Apr 28"},
-];
-
-const VIEWER_ACHIEVEMENTS = [
-  {id:"first-tip",  icon:"🎯", label:"First Tip",     desc:"Sent your first tip",          earned:true },
-  {id:"big-tipper", icon:"🐋", label:"Big Spender",   desc:"Tipped 🪙 500+ in one go",     earned:true },
-  {id:"loyal",      icon:"❤️", label:"Loyal Viewer",  desc:"Followed 10+ streamers",        earned:true },
-  {id:"vip",        icon:"👑", label:"Fan Club VIP",  desc:"Holds a VIP subscription",      earned:false},
-  {id:"early",      icon:"🌅", label:"Early Adopter", desc:"Joined in the first month",     earned:true },
-  {id:"diamond",    icon:"💎", label:"Diamond Fan",   desc:"Tipped 🪙 10,000+ total",       earned:false},
-  {id:"collector",  icon:"🏆", label:"Collector",     desc:"Subbed to 5+ streamers",        earned:false},
-  {id:"whale",      icon:"💰", label:"High Roller",   desc:"Spent $500+ on tokens",         earned:false},
-];
-
-// ── STREAMER WISHLIST ─────────────────────────────────────────────────────────
-const DEFAULT_WISHLIST = []; // streamer fills in their own wishlist items
-
-// ── PPV / MONETIZATION DATA ──────────────────────────────────────────────────
-const PPV_CONTENT = [
-  {id:1, streamer:"Luna Vex",      avatar:"🎵", title:"Acoustic Night Special — Members Only", price:500, duration:"47 min", thumbnail:"🎸", category:"Music",   purchased:false},
-  {id:2, streamer:"Storm Rider",   avatar:"🎮", title:"Pro Gaming Sessions — Uncut",            price:300, duration:"1h 22m",thumbnail:"🎮", category:"Gaming",  purchased:false},
-  {id:3, streamer:"Crystal Wave",  avatar:"🌊", title:"ASMR Luxury Pack (3 Videos)",            price:800, duration:"2h 10m",thumbnail:"🎧", category:"ASMR",    purchased:false},
-  {id:4, streamer:"Rex Nova",      avatar:"💪", title:"Extreme Workout Compilation",            price:250, duration:"38 min", thumbnail:"💪", category:"Fitness", purchased:false},
-  {id:5, streamer:"Aria Storm",    avatar:"🌟", title:"Behind the Scenes: Studio Day",          price:400, duration:"1h 05m",thumbnail:"📹", category:"Exclusive",purchased:false},
-  {id:6, streamer:"Luna Vex",      avatar:"🎵", title:"Unreleased Original Songs",              price:600, duration:"55 min", thumbnail:"🎶", category:"Music",   purchased:false},
-];
-
-const CLIP_PURCHASES = [
-  {id:1, streamer:"Luna Vex",     avatar:"🎵", title:"Best Moments — June 2026",  price:80,  duration:"4:20", thumbnail:"🎬", purchased:false},
-  {id:2, streamer:"Storm Rider",  avatar:"🎮", title:"Epic Win Compilation #12",  price:50,  duration:"2:45", thumbnail:"🏆", purchased:false},
-  {id:3, streamer:"Crystal Wave", avatar:"🌊", title:"ASMR Highlight Reel",       price:60,  duration:"6:00", thumbnail:"🌊", purchased:false},
-  {id:4, streamer:"Aria Storm",   avatar:"🌟", title:"Funniest Stream Moments",   price:40,  duration:"3:15", thumbnail:"😂", purchased:false},
-];
-
+// ── GIFT CARD PACKS ────────────────────────────────────────────────────────────
+// Product config only — no fake user data
 const GIFT_CARD_AMOUNTS = [
   {id:1, tokens:500,  price:50.00,  label:"Starter Pack", icon:"🎁", color:"#aa8890", popular:false},
   {id:2, tokens:1000, price:95.00,  label:"Fan Pack",     icon:"⭐", color:"#ff6b35", popular:true },
@@ -65,41 +9,8 @@ const GIFT_CARD_AMOUNTS = [
   {id:4, tokens:5000, price:400.00, label:"VIP Bundle",   icon:"👑", color:"#f5c518", popular:false},
 ];
 
-const PAYOUT_HISTORY = [
-  {id:1, date:"Jun 1, 2026",  amount:412.00, status:"paid",    method:"Bank Transfer ••4821"},
-  {id:2, date:"May 1, 2026",  amount:387.50, status:"paid",    method:"Bank Transfer ••4821"},
-  {id:3, date:"Apr 1, 2026",  amount:521.00, status:"paid",    method:"Bank Transfer ••4821"},
-  {id:4, date:"Mar 1, 2026",  amount:298.75, status:"paid",    method:"Bank Transfer ••4821"},
-  {id:5, date:"Feb 1, 2026",  amount:463.20, status:"paid",    method:"Bank Transfer ••4821"},
-];
-
-const EXTENDED_NOTIFICATIONS = [
-  {id:1,  type:"tip",    message:"darkwing99 sent you 🪙 200 tokens", time:"2 min ago",  read:false, group:"Today"},
-  {id:2,  type:"follow", message:"starfish22 started following you",   time:"8 min ago",  read:false, group:"Today"},
-  {id:3,  type:"tip",    message:"nightowl sent you 🪙 50 tokens",    time:"14 min ago", read:false, group:"Today"},
-  {id:4,  type:"sub",    message:"cometgaze subscribed at Fan tier 🌟",time:"1 hr ago",  read:true,  group:"Today"},
-  {id:5,  type:"system", message:"Your stream got 1,200+ views! 🎉",  time:"3 hr ago",  read:true,  group:"Today"},
-  {id:6,  type:"ppv",    message:"galaxy99 purchased your PPV content 🎬",time:"4 hr ago",read:true, group:"Today"},
-  {id:7,  type:"payout", message:"Payout of $412.00 processed ✓",     time:"Yesterday 11:30am",read:true,group:"Yesterday"},
-  {id:8,  type:"tip",    message:"galaxy99 sent you 🪙 500 tokens",   time:"Yesterday 8:15pm", read:true,group:"Yesterday"},
-  {id:9,  type:"sub",    message:"neonwave upgraded to Super Fan ⭐",  time:"Yesterday 3:00pm", read:true,group:"Yesterday"},
-  {id:10, type:"gift",   message:"⭐ Gift card sent to friend@email.com",time:"Sat 2:00pm",  read:true,group:"This Week"},
-  {id:11, type:"follow", message:"thunderbird started following you",  time:"Mon 2:00pm",  read:true, group:"This Week"},
-  {id:12, type:"system", message:"You've reached 5,000 followers! 🎉",time:"Mon 9:00am",  read:true, group:"This Week"},
-];
-
-const VIEWER_LOCATIONS = [
-  {country:"United States", viewers:412, x:180, y:120},
-  {country:"United Kingdom",viewers:187, x:420, y:78 },
-  {country:"Canada",        viewers:134, x:155, y:85 },
-  {country:"Germany",       viewers:98,  x:455, y:85 },
-  {country:"Australia",     viewers:87,  x:710, y:280},
-  {country:"France",        viewers:76,  x:440, y:95 },
-  {country:"Brazil",        viewers:65,  x:240, y:240},
-  {country:"Japan",         viewers:54,  x:730, y:115},
-  {country:"Netherlands",   viewers:43,  x:450, y:80 },
-  {country:"Spain",         viewers:34,  x:430, y:108},
-];
+// Payout history, notifications, and viewer locations
+// are loaded live from Upstash — no hardcoded data here.
 
 const DARK_COLORS = {
   bg: "#0d0608",
@@ -179,92 +90,6 @@ function useWindowWidth() {
   return width;
 }
 
-// ── DATA ──────────────────────────────────────────────────────────────────────
-const STREAMERS = [
-  {
-    id: 1, name: "Luna Vex", category: "Female", region: "North American",
-    viewers: 1284, tokens: 8920, avatar: "🎵", live: true, preview: "#1a0a2e",
-    isNew: false, tags: ["singer", "acoustic", "chill"],
-    goal: { current: 720, target: 1000, label: "Acoustic guitar set 🎸" },
-    privateRate: 30, isPrivate: false,
-  },
-  {
-    id: 2, name: "Kai Storm", category: "Male", region: "Euro Russian",
-    viewers: 4521, tokens: 23400, avatar: "🎮", live: true, preview: "#0a1a2e",
-    isNew: false, tags: ["fps", "competitive", "pro"],
-    goal: { current: 1000, target: 1000, label: "Marathon session 🏆" },
-    privateRate: 60, isPrivate: false,
-  },
-  {
-    id: 3, name: "Mira Sol", category: "Female", region: "South American",
-    viewers: 892, tokens: 5600, avatar: "🎨", live: true, preview: "#1a2e0a",
-    isNew: false, tags: ["digital art", "painting", "oc"],
-    goal: { current: 400, target: 500, label: "Portrait reveal 🖼️" },
-    privateRate: 20, isPrivate: false,
-  },
-  {
-    id: 4, name: "Rex Nova", category: "Male", region: "North American",
-    viewers: 2103, tokens: 11200, avatar: "💪", live: true, preview: "#2e1a0a",
-    isNew: false, tags: ["workout", "hiit", "motivation"],
-    goal: { current: 350, target: 2000, label: "1-hour mega workout" },
-    privateRate: 45, isPrivate: false,
-  },
-  {
-    id: 5, name: "Aria Flux", category: "Female", region: "Asian",
-    viewers: 663, tokens: 3800, avatar: "🎙️", live: false, preview: "#2e0a1a",
-    isNew: false, tags: ["asmr", "chill", "q&a"],
-    goal: null, privateRate: 15, isPrivate: false,
-  },
-  {
-    id: 6, name: "Zeph Cross", category: "Male", region: "Euro Russian",
-    viewers: 441, tokens: 2100, avatar: "🍳", live: true, preview: "#0a2e2e",
-    isNew: true, tags: ["cooking", "recipe", "live kitchen"],
-    goal: { current: 150, target: 300, label: "Special dessert 🍰" },
-    privateRate: 20, isPrivate: false,
-  },
-  {
-    id: 7, name: "Nova Blaze", category: "Female", region: "North American",
-    viewers: 3211, tokens: 15600, avatar: "🎸", live: true, preview: "#2e1a2e",
-    isNew: true, tags: ["rock", "guitar", "live band"],
-    goal: { current: 800, target: 1000, label: "Encore performance 🎵" },
-    privateRate: 50, isPrivate: false,
-  },
-  {
-    id: 8, name: "Jade Wilder", category: "Trans", region: "Asian",
-    viewers: 1893, tokens: 9200, avatar: "🕹️", live: true, preview: "#1a2e2e",
-    isNew: false, tags: ["rpg", "anime games", "casual"],
-    goal: { current: 200, target: 800, label: "Speedrun attempt ⚡" },
-    privateRate: 30, isPrivate: true,
-  },
-  {
-    id: 9, name: "Cleo Rivers", category: "Female", region: "Euro Russian",
-    viewers: 712, tokens: 4100, avatar: "🧘", live: true, preview: "#2e2e0a",
-    isNew: true, tags: ["yoga", "wellness", "meditation"],
-    goal: { current: 60, target: 200, label: "Live yoga flow 🌸" },
-    privateRate: 25, isPrivate: false,
-  },
-  {
-    id: 10, name: "Mars Echo", category: "Male", region: "North American",
-    viewers: 2441, tokens: 12800, avatar: "🎤", live: true, preview: "#1a0a1a",
-    isNew: false, tags: ["comedy", "improv", "storytelling"],
-    goal: { current: 750, target: 1000, label: "Stand-up set 🎭" },
-    privateRate: 40, isPrivate: false,
-  },
-  {
-    id: 11, name: "Sol Quinn", category: "Trans", region: "South American",
-    viewers: 388, tokens: 1900, avatar: "✏️", live: false, preview: "#0a1a0a",
-    isNew: true, tags: ["sketch", "illustration", "character"],
-    goal: null, privateRate: 15, isPrivate: false,
-  },
-  {
-    id: 12, name: "Remi & Jay", category: "Couples", region: "Asian",
-    viewers: 1024, tokens: 5300, avatar: "💑", live: true, preview: "#2e0a0a",
-    isNew: false, tags: ["couple", "interactive", "lovense"],
-    goal: { current: 400, target: 600, label: "Secret show reveal 💑" },
-    privateRate: 20, isPrivate: false,
-  },
-];
-
 // ── SUBSCRIPTION TIERS ───────────────────────────────────────────────────────
 const SUBSCRIPTION_TIERS = [
   {
@@ -307,66 +132,10 @@ const SUBSCRIPTION_TIERS = [
   },
 ];
 
-// ── STREAMER PROFILES ─────────────────────────────────────────────────────────
-// Full profile for Luna Vex (the logged-in streamer — fully editable)
-const STREAMER_PROFILES = {
-  1: {
-    id: 1, name: "Streamer", avatar: "🎭",
-    category: "Female", region: "",
-    bannerColor: "#1a0a2e",
-    bio: "",
-    roomSubject: "",
-    welcomeMsg: "",
-    tags: [],
-    socialLinks: {},
-    followers: 0,
-    totalStreams: 0,
-    avgViewers: 0,
-    tipMenu: [
-      { tokens: 10,  action: "" },
-      { tokens: 25,  action: "" },
-      { tokens: 50,  action: "" },
-      { tokens: 100, action: "" },
-      { tokens: 250, action: "" },
-      { tokens: 500, action: "" },
-    ],
-    wishlist: [],
-    streamHistory: [
-      { date: "May 30", title: "Acoustic Friday Night 🎸", viewers: 1284, tokens: 8920,  duration: "2h 15m" },
-      { date: "May 28", title: "Covers & Requests 🎵",     viewers: 1102, tokens: 7340,  duration: "1h 45m" },
-      { date: "May 25", title: "Original Songs Session",   viewers: 892,  tokens: 5200,  duration: "1h 30m" },
-      { date: "May 22", title: "Late Night Chill 🌙",      viewers: 743,  tokens: 4100,  duration: "2h 00m" },
-      { date: "May 18", title: "Fan Appreciation Special", viewers: 1580, tokens: 11200, duration: "3h 00m" },
-    ],
-    subscriptionTiers: SUBSCRIPTION_TIERS,
-  },
-};
-// Auto-generate streamlined profiles for all other streamers
-STREAMERS.forEach(s => {
-  if (!STREAMER_PROFILES[s.id]) {
-    STREAMER_PROFILES[s.id] = {
-      id: s.id, name: s.name, avatar: s.avatar,
-      category: s.category, region: s.region,
-      bannerColor: s.preview,
-      bio: `${s.name} live on Steamr — follow for notifications when I go live!`,
-      roomSubject: s.goal ? `Goal: ${s.goal.label} — tip to help reach it!` : "Welcome to my room!",
-      welcomeMsg: `Hey! Welcome to my room 👋 Don't forget to follow!`,
-      tags: s.tags,
-      socialLinks: {},
-      followers: Math.floor(s.viewers * 3.5),
-      totalStreams: Math.floor(s.tokens / 500),
-      avgViewers: s.viewers,
-      tipMenu: [
-        { tokens: 10,  action: "Say hi 👋"         },
-        { tokens: 50,  action: "Shoutout 📢"        },
-        { tokens: 100, action: "Special request 🎯" },
-        { tokens: 500, action: "Private show 🔒"    },
-      ],
-      subscriptionTiers: SUBSCRIPTION_TIERS,
-      streamHistory: [],
-    };
-  }
-});
+// ── STREAMER PROFILE (own profile only — data comes from Upstash) ──────────
+// Other streamers' profiles are fetched via /api/user-profile?id=...
+// Only the logged-in streamer's profile is held in React state (profileData)
+const STREAMER_PROFILES = {}; // empty — populated at runtime from API
 
 const TOKEN_PACKS = [
   { id: 1, tokens: 100,  price: 10.00,  bonus: 0,    popular: false },
@@ -375,24 +144,8 @@ const TOKEN_PACKS = [
   { id: 4, tokens: 5000, price: 500.00, bonus: 1000, popular: false },
 ];
 
-const CHAT_MSGS = [
-  { user: "darkwing99",  msg: "you're amazing!! 🔥",        tokens: null },
-  { user: "viewer_x",   msg: "sent 50 tokens!",             tokens: 50   },
-  { user: "nightowl",   msg: "best stream today hands down", tokens: null },
-  { user: "starfish22", msg: "sent 200 tokens!",             tokens: 200  },
-  { user: "cometgaze",  msg: "lol this is gold",             tokens: null },
-];
-
-// ── NOTIFICATIONS DATA ────────────────────────────────────────────────────────
-const INIT_NOTIFICATIONS = [
-  { id: 1, type: "tip",    message: "darkwing99 sent you 🪙 200 tokens",          time: "2 min ago",   read: false },
-  { id: 2, type: "follow", message: "starfish22 started following you",            time: "8 min ago",   read: false },
-  { id: 3, type: "tip",    message: "nightowl sent you 🪙 50 tokens",             time: "14 min ago",  read: false },
-  { id: 4, type: "payout", message: "Payout of $412.00 processed successfully ✓", time: "1 hour ago",  read: true  },
-  { id: 5, type: "follow", message: "cometgaze started following you",             time: "2 hours ago", read: true  },
-  { id: 6, type: "tip",    message: "viewer_x sent you 🪙 100 tokens",            time: "3 hours ago", read: true  },
-  { id: 7, type: "tip",    message: "nightbird sent you 🪙 500 tokens",           time: "5 hours ago", read: true  },
-];
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+// Start empty — real notifications loaded from /api/notifications on mount
 
 // ── BASE COMPONENTS ───────────────────────────────────────────────────────────
 function Pill({ children, color = COLORS.accent, style = {} }) {
@@ -1349,142 +1102,13 @@ const TRENDING_TAGS = [
   { tag: "digital art", hot: false },
 ];
 
-// ── FAN CLUB DATA ────────────────────────────────────────────────────────────
+// ── FAN CLUB ─────────────────────────────────────────────────────────────────
+// Fan club posts come from real subscribed streamers via /api/user-profile
 const TIER_RANK = { "Fan": 1, "Super Fan": 2, "VIP": 3 };
-const FAN_CLUB_POSTS = [
-  { id:1, streamerId:1, streamerName:"Luna Vex", streamerAvatar:"🎵", minTier:"Fan", type:"text",
-    caption:"Just finished writing a new song 🎸 Can't wait to debut it in tonight's stream! You're all going to LOVE it 💕", timestamp:"2h ago", likes:147, comments:23, liked:false },
-  { id:2, streamerId:1, streamerName:"Luna Vex", streamerAvatar:"🎵", minTier:"Fan", type:"photo",
-    gradient:"linear-gradient(135deg,#1a0a2e,#2d1456)", caption:"Studio selfie 📸 Recording day vibes ✨", timestamp:"5h ago", likes:284, comments:47, liked:false },
-  { id:3, streamerId:1, streamerName:"Luna Vex", streamerAvatar:"🎵", minTier:"Super Fan", type:"video",
-    gradient:"linear-gradient(135deg,#0d1a3e,#1a3060)", duration:"5:24", caption:"🎬 Super Fan exclusive: 5-min preview of my new EP recording session!", timestamp:"1d ago", likes:512, comments:83, liked:false },
-  { id:4, streamerId:1, streamerName:"Luna Vex", streamerAvatar:"🎵", minTier:"VIP", type:"photo",
-    gradient:"linear-gradient(135deg,#2a1a0e,#4a2a0e)", caption:"👑 VIP only — backstage at the venue tonight 🎭", timestamp:"2d ago", likes:891, comments:124, liked:false },
-  { id:5, streamerId:1, streamerName:"Luna Vex", streamerAvatar:"🎵", minTier:"Fan", type:"poll",
-    caption:"What should I play in tonight's stream? 🎵",
-    pollOptions:[{text:"Acoustic covers",votes:234},{text:"Original songs only",votes:186},{text:"Fan requests",votes:312},{text:"Mix of everything",votes:98}],
-    timestamp:"3d ago", likes:203, comments:56, liked:false },
-  { id:6, streamerId:7, streamerName:"Nova Blaze", streamerAvatar:"🎸", minTier:"Fan", type:"text",
-    caption:"New guitar arrived 🎸🔥 Stream tonight is going to be ELECTRIC!! Can't wait to show you all!", timestamp:"1h ago", likes:445, comments:78, liked:false },
-  { id:7, streamerId:7, streamerName:"Nova Blaze", streamerAvatar:"🎸", minTier:"Super Fan", type:"photo",
-    gradient:"linear-gradient(135deg,#2e0a2e,#4a1a50)", caption:"Surprise — new merch drop coming! Super Fans get first dibs 👀", timestamp:"8h ago", likes:618, comments:101, liked:false },
-  { id:8, streamerId:10, streamerName:"Mars Echo", streamerAvatar:"🎤", minTier:"Fan", type:"poll",
-    caption:"Which improv scenario should I do this Friday? 😂",
-    pollOptions:[{text:"Office party gone wrong",votes:156},{text:"Time traveller tourist",votes:289},{text:"Reality TV audition",votes:201}],
-    timestamp:"4h ago", likes:332, comments:64, liked:false },
-  { id:9, streamerId:4, streamerName:"Rex Nova", streamerAvatar:"💪", minTier:"Fan", type:"text",
-    caption:"PR update: 3 reps at 225lbs bench 🏋️ New training plan dropping for subscribers only next week!", timestamp:"6h ago", likes:521, comments:89, liked:false },
-];
 
-// ── SCHEDULE DATA ─────────────────────────────────────────────────────────────
+// ── SCHEDULE ──────────────────────────────────────────────────────────────────
+// Schedule data loaded from /api/user-profile on mount — no hardcoded slots
 const SCHEDULE_DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const SCHEDULE_EVENTS = [
-  { id:1, streamerId:1, streamerName:"Luna Vex",   avatar:"🎵", day:1, startHour:20, duration:2.5, title:"Acoustic Friday Night",    color:"#ff2d55", isYours:true },
-  { id:2, streamerId:7, streamerName:"Nova Blaze", avatar:"🎸", day:2, startHour:21, duration:2,   title:"Rock & Roll Saturday",    color:"#ff6b35" },
-  { id:3, streamerId:2, streamerName:"Kai Storm",  avatar:"🎮", day:0, startHour:18, duration:3,   title:"FPS Marathon",            color:"#4a9edd" },
-  { id:4, streamerId:10,streamerName:"Mars Echo",  avatar:"🎤", day:3, startHour:19, duration:1.5, title:"Stand-up Set",            color:"#9b59b6" },
-  { id:5, streamerId:1, streamerName:"Luna Vex",   avatar:"🎵", day:3, startHour:20, duration:2,   title:"Covers & Requests",       color:"#ff2d55", isYours:true },
-  { id:6, streamerId:9, streamerName:"Cleo Rivers",avatar:"🧘", day:4, startHour:7,  duration:1,   title:"Morning Yoga Flow",       color:"#00e5a0" },
-  { id:7, streamerId:4, streamerName:"Rex Nova",   avatar:"💪", day:5, startHour:17, duration:2,   title:"HIIT Workout",            color:"#e74c3c" },
-  { id:8, streamerId:1, streamerName:"Luna Vex",   avatar:"🎵", day:6, startHour:21, duration:3,   title:"Fan Appreciation Special",color:"#ff2d55", isYours:true },
-  { id:9, streamerId:3, streamerName:"Mira Sol",   avatar:"🎨", day:1, startHour:14, duration:3,   title:"Digital Art Session",     color:"#27ae60" },
-  { id:10,streamerId:6, streamerName:"Zeph Cross", avatar:"🍳", day:5, startHour:12, duration:2,   title:"Live Kitchen Special",    color:"#f39c12" },
-  { id:11,streamerId:12,streamerName:"Remi & Jay", avatar:"💑", day:2, startHour:23, duration:1.5, title:"Couples Q&A",             color:"#00b894" },
-  { id:12,streamerId:2, streamerName:"Kai Storm",  avatar:"🎮", day:4, startHour:20, duration:2.5, title:"Ranked Grind Live",       color:"#4a9edd" },
-];
-
-// ── LEADERBOARD DATA ──────────────────────────────────────────────────────────
-const LEADERBOARD = {
-  tippers: {
-    today: [
-      {rank:1,name:"darkwing99",  avatar:"🦇",tokens:8920, badge:"🥇"},
-      {rank:2,name:"starfish22",  avatar:"⭐",tokens:6450, badge:"🥈"},
-      {rank:3,name:"nightowl",    avatar:"🦉",tokens:4200, badge:"🥉"},
-      {rank:4,name:"viewer_x",    avatar:"👤",tokens:2800},
-      {rank:5,name:"cometgaze",   avatar:"☄️",tokens:1950},
-      {rank:6,name:"neonrider",   avatar:"🌟",tokens:1200},
-      {rank:7,name:"flashpulse",  avatar:"⚡",tokens:890},
-      {rank:8,name:"crystalwave", avatar:"💎",tokens:650},
-    ],
-    weekly: [
-      {rank:1,name:"starfish22",  avatar:"⭐",tokens:42100,badge:"🥇"},
-      {rank:2,name:"darkwing99",  avatar:"🦇",tokens:38750,badge:"🥈"},
-      {rank:3,name:"nightbird",   avatar:"🐦",tokens:21400,badge:"🥉"},
-      {rank:4,name:"cometgaze",   avatar:"☄️",tokens:15200},
-      {rank:5,name:"viewer_x",    avatar:"👤",tokens:9800},
-      {rank:6,name:"neonrider",   avatar:"🌟",tokens:7400},
-      {rank:7,name:"flashpulse",  avatar:"⚡",tokens:4200},
-      {rank:8,name:"crystalwave", avatar:"💎",tokens:2900},
-    ],
-    alltime: [
-      {rank:1,name:"starfish22",  avatar:"⭐",tokens:924000,badge:"🥇"},
-      {rank:2,name:"darkwing99",  avatar:"🦇",tokens:756000,badge:"🥈"},
-      {rank:3,name:"nightbird",   avatar:"🐦",tokens:512000,badge:"🥉"},
-      {rank:4,name:"cometgaze",   avatar:"☄️",tokens:380000},
-      {rank:5,name:"viewer_x",    avatar:"👤",tokens:241000},
-    ],
-  },
-  streamers: {
-    today: [
-      {rank:1,name:"Kai Storm",   avatar:"🎮",tokens:23400,viewers:4521,badge:"🥇"},
-      {rank:2,name:"Nova Blaze",  avatar:"🎸",tokens:15600,viewers:3211,badge:"🥈"},
-      {rank:3,name:"Mars Echo",   avatar:"🎤",tokens:12800,viewers:2441,badge:"🥉"},
-      {rank:4,name:"Rex Nova",    avatar:"💪",tokens:11200,viewers:2103},
-      {rank:5,name:"Jade Wilder", avatar:"🕹️",tokens:9200, viewers:1893},
-      {rank:6,name:"Luna Vex",    avatar:"🎵",tokens:8920, viewers:1284,isYours:true},
-      {rank:7,name:"Mira Sol",    avatar:"🎨",tokens:5600, viewers:892},
-      {rank:8,name:"Cleo Rivers", avatar:"🧘",tokens:4100, viewers:712},
-    ],
-    weekly: [
-      {rank:1,name:"Kai Storm",   avatar:"🎮",tokens:184000,viewers:38200,badge:"🥇"},
-      {rank:2,name:"Nova Blaze",  avatar:"🎸",tokens:142000,viewers:29100,badge:"🥈"},
-      {rank:3,name:"Mars Echo",   avatar:"🎤",tokens:98400, viewers:21800,badge:"🥉"},
-      {rank:4,name:"Rex Nova",    avatar:"💪",tokens:71600, viewers:15200},
-      {rank:5,name:"Luna Vex",    avatar:"🎵",tokens:83200, viewers:18400,isYours:true},
-      {rank:6,name:"Jade Wilder", avatar:"🕹️",tokens:64000, viewers:13100},
-      {rank:7,name:"Mira Sol",    avatar:"🎨",tokens:38000, viewers:7800},
-      {rank:8,name:"Cleo Rivers", avatar:"🧘",tokens:21000, viewers:4300},
-    ],
-    alltime: [
-      {rank:1,name:"Kai Storm",   avatar:"🎮",tokens:9200000,viewers:1840000,badge:"🥇"},
-      {rank:2,name:"Nova Blaze",  avatar:"🎸",tokens:7100000,viewers:1420000,badge:"🥈"},
-      {rank:3,name:"Luna Vex",    avatar:"🎵",tokens:4800000,viewers:960000, badge:"🥉",isYours:true},
-      {rank:4,name:"Mars Echo",   avatar:"🎤",tokens:3900000,viewers:780000},
-      {rank:5,name:"Rex Nova",    avatar:"💪",tokens:2800000,viewers:560000},
-    ],
-  },
-};
-
-// ── ANALYTICS DATA ───────────────────────────────────────────────────────────
-const ANALYTICS_DAILY = [
-  {day:"May 6", tokens:3210,viewers:412},{day:"May 7", tokens:5820,viewers:680},
-  {day:"May 8", tokens:2940,viewers:388},{day:"May 9", tokens:4100,viewers:524},
-  {day:"May 10",tokens:6200,viewers:790},{day:"May 11",tokens:7800,viewers:1120},
-  {day:"May 12",tokens:5500,viewers:710},{day:"May 13",tokens:4200,viewers:542},
-  {day:"May 14",tokens:6100,viewers:840},{day:"May 15",tokens:7300,viewers:980},
-  {day:"May 16",tokens:8100,viewers:1100},{day:"May 17",tokens:9200,viewers:1280},
-  {day:"May 18",tokens:7600,viewers:1050},{day:"May 19",tokens:5900,viewers:780},
-  {day:"May 20",tokens:4800,viewers:640},{day:"May 21",tokens:7100,viewers:940},
-  {day:"May 22",tokens:8900,viewers:1210},{day:"May 23",tokens:10200,viewers:1420},
-  {day:"May 24",tokens:9400,viewers:1300},{day:"May 25",tokens:8100,viewers:1120},
-  {day:"May 26",tokens:7200,viewers:990},{day:"May 27",tokens:6500,viewers:880},
-  {day:"May 28",tokens:8240,viewers:1140},{day:"May 29",tokens:9100,viewers:1260},
-  {day:"May 30",tokens:10500,viewers:1460},{day:"May 31",tokens:11200,viewers:1580},
-  {day:"Jun 1", tokens:9800,viewers:1380},{day:"Jun 2", tokens:8600,viewers:1200},
-  {day:"Jun 3", tokens:7400,viewers:1020},{day:"Jun 4", tokens:8920,viewers:1284},
-];
-const ANALYTICS_STREAMS = [
-  {title:"Luna Live 🎵",    date:"Jun 4", viewers:1284,tokens:8920, duration:"2h 14m"},
-  {title:"Acoustic Night",   date:"Jun 2", viewers:1200,tokens:8600, duration:"1h 58m"},
-  {title:"Late Night Vibes", date:"May 31",viewers:1580,tokens:11200,duration:"2h 45m"},
-  {title:"Fan Requests",     date:"May 29",viewers:1260,tokens:9100, duration:"1h 32m"},
-  {title:"Friday Hangout",   date:"May 24",viewers:1300,tokens:9400, duration:"2h 10m"},
-  {title:"Open Mic",         date:"May 22",viewers:1420,tokens:10200,duration:"2h 05m"},
-  {title:"Sunday Stream",    date:"May 19",viewers:940, tokens:7100, duration:"1h 20m"},
-  {title:"Chill Afternoon",  date:"May 16",viewers:1100,tokens:8100, duration:"1h 45m"},
-  {title:"Thursday Night",   date:"May 14",viewers:840, tokens:6100, duration:"1h 15m"},
-  {title:"Quick Stream",     date:"May 11",viewers:1120,tokens:7800, duration:"1h 05m"},
-];
 
 // ── BROADCAST SETTINGS ────────────────────────────────────────────────────────
 const QUALITY_PRESETS = [
@@ -1532,42 +1156,56 @@ const DISCOVERY_TAGS = [
   {tag:"roleplay",count:860},{tag:"cosplay",count:740},{tag:"couples",count:440},
 ];
 
-function BrowseScreen({ onNavigate, following, onFollow }) {
+function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
   const w = useWindowWidth(); const isMobile = w < 640; const isTablet = w < 960;
-  const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 1200); return () => clearTimeout(t); }, []);
+  const [loading,    setLoading]    = useState(true);
+  const [streamers,  setStreamers]  = useState([]);
+  const [fetchErr,   setFetchErr]   = useState("");
   const [cat,        setCat]        = useState("All");
   const [sort,       setSort]       = useState("featured");
   const [region,     setRegion]     = useState("All Regions");
   const [search,     setSearch]     = useState("");
   const [activeTag,  setActiveTag]  = useState("");
   const [showSugg,   setShowSugg]   = useState(false);
-  const viewerTokens = 350;
+
+  // ── Fetch real live streamers from API ────────────────────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    const headers = token ? { "x-auth-token": token } : {};
+    fetch("/api/user-profile?live=true", { headers })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) setStreamers(data.streamers || []);
+        else setFetchErr("Could not load streamers.");
+      })
+      .catch(() => setFetchErr("Connection error — please refresh."))
+      .finally(() => setLoading(false));
+  }, []);
 
   // ── Filter + sort pipeline ────────────────────────────────────────────────
-  let results = STREAMERS
+  let results = streamers
     .filter(s => cat    === "All"        || s.category === cat)
     .filter(s => region === "All Regions"|| s.region   === region)
-    .filter(s => !activeTag              || s.tags.includes(activeTag))
+    .filter(s => !activeTag              || (s.tags || []).includes(activeTag))
     .filter(s => !search.trim()          ||
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.tags.some(t => t.includes(search.toLowerCase())));
+      (s.name || s.displayName || "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.tags || []).some(t => t.includes(search.toLowerCase())));
 
   if (sort === "following") results = results.filter(s => following.has(s.id));
   if (sort === "new")       results = [...results].filter(s => s.isNew || s.live).sort((a,b) => Number(b.isNew)-Number(a.isNew));
   if (sort === "viewers" || sort === "featured")
-    results = [...results].sort((a,b) => (b.live?1:0)-(a.live?1:0) || b.viewers-a.viewers);
+    results = [...results].sort((a,b) => (b.live?1:0)-(a.live?1:0) || (b.viewers||0)-(a.viewers||0));
 
   const featured  = sort === "featured" ? results.slice(0,3) : [];
   const grid      = sort === "featured" ? results.slice(3)   : results;
-  const liveCount = STREAMERS.filter(s => s.live).length;
-  const justLive  = STREAMERS.filter(s => s.live && s.isNew);
+  const liveCount = streamers.filter(s => s.live).length;
+  const justLive  = streamers.filter(s => s.live && s.isNew);
 
   // ── Search suggestions ────────────────────────────────────────────────────
   const q = search.trim().toLowerCase();
   const suggestions = q.length < 1 ? [] : [
-    ...STREAMERS.filter(s => s.name.toLowerCase().includes(q)).slice(0,3)
-      .map(s => ({ type:"streamer", label:s.name, id:s.id })),
+    ...streamers.filter(s => (s.name||s.displayName||"").toLowerCase().includes(q)).slice(0,3)
+      .map(s => ({ type:"streamer", label:s.name || s.displayName, id:s.id })),
     ...TRENDING_TAGS.filter(t => t.tag.includes(q)).slice(0,4)
       .map(t => ({ type:"tag", label:t.tag })),
   ];
@@ -1726,14 +1364,32 @@ function BrowseScreen({ onNavigate, following, onFollow }) {
       )}
 
       {/* ── Empty states ─────────────────────────────────────────────────── */}
-      {sort==="following" && results.length===0 && (
+      {fetchErr && !loading && (
+        <div style={{ textAlign:"center", padding:"60px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>⚠️</div>
+          <h3 style={{ margin:"0 0 8px" }}>Couldn't load streams</h3>
+          <p style={{ color:COLORS.muted, fontSize:14, marginBottom:20 }}>{fetchErr}</p>
+          <Btn onClick={() => window.location.reload()} variant="secondary">Retry</Btn>
+        </div>
+      )}
+      {!loading && !fetchErr && streamers.length === 0 && (
+        <div style={{ textAlign:"center", padding:"80px 24px" }}>
+          <div style={{ fontSize:64, marginBottom:16 }}>📡</div>
+          <h3 style={{ margin:"0 0 8px", fontSize:20 }}>No live streams right now</h3>
+          <p style={{ color:COLORS.muted, fontSize:14, marginBottom:20, lineHeight:1.7 }}>
+            No one is streaming yet — check back soon, or be the first to go live!
+          </p>
+          <Btn onClick={() => onNavigate("streamer-dashboard")}>🔴 Go Live</Btn>
+        </div>
+      )}
+      {sort==="following" && results.length===0 && streamers.length > 0 && (
         <div style={{ textAlign:"center", padding:"60px 24px" }}>
           <div style={{ fontSize:48, marginBottom:12 }}>♡</div>
           <h3 style={{ margin:"0 0 8px" }}>No followed streamers yet</h3>
           <p style={{ color:COLORS.muted, fontSize:14 }}>Click ♡ on any card to follow a streamer.</p>
         </div>
       )}
-      {results.length===0 && sort !== "following" && (search.trim() || activeTag) && (
+      {results.length===0 && sort !== "following" && streamers.length > 0 && (search.trim() || activeTag) && (
         <div style={{ textAlign:"center", padding:"60px 24px" }}>
           <div style={{ fontSize:48, marginBottom:12 }}>🔍</div>
           <h3 style={{ margin:"0 0 8px" }}>No streamers found</h3>
@@ -1793,10 +1449,10 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
   // Effective tip amount — either preset or custom
   const effectiveTip = useCustom ? (parseInt(customTip) || 0) : tipAmount;
-  const [msgs,       setMsgs]       = useState(CHAT_MSGS);
+  const [msgs,       setMsgs]       = useState([]);
   const [chatInput,  setChatInput]  = useState("");
   const [tipped,     setTipped]     = useState(false);
-  const [goal,       setGoal]       = useState({ current: 720, target: 1000, label: "Acoustic guitar set 🎸" });
+  const [goal,       setGoal]       = useState(null);
   const [spyMode,    setSpyMode]    = useState(false);
   const [showSubModal, setShowSubModal] = useState(false);
   const [tipAlerts,  setTipAlerts]  = useState([]);
@@ -1809,33 +1465,59 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   };
   const removeTipAlert = (id) => setTipAlerts(a => a.filter(x => x.id !== id));
 
-  // Simulate incoming tips from other viewers
+  // ── Real viewer count — polled from sorted-set heartbeats ─────────────────
+  const [viewerCount, setViewerCount] = useState(0);
   useEffect(() => {
-    const MOCK = [
-      {user:"darkwing99",amount:50},{user:"starfish22",amount:200},
-      {user:"nightowl",amount:10},{user:"cometgaze",amount:25},
-      {user:"crystalwave",amount:500},{user:"neonrider",amount:100},
-    ];
-    let i = 0;
-    const schedule = () => {
-      nextTipRef.current = setTimeout(() => {
-        const m = MOCK[i++ % MOCK.length];
-        addTipAlert(m.user, m.amount, "incoming");
-        setMsgs(ms => [...ms.slice(-30), { user:m.user, msg:`sent 🪙 ${m.amount}!`, tokens:m.amount }]);
-        setGoal(g => ({ ...g, current: Math.min(g.target, g.current + Math.floor(m.amount/3)) }));
-        schedule();
-      }, 5000 + Math.random() * 7000);
+    if (!streamerProfile?.email) return;
+    const streamId = encodeURIComponent(streamerProfile.email);
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?streamId=${streamId}`);
+        const data = await r.json();
+        if (data.ok) setViewerCount(data.count || 0);
+      } catch {}
     };
-    const first = setTimeout(() => schedule(), 3000);
-    return () => { clearTimeout(first); clearTimeout(nextTipRef.current); };
-  }, []);
+    poll();
+    const iv = setInterval(poll, 15_000);
+    return () => clearInterval(iv);
+  }, [streamerProfile?.email]);
   const currentSub  = subscriptions[selectedStreamerId] || subscriptions[1] || null;
   const isFollowing = following?.has(selectedStreamerId) || following?.has(1);
-  const streamerProfile = STREAMER_PROFILES[selectedStreamerId] || STREAMER_PROFILES[1];
 
-  // Get streamer name for tip record
-  const streamer = STREAMERS.find(s => s.id === selectedStreamerId);
-  const streamerName = streamer?.name || "Streamer";
+  // ── Load real streamer profile ─────────────────────────────────────────────
+  const [streamerProfile, setStreamerProfile] = useState(null);
+  const [streamerName, setStreamerName] = useState("Streamer");
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    fetch(`/api/user-profile?publicId=${encodeURIComponent(selectedStreamerId)}`, {
+      headers: token ? { "x-auth-token": token } : {},
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        const p = data.profile;
+        const sp = p.streamerProfile || {};
+        setStreamerProfile({
+          id:          selectedStreamerId,
+          name:        p.displayName || p.name || "Streamer",
+          avatar:      p.avatarImg   || "🎭",
+          avatarImg:   p.avatarImg   || null,
+          category:    sp.category   || p.category || "Female",
+          tags:        sp.tags       || [],
+          roomSubject: sp.roomSubject|| "",
+          welcomeMsg:  sp.welcomeMsg || "",
+          tipMenu:     sp.tipMenu    || [],
+          email:       p.email       || "",
+        });
+        setStreamerName(p.displayName || p.name || "Streamer");
+        if (sp.goalLabel && sp.goalTarget) {
+          setGoal({ current: 0, target: sp.goalTarget, label: sp.goalLabel });
+        }
+      }
+    })
+    .catch(() => {});
+  }, [selectedStreamerId]);
 
   // ── Geo-blocking check ────────────────────────────────────────────────────
   const [geoBlocked,  setGeoBlocked]  = useState(false);
@@ -1901,7 +1583,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       fetch(`/api/user-profile?streamId=${streamId}`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ sessionId }),
+        body:    JSON.stringify({ action: "viewer-heartbeat", sessionId }),
       }).catch(() => {});
     };
 
@@ -2128,37 +1810,34 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12, marginBottom:12 }}>
             <div>
               <h3
-                onClick={() => onNavigate("profile", { streamerId: 1 })}
+                onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
                 style={{ margin:"0 0 6px", fontSize:20, fontWeight:800, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 }}
               >
-                {STREAMER_PROFILES[1].name}
+                {streamerProfile?.name || streamerName}
                 <span style={{ fontSize:11, color:COLORS.muted, fontWeight:400 }}>👤 View profile</span>
               </h3>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                <Pill color={CAT_COLOR[STREAMER_PROFILES[1].category] || COLORS.accentB}>{STREAMER_PROFILES[1].category}</Pill>
-                {STREAMER_PROFILES[1].tags.slice(0,3).map(tag => (
+                {streamerProfile?.category && <Pill color={CAT_COLOR[streamerProfile.category] || COLORS.accentB}>{streamerProfile.category}</Pill>}
+                {(streamerProfile?.tags || []).slice(0,3).map(tag => (
                   <span key={tag} style={{ fontSize:11, color:COLORS.muted, background:COLORS.surface, borderRadius:4, padding:"2px 6px" }}>#{tag}</span>
                 ))}
               </div>
             </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ color:COLORS.gold, fontWeight:700 }}>🪙 8,920 tokens today</div>
-              {spyMode && <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>Spy rate: 🪙 30/min</div>}
-            </div>
           </div>
 
           {/* Room subject */}
-          {STREAMER_PROFILES[1].roomSubject && (
+          {streamerProfile?.roomSubject && (
             <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginBottom:14, padding:"8px 12px", background:COLORS.surface, borderRadius:8, lineHeight:1.5 }}>
-              {STREAMER_PROFILES[1].roomSubject}
+              {streamerProfile.roomSubject}
             </div>
           )}
 
           {/* Tip menu from profile */}
+          {streamerProfile?.tipMenu?.length > 0 && (
           <div style={{ marginBottom:16 }}>
             <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>💰 Tip Menu</div>
             <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              {STREAMER_PROFILES[1].tipMenu.map((item, i) => (
+              {streamerProfile.tipMenu.map((item, i) => (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:COLORS.surface, borderRadius:7 }}>
                   <span style={{ minWidth:46, fontSize:11, fontWeight:800, color:COLORS.gold, background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}33`, borderRadius:5, padding:"2px 5px", textAlign:"center" }}>🪙 {item.tokens}</span>
                   <span style={{ fontSize:12, color:COLORS.muted, flex:1 }}>{item.action}</span>
@@ -2166,7 +1845,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
               ))}
             </div>
           </div>
-
+          )}
         </Card>
       </div>
 
@@ -2178,7 +1857,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             border:`1px solid ${COLORS.border}`, borderRadius:20, padding:"4px 10px", fontSize:12 }}>
             <span style={{ width:7,height:7,borderRadius:"50%",background:COLORS.accent,display:"inline-block",boxShadow:`0 0 6px ${COLORS.accent}` }}/>
             <span style={{ color:COLORS.muted }}>👁</span>
-            <span style={{ fontWeight:700, color:COLORS.text }}>1,284</span>
+            <span style={{ fontWeight:700, color:COLORS.text }}>{viewerCount > 0 ? viewerCount.toLocaleString() : "—"}</span>
             <span style={{ color:COLORS.muted }}>watching</span>
           </div>
         </div>
@@ -2203,11 +1882,11 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         </div>
       </Card>
       {/* Subscribe modal */}
-      {showSubModal && (
+      {showSubModal && streamerProfile && (
         <SubscribeModal
-          profile={STREAMER_PROFILES[1]}
+          profile={streamerProfile}
           currentSub={currentSub}
-          onSubscribe={(tier) => onSubscribe(1, tier)}
+          onSubscribe={(tier) => onSubscribe(selectedStreamerId, tier)}
           onClose={() => setShowSubModal(false)}
         />
       )}
@@ -2611,17 +2290,16 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
         <Card>
           <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
           {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
-            const streamer  = STREAMERS.find(s => s.id===Number(id));
             const isConfirm = confirmId === id;
             return (
               <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                   <div onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}
                     style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
-                    {streamer?.avatar||"🎭"}
+                    {"🎭"}
                   </div>
                   <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("stream-room",{streamerId:Number(id)})}>
-                    <div style={{ fontWeight:700,fontSize:13 }}>{streamer?.name||"Streamer"}</div>
+                    <div style={{ fontWeight:700,fontSize:13 }}>{sub.streamerName || "Streamer"}</div>
                     <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
                   </div>
                   <SubBadge tierName={sub.tierName} />
@@ -2634,7 +2312,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                 </div>
                 {isConfirm && (
                   <div style={{ marginTop:12,padding:"14px 16px",background:COLORS.surface,border:`1px solid #ff666644`,borderRadius:10 }}>
-                    <div style={{ fontWeight:700,fontSize:13,marginBottom:6 }}>Cancel {streamer?.name||"Streamer"} subscription?</div>
+                    <div style={{ fontWeight:700,fontSize:13,marginBottom:6 }}>Cancel subscription?</div>
                     <div style={{ fontSize:12,color:COLORS.muted,marginBottom:14,lineHeight:1.5 }}>
                       You'll lose access to their Fan Club and subscriber perks. This takes effect immediately.
                     </div>
@@ -2665,19 +2343,15 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
       {tab==="following" && (
         <Card>
           <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Streamers You Follow</div>
-          {followCount > 0 ? STREAMERS.filter(s => following?.has(s.id)).map(s => (
-            <div key={s.id} onClick={() => onNavigate("stream-room",{streamerId:s.id})}
-              style={{ display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`,cursor:"pointer" }}>
-              <div style={{ width:44,height:44,borderRadius:"50%",background:s.preview||COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>
-                {s.avatar}
+          {followCount > 0 ? (
+            <div style={{ color:COLORS.muted, fontSize:13, textAlign:"center", padding:"24px 0" }}>
+              <div style={{ fontSize:32, marginBottom:10 }}>❤️</div>
+              <div style={{ fontWeight:700, color:COLORS.text }}>Following {followCount} streamer{followCount!==1?"s":""}</div>
+              <div style={{ fontSize:12, marginTop:8 }}>
+                <Btn onClick={() => onNavigate("viewer-browse")} variant="ghost" style={{ fontSize:12, marginTop:12 }}>Browse Live Now →</Btn>
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontWeight:700,fontSize:13 }}>{s.name}</div>
-                <div style={{ fontSize:11,color:COLORS.muted }}>{s.tags?.slice(0,2).join(" · ")}</div>
-              </div>
-              {s.live && <Pill color={COLORS.accent} style={{ fontSize:10 }}>LIVE</Pill>}
             </div>
-          )) : (
+          ) : (
             <div style={{ textAlign:"center",padding:"32px 0",color:COLORS.muted }}>
               <div style={{ fontSize:32,marginBottom:10 }}>❤️</div>
               <div style={{ fontWeight:700 }}>Not following anyone yet</div>
@@ -4211,9 +3885,53 @@ const BANNER_PRESETS = [
 // ── PROFILE SCREEN ────────────────────────────────────────────────────────────
 function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, following, onFollow, subscriptions = {}, onSubscribe, onCancelSub, isStreamerLive = false }) {
   const w = useWindowWidth(); const isMobile = w < 768;
-  const profile = isOwnProfile ? profileData : (STREAMER_PROFILES[streamerId] || STREAMER_PROFILES[1]);
-  const streamer = STREAMERS.find(s => s.id === profile.id) || STREAMERS[0];
-  const isLiveNow = isOwnProfile ? isStreamerLive : streamer.live;
+
+  // For own profile, use the App's profileData state.
+  // For other streamers, fetch from API.
+  const [fetchedProfile, setFetchedProfile] = useState(null);
+  useEffect(() => {
+    if (isOwnProfile) return;
+    const token = localStorage.getItem("steamr_token");
+    fetch(`/api/user-profile?publicId=${encodeURIComponent(streamerId)}`, {
+      headers: token ? { "x-auth-token": token } : {},
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        const p = data.profile;
+        const sp = p.streamerProfile || {};
+        setFetchedProfile({
+          id:          streamerId,
+          name:        p.displayName || p.name || "Streamer",
+          avatar:      sp.avatar     || "🎭",
+          avatarImg:   p.avatarImg   || null,
+          category:    sp.category   || p.category || "Female",
+          region:      sp.region     || "",
+          bannerColor: sp.bannerColor|| "#1a0a2e",
+          bannerImg:   sp.bannerImg  || null,
+          bio:         p.bio         || "",
+          roomSubject: sp.roomSubject|| "",
+          tags:        sp.tags       || [],
+          socialLinks: sp.socialLinks|| {},
+          followers:   data.activity?.followers || 0,
+          tipMenu:     sp.tipMenu    || [],
+          wishlist:    sp.wishlist   || [],
+          subscriptionTiers: SUBSCRIPTION_TIERS,
+          email:       p.email       || "",
+        });
+      }
+    })
+    .catch(() => {});
+  }, [streamerId, isOwnProfile]);
+
+  const profile = isOwnProfile ? profileData : (fetchedProfile || {
+    id: streamerId, name: "Loading…", avatar: "🎭", avatarImg: null,
+    category: "", region: "", bannerColor: "#1a0a2e", bannerImg: null,
+    bio: "", roomSubject: "", tags: [], socialLinks: {}, followers: 0,
+    tipMenu: [], wishlist: [], subscriptionTiers: SUBSCRIPTION_TIERS,
+  });
+
+  const isLiveNow = isOwnProfile ? isStreamerLive : false; // real live status from API if needed
   const isFollowing = following.has(profile.id);
   const currentSub  = subscriptions[profile.id] || null;
   const [showModal, setShowModal] = useState(false);
@@ -5288,6 +5006,27 @@ function SettingsScreen({ onNavigate, addToast, isStreamer = true, isDark = true
     </div>
   );
 
+  // ── Load real user identity from localStorage ─────────────────────────────
+  const [settingsUser, setSettingsUser] = useState({ name: "", email: "", role: "", joinDate: "" });
+  useEffect(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      if (session) setSettingsUser({ name: session.name || "", email: session.email || "", role: session.role || "", joinDate: "" });
+    } catch {}
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) setSettingsUser({
+          name:     data.profile.displayName || data.profile.name || "",
+          email:    data.profile.email       || "",
+          role:     data.profile.role        || "streamer",
+          joinDate: data.profile.joinDate    || "",
+        });
+      }).catch(() => {});
+  }, []);
+
   // ── labelled input helper ─────────────────────────────────────────────────
   const Field = ({ label, note, ...props }) => (
     <div style={{ marginBottom:14 }}>
@@ -5316,18 +5055,17 @@ function SettingsScreen({ onNavigate, addToast, isStreamer = true, isDark = true
         <SectionHead>Account</SectionHead>
         <Card>
           <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-            <div style={{ width:56, height:56, borderRadius:"50%", background:COLORS.surface, border:`2px solid ${COLORS.border}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, flexShrink:0 }}>🎵</div>
+            <div style={{ width:56, height:56, borderRadius:"50%", background:COLORS.surface, border:`2px solid ${COLORS.border}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:28, flexShrink:0 }}>🎭</div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontWeight:800, fontSize:17 }}>Luna Vex</div>
-              <div style={{ color:COLORS.muted, fontSize:13, marginTop:1 }}>luna@steamr.com</div>
+              <div style={{ fontWeight:800, fontSize:17 }}>{settingsUser.name || "—"}</div>
+              <div style={{ color:COLORS.muted, fontSize:13, marginTop:1 }}>{settingsUser.email || "—"}</div>
             </div>
-            <Pill color={COLORS.accent}>Streamer</Pill>
+            <Pill color={COLORS.accent}>{settingsUser.role === "viewer" ? "Viewer" : "Streamer"}</Pill>
           </div>
           <div style={{ display:"flex", gap:28, marginTop:16, paddingTop:16, borderTop:`1px solid ${COLORS.border}`, flexWrap:"wrap" }}>
             {[
-              { label:"Member since", value:"March 2023" },
-              { label:"Account ID",   value:"#LV-00001"  },
-              { label:"Status",       value:"● Verified", color: COLORS.green },
+              { label:"Member since", value: settingsUser.joinDate || "Recently" },
+              { label:"Account type",  value: settingsUser.role === "viewer" ? "Viewer Account" : "Streamer Account" },
             ].map(({ label, value, color }) => (
               <div key={label}>
                 <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:3 }}>{label}</div>
@@ -5481,7 +5219,7 @@ function SettingsScreen({ onNavigate, addToast, isStreamer = true, isDark = true
 // ── FAN CLUB FEED ─────────────────────────────────────────────────────────────
 function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [posts,      setPosts]      = useState(FAN_CLUB_POSTS);
+  const [posts,      setPosts]      = useState([]);
   const [filter,     setFilter]     = useState("All");
   const [votedPolls, setVotedPolls] = useState({});
 
@@ -5492,7 +5230,6 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
   };
   const subscribedIds = Object.keys(subscriptions).map(Number);
   const hasSubs = subscribedIds.length > 0;
-  const subscribedStreamers = STREAMERS.filter(s => subscribedIds.includes(s.id));
   const filtered = posts.filter(p => {
     if (filter === "Photos") return p.type === "photo";
     if (filter === "Videos") return p.type === "video";
@@ -5519,23 +5256,6 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
         <Btn onClick={() => onNavigate("viewer-browse")} variant="ghost" style={{ fontSize:12, padding:"6px 14px" }}>+ Find Streamers</Btn>
       </div>
 
-      {subscribedStreamers.length > 0 && (
-        <div style={{ display:"flex", gap:14, overflowX:"auto", paddingBottom:12, marginBottom:20 }}>
-          {subscribedStreamers.map(s => (
-            <div key={s.id} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5, flexShrink:0, cursor:"pointer" }}
-              onClick={() => onNavigate("profile", { streamerId:s.id })}>
-              <div style={{ width:56, height:56, borderRadius:"50%", border:`3px solid ${COLORS.accent}`,
-                display:"flex", alignItems:"center", justifyContent:"center", fontSize:24,
-                background:s.preview, position:"relative" }}>
-                {s.avatar}
-                {s.live && <div style={{ position:"absolute", bottom:1, right:1, width:12, height:12, borderRadius:"50%", background:COLORS.accent, border:`2px solid ${COLORS.bg}` }} />}
-              </div>
-              <span style={{ fontSize:10, color:COLORS.muted, maxWidth:60, textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div style={{ display:"flex", borderBottom:`1px solid ${COLORS.border}`, marginBottom:20 }}>
         {["All","Photos","Videos","Polls","Text"].map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
@@ -5545,14 +5265,20 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
         ))}
       </div>
 
-      {!hasSubs && (
+      {!hasSubs ? (
         <div style={{ textAlign:"center", padding:"60px 24px" }}>
           <div style={{ fontSize:52, marginBottom:14 }}>👑</div>
           <h3 style={{ margin:"0 0 8px" }}>No subscriptions yet</h3>
           <p style={{ color:COLORS.muted, fontSize:14, marginBottom:24 }}>Subscribe to streamers to unlock exclusive Fan Club content.</p>
           <Btn onClick={() => onNavigate("viewer-browse")}>Browse Streamers</Btn>
         </div>
-      )}
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"60px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:14 }}>📭</div>
+          <h3 style={{ margin:"0 0 8px" }}>No posts yet</h3>
+          <p style={{ color:COLORS.muted, fontSize:14 }}>The streamers you follow haven't posted Fan Club content yet — check back soon!</p>
+        </div>
+      ) : (
 
       <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
         {filtered.map(post => {
@@ -5566,7 +5292,7 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
                 <div style={{ width:40, height:40, borderRadius:"50%", background:COLORS.surface,
                   display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, cursor:"pointer",
                   border:`2px solid ${unlocked?COLORS.accent:COLORS.border}` }}
-                  onClick={() => onNavigate("profile",{streamerId:post.streamerId})}>{post.streamerAvatar}</div>
+                  onClick={() => onNavigate("profile",{streamerId:post.streamerId})}>{post.streamerAvatar || "🎭"}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontWeight:700, fontSize:14, cursor:"pointer" }}
                     onClick={() => onNavigate("profile",{streamerId:post.streamerId})}>{post.streamerName}</div>
@@ -5595,7 +5321,7 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
                     </div>
                   ) : (
                     <>
-                      <div style={{ fontSize:52 }}>{post.streamerAvatar}</div>
+                      <div style={{ fontSize:52 }}>{post.streamerAvatar || "🎭"}</div>
                       {post.type==="video" && (
                         <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.28)",
                           display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -5658,32 +5384,30 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
 
 // ── PRIVATE SHOW SCREEN ────────────────────────────────────────────────────────
-function PrivateShowScreen({ onNavigate, addToast }) {
+function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens = 0 }) {
   const [phase,     setPhase]     = useState("request");
   const [duration,  setDuration]  = useState(10);
   const [elapsed,   setElapsed]   = useState(0);
-  const [balance,   setBalance]   = useState(350);
+  const [balance,   setBalance]   = useState(viewerTokens);
   const [spent,     setSpent]     = useState(0);
   const [chatInput, setChatInput] = useState("");
-  const [chatMsgs,  setChatMsgs]  = useState([
-    { from:"Luna Vex", msg:"Hey! Your request just came in 😊 Ready when you are!", me:false }
-  ]);
+  const [chatMsgs,  setChatMsgs]  = useState([]);
   const timerRef = useRef(null);
   const chatRef  = useRef(null);
-  const streamer = STREAMERS.find(s => s.id === 1);
-  const RATE = streamer?.privateRate || 30;
+  const RATE = 30; // default rate; real rate would come from streamer's profile
   const totalCost = RATE * duration;
 
   const startShow = () => {
     setPhase("waiting");
     setTimeout(() => {
       setPhase("active");
-      addToast("live", `🔒 Private show started with ${streamer.name}!`);
+      addToast("live", `🔒 Private show started!`);
       timerRef.current = setInterval(() => {
         setElapsed(e => { const ne=e+1; if(ne%2===0){setBalance(b=>Math.max(0,b-1));setSpent(s=>s+1);} return ne; });
       }, 1000);
@@ -5711,8 +5435,8 @@ function PrivateShowScreen({ onNavigate, addToast }) {
       {phase==="request" && (
         <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:28 }}>
           <div style={{ textAlign:"center", marginBottom:24 }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>{streamer.avatar}</div>
-            <h2 style={{ margin:"0 0 4px", fontWeight:900 }}>Private Show with {streamer.name}</h2>
+            <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
+            <h2 style={{ margin:"0 0 4px", fontWeight:900 }}>Request a Private Show</h2>
             <p style={{ color:COLORS.muted, fontSize:13, margin:0 }}>One-on-one, encrypted session</p>
           </div>
           <div style={{ background:COLORS.surface, borderRadius:12, padding:16, marginBottom:20 }}>
@@ -5756,7 +5480,7 @@ function PrivateShowScreen({ onNavigate, addToast }) {
       {phase==="waiting" && (
         <div style={{ textAlign:"center", padding:"60px 20px" }}>
           <div style={{ fontSize:52, marginBottom:20 }}>⏳</div>
-          <h3 style={{ margin:"0 0 10px" }}>Waiting for {streamer.name}…</h3>
+          <h3 style={{ margin:"0 0 10px" }}>Waiting for streamer…</h3>
           <p style={{ color:COLORS.muted, fontSize:14 }}>Usually accepts within 30 seconds.</p>
           <div style={{ width:40, height:40, border:`3px solid ${COLORS.border}`, borderTopColor:COLORS.accent,
             borderRadius:"50%", margin:"20px auto 0", animation:"spin 0.8s linear infinite" }} />
@@ -5766,10 +5490,10 @@ function PrivateShowScreen({ onNavigate, addToast }) {
 
       {phase==="active" && (
         <>
-          <div style={{ background:`linear-gradient(135deg,${streamer.preview},#0a0a1a)`, borderRadius:16, height:240,
+          <div style={{ background:`linear-gradient(135deg,#1a0a2e,#0a0a1a)`, borderRadius:16, height:240,
             display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
             marginBottom:16, border:`1px solid ${COLORS.border}` }}>
-            <div style={{ fontSize:60 }}>{streamer.avatar}</div>
+            <div style={{ fontSize:60 }}>🔒</div>
             <div style={{ position:"absolute", top:12, left:12, background:COLORS.accent, borderRadius:6,
               padding:"3px 10px", fontSize:11, fontWeight:800, color:"#fff", display:"flex", alignItems:"center", gap:5 }}>
               <div style={{ width:7, height:7, borderRadius:"50%", background:"#fff", animation:"blink 1s infinite" }} />PRIVATE
@@ -5812,7 +5536,7 @@ function PrivateShowScreen({ onNavigate, addToast }) {
         <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:32, textAlign:"center" }}>
           <div style={{ fontSize:52, marginBottom:16 }}>🎭</div>
           <h2 style={{ margin:"0 0 6px", fontWeight:900 }}>Show Complete!</h2>
-          <p style={{ color:COLORS.muted, fontSize:14, marginBottom:28 }}>Great session with {streamer.name}!</p>
+          <p style={{ color:COLORS.muted, fontSize:14, marginBottom:28 }}>Great private session!</p>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:28 }}>
             {[{label:"Duration",value:fmtTime(elapsed)},{label:"Tokens Spent",value:`🪙 ${spent}`},{label:"USD Value",value:`$${(spent*0.10).toFixed(2)}`}].map(s => (
               <div key={s.label} style={{ background:COLORS.surface, borderRadius:12, padding:14 }}>
@@ -5823,7 +5547,7 @@ function PrivateShowScreen({ onNavigate, addToast }) {
           </div>
           <div style={{ display:"flex", gap:10 }}>
             <Btn onClick={() => onNavigate("stream-room")} variant="ghost" style={{ flex:1 }}>← Stream Room</Btn>
-            <Btn onClick={() => { setPhase("request"); setElapsed(0); setSpent(0); setBalance(350); }} style={{ flex:1 }}>Book Another</Btn>
+            <Btn onClick={() => { setPhase("request"); setElapsed(0); setSpent(0); setBalance(viewerTokens); }} style={{ flex:1 }}>Book Another</Btn>
           </div>
         </div>
       )}
@@ -6140,8 +5864,21 @@ function LeaderboardScreen({ onNavigate }) {
   const [period,  setPeriod]  = useState("today");
   const [type,    setType]    = useState("tippers");
   const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 800); return () => clearTimeout(t); }, []);
-  const data = LEADERBOARD[type][period];
+  const [data,    setData]    = useState([]);
+
+  useEffect(() => {
+    setLoading(true);
+    setData([]);
+    const token = localStorage.getItem("steamr_token");
+    fetch(`/api/leaderboard?type=${type}&period=${period}`, {
+      headers: token ? { "x-auth-token": token } : {},
+    })
+    .then(r => r.json())
+    .then(res => { if (res.ok) setData(res.entries || []); })
+    .catch(() => {})
+    .finally(() => setLoading(false));
+  }, [type, period]);
+
   const PERIODS = [["today","Today"],["weekly","This Week"],["alltime","All Time"]];
   const TYPES   = [["tippers","Top Tippers 🪙"],["streamers","Top Streamers 📡"]];
   const medal = r => r===1?"🥇":r===2?"🥈":r===3?"🥉":"";
@@ -6189,7 +5926,18 @@ function LeaderboardScreen({ onNavigate }) {
       )}
 
       <div style={{ display: loading ? "none" : "flex", flexDirection:"column", gap:10 }}>
-        {data.map(entry => (
+        {data.length === 0 && !loading ? (
+          <div style={{ textAlign:"center", padding:"60px 24px", color:COLORS.muted }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>🏆</div>
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:8, color:COLORS.text }}>No entries yet</div>
+            <div style={{ fontSize:13, marginBottom:24 }}>
+              {type === "tippers" ? "Be the first to tip a streamer!" : "Be the first to go live!"}
+            </div>
+            <Btn onClick={() => onNavigate(type==="tippers"?"viewer-browse":"go-live")} style={{ fontSize:13 }}>
+              {type==="tippers"?"Browse Streams":"🔴 Go Live Now"}
+            </Btn>
+          </div>
+        ) : data.map(entry => (
           <div key={entry.rank}
             style={{ background:entry.isYours?COLORS.accent+"18":entry.rank<=3?COLORS.gold+"0a":COLORS.card,
               border:`1px solid ${entry.isYours?COLORS.accent+"66":entry.rank<=3?COLORS.gold+"33":COLORS.border}`,
@@ -6221,6 +5969,7 @@ function LeaderboardScreen({ onNavigate }) {
         ))}
       </div>
 
+      {data.length > 0 && (
       <div style={{ marginTop:28, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:20, textAlign:"center" }}>
         <p style={{ margin:"0 0 14px", color:COLORS.muted, fontSize:13 }}>
           {type==="tippers"?"Tip more to climb the leaderboard and earn exclusive badges!":"Go live more to grow your fanbase and rank up!"}
@@ -6229,6 +5978,7 @@ function LeaderboardScreen({ onNavigate }) {
           {type==="tippers"?"Browse Streams":"🔴 Go Live Now"}
         </Btn>
       </div>
+      )}
     </div>
   );
 }
@@ -6237,10 +5987,23 @@ function LeaderboardScreen({ onNavigate }) {
 function DiscoveryScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const [query, setQuery] = useState("");
+  const [liveStreamers, setLiveStreamers] = useState([]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    fetch("/api/user-profile?live=true", { headers: token ? { "x-auth-token": token } : {} })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setLiveStreamers(data.streamers || []); })
+      .catch(() => {});
+  }, []);
+
   const filteredStreamers = query.trim()
-    ? STREAMERS.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.tags.some(t=>t.includes(query.toLowerCase())) || s.category.toLowerCase().includes(query.toLowerCase()))
+    ? liveStreamers.filter(s =>
+        (s.name||s.displayName||"").toLowerCase().includes(query.toLowerCase()) ||
+        (s.tags||[]).some(t=>t.includes(query.toLowerCase())) ||
+        (s.category||"").toLowerCase().includes(query.toLowerCase()))
     : [];
-  const featured = catName => STREAMERS.filter(s=>s.category===catName&&s.live).slice(0,3);
+  const featured = catName => liveStreamers.filter(s=>s.category===catName&&s.live).slice(0,3);
   const tagSize = count => count>3000?18:count>1500?15:count>800?13:11;
 
   return (
@@ -6297,7 +6060,11 @@ function DiscoveryScreen({ onNavigate }) {
                   onMouseLeave={e=>e.currentTarget.style.transform="none"}>
                   <div style={{ fontSize:26, marginBottom:6 }}>{cat.icon}</div>
                   <div style={{ fontWeight:800, fontSize:14, color:"#fff", marginBottom:2 }}>{cat.name}</div>
-                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)" }}>{cat.count.toLocaleString()} live</div>
+                  <div style={{ fontSize:11, color:"rgba(255,255,255,0.8)" }}>
+                    {liveStreamers.filter(s => s.category === cat.name && s.live).length > 0
+                      ? `${liveStreamers.filter(s => s.category === cat.name && s.live).length} live`
+                      : "No streams now"}
+                  </div>
                   {cat.hot&&<div style={{ position:"absolute", top:8, right:8, background:"rgba(255,255,255,0.25)", borderRadius:6, padding:"2px 8px", fontSize:10, fontWeight:700, color:"#fff" }}>🔥 HOT</div>}
                 </div>
               ))}
@@ -6850,30 +6617,11 @@ function LiveViewerMap({ viewerCount = 1284 }) {
           <ellipse cx="714" cy="290" rx="52" ry="32" fill="#1a3a4a" opacity="0.7"/>
           <ellipse cx="540" cy="200" rx="28" ry="40" fill="#1a3a4a" opacity="0.5"/>
         </svg>
-        {/* Viewer pulse dots */}
-        {VIEWER_LOCATIONS.map((loc, i) => {
-          const sz = Math.max(6, Math.min(14, loc.viewers / 28));
-          return (
-            <div key={i} title={`${loc.country}: ${loc.viewers}`} style={{
-              position:"absolute",
-              left:`${(loc.x/800)*100}%`, top:`${(loc.y/350)*100}%`,
-              width:sz, height:sz, borderRadius:"50%",
-              background:COLORS.accent,
-              boxShadow:`0 0 ${sz+2}px ${COLORS.accent}cc`,
-              transform:"translate(-50%,-50%)",
-              animation:`pulse ${1.8 + i*0.15}s ease-in-out infinite`,
-            }}/>
-          );
-        })}
+        {/* World map — viewer locations shown when real data is available */}
       </div>
-      {/* Country list */}
-      <div style={{padding:"8px 16px"}}>
-        {VIEWER_LOCATIONS.slice(0,5).map((loc,i) => (
-          <div key={i} style={{display:"flex", justifyContent:"space-between", padding:"4px 0", fontSize:11}}>
-            <span style={{color:COLORS.muted}}>{loc.country}</span>
-            <span style={{fontWeight:700}}>{loc.viewers}</span>
-          </div>
-        ))}
+      {/* Empty location state */}
+      <div style={{padding:"12px 16px", textAlign:"center"}}>
+        <div style={{fontSize:11, color:COLORS.muted}}>Viewer geography will appear here once streams are live</div>
       </div>
     </div>
   );
@@ -7039,20 +6787,31 @@ function NotificationsCenterScreen({ onNavigate }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function SearchResultsScreen({ onNavigate, initialQuery = "" }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [query,  setQuery]  = useState(initialQuery);
-  const [filter, setFilter] = useState("all");
+  const [query,      setQuery]      = useState(initialQuery);
+  const [filter,     setFilter]     = useState("all");
+  const [streamers,  setStreamers]  = useState([]);
+  const [loading,    setLoading]    = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    fetch("/api/user-profile?live=true", { headers: token ? { "x-auth-token": token } : {} })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setStreamers(data.streamers || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   const FILTERS = ["all","live","music","gaming","asmr","fitness","couples"];
 
-  const results = STREAMERS.filter(s => {
+  const results = streamers.filter(s => {
     const q  = query.toLowerCase().trim();
-    const ok = !q || s.name.toLowerCase().includes(q) ||
-      (s.tags  && s.tags.some (t => t.toLowerCase().includes(q))) ||
-      (s.category && s.category.toLowerCase().includes(q));
+    const ok = !q || (s.name||s.displayName||"").toLowerCase().includes(q) ||
+      ((s.tags||[]).some(t => t.toLowerCase().includes(q))) ||
+      ((s.category||"").toLowerCase().includes(q));
     const lf = filter === "all"  ? true
              : filter === "live" ? s.live
-             : (s.tags && s.tags.some(t => t.toLowerCase() === filter)) ||
-               (s.category && s.category.toLowerCase() === filter);
+             : ((s.tags||[]).some(t => t.toLowerCase() === filter)) ||
+               ((s.category||"").toLowerCase() === filter);
     return ok && lf;
   });
 
@@ -7377,7 +7136,7 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
           <div>Loading your content…</div>
         </div>
       ) : (() => {
-        const allItems   = tab==="videos" ? PPV_CONTENT : CLIP_PURCHASES;
+        const allItems   = [];  // PPV content is uploaded by real streamers — none yet
         const ownedItems = allItems.filter(item => isPurchased(item));
 
         if (ownedItems.length === 0) return (
@@ -7573,7 +7332,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
     const token = localStorage.getItem("steamr_token");
     const headers = token ? { "x-auth-token": token } : {};
     setLiveLoading(true);
-    fetch("/api/live-streamers", { headers })
+    fetch("/api/user-profile?live=true", { headers })
       .then(r => r.json())
       .then(data => {
         if (data.ok) {
@@ -8493,15 +8252,30 @@ export default function App() {
     return "landing";
   });
   const [selectedStreamerId, setSelectedStreamerId] = useState(1);
-  const [profileData,        setProfileData]        = useState(STREAMER_PROFILES[1]);
+  const [profileData,        setProfileData]        = useState({
+    id: 1, name: "", displayName: "", avatar: "🎭", avatarImg: null,
+    category: "Female", region: "", bannerColor: "#1a0a2e", bannerImg: null,
+    bio: "", roomSubject: "", welcomeMsg: "", tags: [], socialLinks: {},
+    followers: 0, totalStreams: 0, avgViewers: 0,
+    tipMenu: [
+      { tokens: 10,  action: "" },
+      { tokens: 25,  action: "" },
+      { tokens: 50,  action: "" },
+      { tokens: 100, action: "" },
+      { tokens: 250, action: "" },
+      { tokens: 500, action: "" },
+    ],
+    wishlist: [],
+    subscriptionTiers: SUBSCRIPTION_TIERS,
+  });
   const [following,          setFollowing]          = useState(new Set());
   const [subscriptions,      setSubscriptions]      = useState({});
-  const [notifications,      setNotifications]      = useState(INIT_NOTIFICATIONS);
+  const [notifications,      setNotifications]      = useState([]);
   const [toasts,             setToasts]             = useState([]);
   const [isDark,             setIsDark]             = useState(true);
   const [showOnboarding,     setShowOnboarding]     = useState(false);
   const [onboardingRole,     setOnboardingRole]     = useState("viewer");
-  const [viewerTokens,       setViewerTokens]       = useState(350);
+  const [viewerTokens,       setViewerTokens]       = useState(0);
   const [isStreamerLive,     setIsStreamerLive]      = useState(false);
   const [searchQuery,        setSearchQuery]        = useState("");
 
@@ -8686,23 +8460,20 @@ export default function App() {
   };
 
   // ── Follow — fires toast + notification ──
-  const onFollow = (id, streamerEmailOverride) => {
+  const onFollow = (id, streamerEmailOverride, streamerNameOverride) => {
     setFollowing(prev => {
       const next = new Set(prev);
       const wasFollowing = prev.has(id);
       wasFollowing ? next.delete(id) : next.add(id);
       if (!wasFollowing) {
-        const s = STREAMERS.find(x => x.id === id);
-        addToast("follow", `Now following ${s ? s.name : "streamer"} ♥`);
+        const displayName = streamerNameOverride || "streamer";
+        addToast("follow", `Now following ${displayName} ♥`);
         addNotification("follow", `Someone new started following you`);
         // Save follow to Upstash user profile
         try {
           const token = localStorage.getItem("steamr_token");
           if (token) {
-            // Update following list in user profile
-            // Use the real email if passed (e.g. from ProfileScreen), else derive from STREAMERS or id
-            const followedStreamer = STREAMERS.find(x => x.id === id);
-            const streamerEmail = streamerEmailOverride || followedStreamer?.email || `streamer_${id}@steamr.app`;
+            const streamerEmail = streamerEmailOverride || `streamer_${id}@steamr.app`;
             fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
@@ -8713,18 +8484,18 @@ export default function App() {
         // Save follow to Vercel KV so streamer can notify on go live
         try {
           const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
-          if (session?.email && s) {
+          if (session?.email) {
             fetch("/api/follow", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 streamerId:    id,
-                streamerName:  s.name,
-                streamerEmail: s.email || `streamer_${id}@steamr.app`,
+                streamerName:  displayName,
+                streamerEmail: streamerEmailOverride || `streamer_${id}@steamr.app`,
                 viewerEmail:   session.email,
                 viewerName:    session.name || session.email,
               }),
-            }).catch(() => {}); // fail silently — local state already updated
+            }).catch(() => {});
           }
         } catch {}
       } else {
@@ -8732,8 +8503,7 @@ export default function App() {
         try {
           const token = localStorage.getItem("steamr_token");
           if (token) {
-            const unfollowedStreamer = STREAMERS.find(x => x.id === id);
-            const streamerEmail = streamerEmailOverride || unfollowedStreamer?.email || `streamer_${id}@steamr.app`;
+            const streamerEmail = streamerEmailOverride || `streamer_${id}@steamr.app`;
             fetch("/api/user-profile", {
               method: "POST",
               headers: { "x-auth-token": token, "Content-Type": "application/json" },
@@ -8758,7 +8528,7 @@ export default function App() {
   };
 
   // ── Subscribe — fires toast + notification ──
-  const onSubscribe = (streamerId, tier) => {
+  const onSubscribe = (streamerId, tier, streamerNameOverride) => {
     const newSub = {
       tierName:  tier.name,
       tierBadge: tier.badge,
@@ -8779,8 +8549,8 @@ export default function App() {
       }
       return updated;
     });
-    const s = STREAMERS.find(x => x.id === streamerId);
-    addToast("subscribe", `${tier.badge} Subscribed to ${s?.name || "streamer"} — ${tier.name}!`);
+    const s = { name: streamerNameOverride || `streamer_${streamerId}` };
+    addToast("subscribe", `${tier.badge} Subscribed to ${s.name} — ${tier.name}!`);
     addNotification("subscribe", `New ${tier.name} subscriber! ${tier.badge}`);
   };
 
@@ -8811,7 +8581,7 @@ export default function App() {
       case "admin":              return <AdminScreen onNavigate={navigate} />;
       case "signup-streamer":    return <SignupScreen role="streamer" onNavigate={navigate} />;
       case "signup-viewer":      return <SignupScreen role="viewer"   onNavigate={navigate} />;
-      case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} />;
+      case "viewer-browse":      return <BrowseScreen onNavigate={navigate} following={following} onFollow={onFollow} viewerTokens={viewerTokens} />;
       case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} following={following} onFollow={onFollow} />;
       case "buy-tokens":         return <BuyTokensScreen onNavigate={navigate} viewerTokens={viewerTokens} onPurchase={onPurchase} />;
       case "kyc-streamer":       return <KYCScreen role="streamer" onNavigate={navigate} />;
@@ -8823,7 +8593,7 @@ export default function App() {
       case "edit-profile":       return <EditProfileScreen profileData={profileData} onSave={setProfileData} onNavigate={navigate} />;
       case "settings":           return <SettingsScreen onNavigate={navigate} addToast={addToast} isStreamer={true} isDark={isDark} onToggleTheme={toggleTheme} />;
       case "fan-club":           return <FanClubFeed subscriptions={subscriptions} onNavigate={navigate} addToast={addToast} />;
-      case "private-show":       return <PrivateShowScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
+      case "private-show":       return <PrivateShowScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} viewerTokens={viewerTokens} />;
       case "schedule":           return <ScheduleScreen onNavigate={navigate} />;
       case "leaderboard":        return <LeaderboardScreen onNavigate={navigate} />;
       case "discovery":          return <DiscoveryScreen onNavigate={navigate} />;
