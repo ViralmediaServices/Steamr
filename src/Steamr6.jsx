@@ -1912,7 +1912,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         <SubscribeModal
           profile={streamerProfile}
           currentSub={currentSub}
-          onSubscribe={(tier) => onSubscribe(selectedStreamerId, tier)}
+          onSubscribe={(tier) => onSubscribe(selectedStreamerId, tier, streamerProfile?.displayName || streamerProfile?.name, streamerProfile?.avatarImg)}
           onClose={() => setShowSubModal(false)}
         />
       )}
@@ -2321,8 +2321,10 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
               <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                   <div onClick={() => onNavigate("profile",{streamerId:id})}
-                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
-                    {"🎭"}
+                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0,overflow:"hidden" }}>
+                    {sub.streamerAvatar
+                      ? <img src={sub.streamerAvatar} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                      : "🎭"}
                   </div>
                   <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:id})}>
                     <div style={{ fontWeight:700,fontSize:13 }}>{sub.streamerName || "Streamer"}</div>
@@ -2347,7 +2349,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                         style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Keep Subscription
                       </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
+                      <button onClick={() => { onCancelSub && onCancelSub(id); setConfirmId(null); }}
                         style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Yes, Cancel
                       </button>
@@ -4109,39 +4111,25 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           {/* Social links — always show on own profile; on public only if links exist */}
           {(isOwnProfile || Object.keys(profile.socialLinks || {}).length > 0) && (
             <Card style={{ marginBottom:16 }}>
-              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>🔗 Social</div>
+              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Social</div>
               {Object.keys(profile.socialLinks || {}).length > 0 ? (
-                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                   {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
                     if (!handle) return null;
+                    const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
                     const cleanHandle = handle.replace(/^@/, "");
-                    const meta = platform === "twitter"
-                      ? { icon:"𝕏",  label:"Twitter / X", color:"#1DA1F2", url:`https://twitter.com/${cleanHandle}` }
-                      : platform === "instagram"
-                      ? { icon:"📸", label:"Instagram",    color:"#E1306C", url:`https://instagram.com/${cleanHandle}` }
-                      : platform === "tiktok"
-                      ? { icon:"🎵", label:"TikTok",       color:"#00f2ea", url:`https://tiktok.com/@${cleanHandle}` }
-                      : { icon:"🔗", label:platform,       color:COLORS.muted, url:handle };
+                    const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
+                              : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
+                              : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
+                              : handle;
                     return (
-                      <a key={platform} href={meta.url} target="_blank" rel="noopener noreferrer"
-                        style={{ textDecoration:"none", display:"flex", alignItems:"center", gap:12,
-                          background: meta.color + "11",
-                          border: `1px solid ${meta.color}33`,
-                          borderRadius: 10, padding:"11px 14px",
-                          transition:"border-color 0.15s, background 0.15s" }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = meta.color + "88"; e.currentTarget.style.background = meta.color + "1e"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = meta.color + "33"; e.currentTarget.style.background = meta.color + "11"; }}
+                      <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
+                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
                       >
-                        <span style={{ width:32, height:32, borderRadius:8, background: meta.color + "22",
-                          border:`1px solid ${meta.color}44`, display:"flex", alignItems:"center",
-                          justifyContent:"center", fontSize:15, flexShrink:0 }}>
-                          {meta.icon}
-                        </span>
-                        <div>
-                          <div style={{ fontSize:11, fontWeight:700, color:meta.color, textTransform:"uppercase", letterSpacing:0.8 }}>{meta.label}</div>
-                          <div style={{ fontSize:13, fontWeight:600, color:COLORS.text }}>@{cleanHandle}</div>
-                        </div>
-                        <span style={{ marginLeft:"auto", fontSize:16, color:meta.color, opacity:0.6 }}>↗</span>
+                        <span>{icon}</span>
+                        <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
                       </a>
                     );
                   })}
@@ -4293,7 +4281,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         <SubscribeModal
           profile={profile}
           currentSub={currentSub}
-          onSubscribe={(tier) => onSubscribe(profile.id, tier)}
+          onSubscribe={(tier) => onSubscribe(profile.id, tier, profile.displayName || profile.name, profile.avatarImg)}
           onClose={() => setShowModal(false)}
         />
       )}
@@ -4976,46 +4964,18 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       {/* Social links */}
       <Card style={{ marginBottom:28 }}>
         <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted, marginBottom:16 }}>🔗 SOCIAL LINKS</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {[
-            { key:"socialTwitter",   icon:"𝕏",  label:"Twitter / X",  placeholder:"@yourhandle", color:"#1DA1F2", bg:"#1DA1F211" },
-            { key:"socialInstagram", icon:"📸", label:"Instagram",     placeholder:"@yourhandle", color:"#E1306C", bg:"#E1306C11" },
-            { key:"socialTikTok",    icon:"🎵", label:"TikTok",        placeholder:"@yourhandle", color:"#00f2ea", bg:"#00f2ea11" },
-          ].map(({ key, icon, label, placeholder, color, bg }) => (
-            <div key={key} style={{
-              background: bg,
-              border: `1px solid ${color}33`,
-              borderRadius: 12,
-              padding: "14px 16px",
-            }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                <span style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: color + "22",
-                  border: `1px solid ${color}44`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 15, flexShrink: 0,
-                }}>{icon}</span>
-                <span style={{ fontWeight:800, fontSize:14, color: color }}>{label}</span>
-              </div>
-              <input
-                value={form[key]}
-                onChange={e => update(key, e.target.value)}
-                placeholder={placeholder}
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  background: COLORS.surface,
-                  border: `1px solid ${color}33`,
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  color: COLORS.text,
-                  fontSize: 14,
-                  outline: "none",
-                }}
-              />
-            </div>
-          ))}
-        </div>
+        {[
+          { key:"socialTwitter",   icon:"𝕏",  label:"Twitter / X",  placeholder:"@yourhandle" },
+          { key:"socialInstagram", icon:"📷", label:"Instagram",    placeholder:"@yourhandle" },
+          { key:"socialTikTok",    icon:"🎵", label:"TikTok",       placeholder:"@yourhandle" },
+        ].map(({ key, icon, label, placeholder }) => (
+          <div key={key} style={{ marginBottom:12 }}>
+            <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>{icon} {label}</label>
+            <input value={form[key]} onChange={e => update(key, e.target.value)} placeholder={placeholder}
+              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"11px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
+            />
+          </div>
+        ))}
       </Card>
 
       {/* Save */}
@@ -7537,7 +7497,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
                 {Object.entries(subscriptions).map(([id, sub]) => {
                   const profile = subProfiles[id];
                   const displayName = profile?.displayName || profile?.name || sub.streamerName || "Streamer";
-                  const avatarImg   = profile?.avatarImg || null;
+                  const avatarImg   = profile?.avatarImg || sub.streamerAvatar || null;
                   return (
                     <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
@@ -8642,12 +8602,14 @@ export default function App() {
   };
 
   // ── Subscribe — fires toast + notification ──
-  const onSubscribe = (streamerId, tier, streamerNameOverride) => {
+  const onSubscribe = (streamerId, tier, streamerNameOverride, streamerAvatarOverride) => {
     const newSub = {
-      tierName:  tier.name,
-      tierBadge: tier.badge,
-      tierPrice: tier.price,
-      tierColor: tier.color,
+      tierName:      tier.name,
+      tierBadge:     tier.badge,
+      tierPrice:     tier.price,
+      tierColor:     tier.color,
+      streamerName:  streamerNameOverride  || null,
+      streamerAvatar: streamerAvatarOverride || null,
       since: new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" }),
     };
     setSubscriptions(prev => {
