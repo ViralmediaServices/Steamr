@@ -3928,7 +3928,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     id: streamerId, name: "Loading…", avatar: "🎭", avatarImg: null,
     category: "", region: "", bannerColor: "#1a0a2e", bannerImg: null,
     bio: "", roomSubject: "", tags: [], socialLinks: {}, followers: 0,
-    tipMenu: [], wishlist: [], subscriptionTiers: SUBSCRIPTION_TIERS,
+    tipMenu: [], wishlist: [], streamHistory: [], subscriptionTiers: SUBSCRIPTION_TIERS,
   });
 
   const isLiveNow = isOwnProfile ? isStreamerLive : false; // real live status from API if needed
@@ -4112,11 +4112,11 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           )}
 
           {/* Stream history */}
-          {profile.streamHistory.length > 0 && (
+          {(profile.streamHistory || []).length > 0 && (
             <Card>
               <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:14 }}>📼 Recent Streams</div>
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {profile.streamHistory.map((s, i) => (
+                {(profile.streamHistory || []).map((s, i) => (
                   <div key={i} style={{ background:COLORS.surface, borderRadius:10, padding:"12px 14px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
                     <div>
                       <div style={{ fontWeight:700, fontSize:13, marginBottom:5 }}>{s.title}</div>
@@ -8257,6 +8257,7 @@ export default function App() {
     category: "Female", region: "", bannerColor: "#1a0a2e", bannerImg: null,
     bio: "", roomSubject: "", welcomeMsg: "", tags: [], socialLinks: {},
     followers: 0, totalStreams: 0, avgViewers: 0,
+    streamHistory: [],
     tipMenu: [
       { tokens: 10,  action: "" },
       { tokens: 25,  action: "" },
