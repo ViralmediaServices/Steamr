@@ -1853,7 +1853,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       : `id_${selectedStreamerId}`;
 
     const heartbeat = () => {
-      fetch(`/api/viewer-count?streamId=${streamId}`, {
+      fetch(`/api/user-profile?streamId=${streamId}`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ sessionId }),
@@ -1866,7 +1866,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     return () => {
       clearInterval(iv);
       // Remove viewer on unmount (best-effort — sorted set TTL handles failures)
-      fetch(`/api/viewer-count?streamId=${streamId}`, {
+      fetch(`/api/user-profile?streamId=${streamId}`, {
         method:  "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ sessionId }),
@@ -3543,7 +3543,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     if (!streaming || !streamIdRef.current) return;
     const poll = async () => {
       try {
-        const r = await fetch(`/api/viewer-count?streamId=${streamIdRef.current}`);
+        const r = await fetch(`/api/user-profile?streamId=${streamIdRef.current}`);
         const data = await r.json();
         if (data.ok) {
           setViewerCount(data.count);
