@@ -76,6 +76,134 @@ async function viewerCount_leave(streamId, sessionId) {
 }
 
 export default async function handler(req, res) {
+  // ── Public streamer profile — no auth needed ─────────────────────────────
+  // Called by ProfileScreen and StreamRoomScreen when viewing another streamer.
+  // ?publicId={email} returns the public fields for that streamer.
+  const publicId = req.query?.publicId;
+  if (publicId) {
+    try {
+      const lookupEmail = decodeURIComponent(publicId).toLowerCase().trim();
+      const [{ result: accResult }, { result: actResult }] = await Promise.all([
+        kvCommand("GET", `user:${lookupEmail}`),
+        kvCommand("GET", `activity:${lookupEmail}`),
+      ]);
+      const account  = parse(accResult);
+      const activity = parse(actResult) || {};
+
+      if (!account || account.role !== "streamer") {
+        return res.status(404).json({ error: "Streamer not found" });
+      }
+
+      const sp = account.streamerProfile || {};
+
+      return res.status(200).json({
+        ok: true,
+        profile: {
+          email:           account.email,
+          name:            account.displayName || account.name || "Streamer",
+          displayName:     account.displayName || account.name || "Streamer",
+          avatarImg:       account.avatarImg   || null,
+          bio:             account.bio         || "",
+          verified:        account.verified    || false,
+          streamerProfile: sp,
+        },
+        activity: {
+          followers: activity.followers || 0,
+          isLive:    activity.isLive    || false,
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── Live streamers list — no auth needed ─────────────────────────────────
+  // Called by BrowseScreen, DiscoveryScreen, SearchResultsScreen.
+  // Scans activity:* keys for isLive:true and returns public profile data.
+  if (req.query?.live === "true") {
+    try {
+      // Scan all activity keys
+      const activityKeys = [];
+      let cursor = "0";
+      do {
+        const { result } = await kvCommand("SCAN", cursor, "MATCH", "activity:*", "COUNT", "100");
+        if (!result || !Array.isArray(result)) break;
+        cursor = result[0];
+        if (Array.isArray(result[1])) activityKeys.push(...result[1]);
+      } while (cursor !== "0");
+
+      if (activityKeys.length === 0) {
+        return res.status(200).json({ ok: true, streamers: [] });
+      }
+
+      const VIEWER_TTL_MS = 45_000;
+      const liveStreamers = [];
+
+      await Promise.all(
+        activityKeys.map(async (actKey) => {
+          try {
+            const email = actKey.replace(/^activity:/, "");
+
+            const { result: actResult } = await kvCommand("GET", actKey);
+            const activity = parse(actResult);
+            if (!activity?.isLive) return;
+
+            const { result: accResult } = await kvCommand("GET", `user:${email}`);
+            const account = parse(accResult);
+            if (!account || account.role !== "streamer") return;
+
+            const sp = account.streamerProfile || {};
+
+            // Real viewer count from sorted-set heartbeats
+            const streamId = encodeURIComponent(email);
+            const vKey = `viewers:${streamId}`;
+            const now  = Date.now();
+            await kvCommand("ZREMRANGEBYSCORE", vKey, 0, now - VIEWER_TTL_MS);
+            const { result: vcResult } = await kvCommand("ZCARD", vKey);
+            const viewers = Number(vcResult) || 0;
+
+            const isNew = activity.liveStartedAt
+              ? Date.now() - new Date(activity.liveStartedAt).getTime() < 30 * 60 * 1000
+              : false;
+
+            liveStreamers.push({
+              id:          email,
+              email,
+              name:        account.displayName || account.name || "Streamer",
+              displayName: account.displayName || account.name || "Streamer",
+              category:    sp.category    || "Female",
+              region:      sp.region      || "",
+              tags:        sp.tags        || [],
+              avatarImg:   account.avatarImg  || null,
+              avatar:      "🎭",
+              bannerColor: sp.bannerColor || "#1a0a2e",
+              bannerImg:   sp.bannerImg   || null,
+              roomSubject: sp.roomSubject || "",
+              live:        true,
+              isNew,
+              viewers,
+              verified:    account.verified || false,
+              streamTitle: activity.currentStreamTitle || "",
+              liveStartedAt: activity.liveStartedAt   || null,
+              goal: (sp.goalLabel && sp.goalTarget) ? {
+                current: 0,
+                target:  sp.goalTarget,
+                label:   sp.goalLabel,
+              } : null,
+            });
+          } catch { /* skip entries that fail */ }
+        })
+      );
+
+      liveStreamers.sort((a, b) => (b.viewers || 0) - (a.viewers || 0));
+      return res.status(200).json({ ok: true, streamers: liveStreamers });
+
+    } catch (err) {
+      console.error("live-streamers error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   // ── Public geo-block fetch — no auth needed ────────────────────────────────
   const geoBlockId = req.query?.geoBlockId;
   if (geoBlockId) {
@@ -220,11 +348,12 @@ export default async function handler(req, res) {
       if (!account) return res.status(404).json({ error: "Account not found" });
 
       // ── Follow / unfollow ────────────────────────────────────────────────
-      if (streamerId && action === "follow" || action === "unfollow") {
-        const following = new Set(account.following || []);
-        const wasFollowing = following.has(Number(streamerId));
-        if (action === "follow")   following.add(Number(streamerId));
-        if (action === "unfollow") following.delete(Number(streamerId));
+      if (streamerId && (action === "follow" || action === "unfollow")) {
+        const following    = new Set(account.following || []);
+        const streamerKey  = String(streamerId); // email or legacy numeric ID as string
+        const wasFollowing = following.has(streamerKey);
+        if (action === "follow")   following.add(streamerKey);
+        if (action === "unfollow") following.delete(streamerKey);
         account.following = [...following];
         await kvCommand("SET", accountKey, JSON.stringify(account));
 
