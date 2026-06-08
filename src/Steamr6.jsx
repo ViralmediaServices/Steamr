@@ -7231,10 +7231,11 @@ const AUTHED = ["viewer-browse","stream-room","buy-tokens","streamer-dashboard",
 export default function App() {
   const [screen, setScreen] = useState(() => {
     try {
-      const token   = localStorage.getItem("steamr_token");
-      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      const token       = localStorage.getItem("steamr_token");
+      const session     = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
-        return session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
+        return savedScreen || (session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
       }
     } catch {}
     return "landing";
@@ -7311,11 +7312,14 @@ export default function App() {
   // ── Auto-login from localStorage — stays logged in until explicit sign out ────
   useEffect(() => {
     try {
-      const token   = localStorage.getItem("steamr_token");
-      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      const token      = localStorage.getItem("steamr_token");
+      const session    = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
         setUserRole(session.role);
-        setScreen(session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard");
+        // Restore the last visited screen, fall back to dashboard
+        const defaultScreen = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
+        setScreen(savedScreen || defaultScreen);
         // Load real following list, token balance + subscriptions from Upstash
         fetch("/api/user-profile", { headers: { "x-auth-token": token } })
         .then(r => r.json())
@@ -7352,6 +7356,7 @@ export default function App() {
       localStorage.removeItem("steamr_token");
       localStorage.removeItem("steamr_session");
       localStorage.removeItem("steamr_accounts");
+      localStorage.removeItem("steamr_screen");
     } catch {}
     setScreen("landing");
   };
@@ -7393,6 +7398,8 @@ export default function App() {
     setScreen(s);
     setShowOnboarding(false); // always close modal when navigating
     if (opts.streamerId != null) setSelectedStreamerId(opts.streamerId);
+    // Save current screen so refresh restores it
+    try { localStorage.setItem("steamr_screen", s); } catch {}
     // Trigger onboarding only on first visit to main home screens
     if (!seenOnboarding && (s === "viewer-browse" || s === "streamer-dashboard")) {
       setSeenOnboarding(true);
