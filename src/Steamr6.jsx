@@ -2989,12 +2989,124 @@ function KYCScreen({ role, onNavigate }) {
 }
 
 
-function PendingKYC({ isStreamer, onNavigate, inline=false }) {
-  const [status, setStatus] = useState("checking");
-  useEffect(() => { const t=setTimeout(()=>setStatus("verified"),3000); return ()=>clearTimeout(t); },[]);
-  if (inline) return status==="verified"
+// ══════════════════════════════════════════════════════════════════════════════
+// KYC STATUS SCREEN — shown when streamer clicks "ID Status"
+// ══════════════════════════════════════════════════════════════════════════════
+function KYCStatusScreen({ onNavigate }) {
+  const [kycStatus, setKycStatus] = useState(null);
+  const [verified,  setVerified]  = useState(false);
+  const [loading,   setLoading]   = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        setKycStatus(data.profile.kycStatus);
+        setVerified(data.profile.verified || false);
+      }
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"80px 24px", textAlign:"center" }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
+      <div style={{ color:COLORS.muted }}>Checking verification status…</div>
+    </div>
+  );
+
+  // ── Not submitted ──────────────────────────────────────────────────────────
+  if (!kycStatus) return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+      <button onClick={() => onNavigate("streamer-dashboard")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>← Dashboard</button>
+      <Card style={{ textAlign:"center", padding:"40px 28px" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>🛡️</div>
+        <h2 style={{ margin:"0 0 12px", fontWeight:900 }}>Identity Not Verified</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+          You need to verify your identity before you can go live or receive payouts. The process takes under 2 minutes.
+        </p>
+        <Btn onClick={() => onNavigate("kyc-streamer")} style={{ width:"100%" }}>
+          🛡️ Start Verification →
+        </Btn>
+      </Card>
+    </div>
+  );
+
+  // ── Pending ────────────────────────────────────────────────────────────────
+  if (kycStatus === "pending" && !verified) return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+      <button onClick={() => onNavigate("streamer-dashboard")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>← Dashboard</button>
+      <Card style={{ textAlign:"center", padding:"40px 28px" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>📋</div>
+        <div style={{ display:"inline-flex", alignItems:"center", gap:8, background:COLORS.gold+"22", border:`1px solid ${COLORS.gold}44`, borderRadius:20, padding:"6px 16px", marginBottom:20 }}>
+          <span style={{ width:8, height:8, borderRadius:"50%", background:COLORS.gold, display:"inline-block" }}/>
+          <span style={{ fontWeight:700, color:COLORS.gold, fontSize:13 }}>Pending Review</span>
+        </div>
+        <h2 style={{ margin:"0 0 12px", fontWeight:900 }}>Documents Under Review</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:8 }}>
+          Your identity documents have been submitted and are currently being reviewed by the Steamr team.
+        </p>
+        <p style={{ color:COLORS.muted, fontSize:13, lineHeight:1.7, marginBottom:28 }}>
+          You'll receive an email notification once your account is approved. This typically takes <strong style={{ color:COLORS.text }}>24–48 hours</strong>.
+        </p>
+        <div style={{ background:COLORS.surface, borderRadius:12, padding:"16px 20px", marginBottom:20, textAlign:"left" }}>
+          {[
+            { icon:"📄", label:"Documents", status:"Received ✓" },
+            { icon:"🔍", label:"Review",    status:"In Progress…" },
+            { icon:"✅", label:"Approval",  status:"Pending" },
+          ].map(step => (
+            <div key={step.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                <span style={{ fontSize:18 }}>{step.icon}</span>
+                <span style={{ fontSize:13, fontWeight:600 }}>{step.label}</span>
+              </div>
+              <span style={{ fontSize:12, color:step.status.includes("✓")? COLORS.green : step.status.includes("In Progress") ? COLORS.gold : COLORS.muted, fontWeight:600 }}>{step.status}</span>
+            </div>
+          ))}
+        </div>
+        <Btn onClick={() => onNavigate("streamer-dashboard")} variant="secondary" style={{ width:"100%" }}>
+          Back to Dashboard
+        </Btn>
+      </Card>
+    </div>
+  );
+
+  // ── Verified ───────────────────────────────────────────────────────────────
+  return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+      <button onClick={() => onNavigate("streamer-dashboard")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>← Dashboard</button>
+      <Card style={{ textAlign:"center", padding:"40px 28px" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>✅</div>
+        <div style={{ display:"inline-flex", alignItems:"center", gap:8, background:COLORS.green+"22", border:`1px solid ${COLORS.green}44`, borderRadius:20, padding:"6px 16px", marginBottom:20 }}>
+          <span style={{ width:8, height:8, borderRadius:"50%", background:COLORS.green, display:"inline-block" }}/>
+          <span style={{ fontWeight:700, color:COLORS.green, fontSize:13 }}>Identity Verified</span>
+        </div>
+        <h2 style={{ margin:"0 0 12px", fontWeight:900, color:COLORS.green }}>You're Verified!</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+          Your identity has been confirmed. You can now go live, receive tips, and request payouts.
+        </p>
+        <Btn onClick={() => onNavigate("go-live")} style={{ width:"100%", marginBottom:10 }}>
+          🔴 Go Live Now
+        </Btn>
+        <Btn onClick={() => onNavigate("streamer-dashboard")} variant="secondary" style={{ width:"100%" }}>
+          Back to Dashboard
+        </Btn>
+      </Card>
+    </div>
+  );
+}
+
+
+function PendingKYC({ isStreamer, onNavigate, inline=false, verified=false, kycStatus=null }) {
+  if (inline) return verified
     ? (<div style={{ padding:"12px 16px",background:COLORS.green+"18",border:`1px solid ${COLORS.green}44`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}><div><div style={{ fontWeight:700,color:COLORS.green,fontSize:14 }}>✅ Identity Verified</div><div style={{ color:COLORS.muted,fontSize:12 }}>KYC complete — payouts enabled</div></div><Pill color={COLORS.green}>Verified</Pill></div>)
-    : (<div style={{ padding:"12px 16px",background:"#f5c51822",border:`1px solid ${COLORS.gold}44`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20 }}><div><div style={{ fontWeight:700,color:COLORS.gold,fontSize:14 }}>⏳ Verification In Progress</div><div style={{ color:COLORS.muted,fontSize:12 }}>Payouts locked until complete</div></div><Pill color={COLORS.gold}>Pending</Pill></div>);
+    : kycStatus === "pending"
+    ? (<div style={{ padding:"12px 16px",background:"#f5c51822",border:`1px solid ${COLORS.gold}44`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,cursor:"pointer" }} onClick={() => onNavigate("kyc-status")}><div><div style={{ fontWeight:700,color:COLORS.gold,fontSize:14 }}>⏳ Verification Pending</div><div style={{ color:COLORS.muted,fontSize:12 }}>Under review — Go Live locked until approved</div></div><Pill color={COLORS.gold}>Pending</Pill></div>)
+    : (<div style={{ padding:"12px 16px",background:COLORS.accent+"18",border:`1px solid ${COLORS.accent}44`,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,cursor:"pointer" }} onClick={() => onNavigate("kyc-streamer")}><div><div style={{ fontWeight:700,color:COLORS.accent,fontSize:14 }}>🛡️ Identity Verification Required</div><div style={{ color:COLORS.muted,fontSize:12 }}>Verify your ID to go live and receive payouts</div></div><Btn variant="secondary" style={{ fontSize:11,padding:"4px 10px" }}>Start →</Btn></div>);
   return (
     <div style={{ textAlign:"center",padding:"16px 0" }}>
       {status==="checking"
@@ -3091,12 +3203,26 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           <Btn onClick={() => onNavigate("edit-profile")} variant="secondary" style={{ fontSize:13 }}>✏️ Edit Profile</Btn>
           <Btn onClick={() => onNavigate("analytics")} variant="secondary" style={{ fontSize:13 }}>📊 Analytics</Btn>
-          <Btn onClick={() => onNavigate("kyc-streamer")} variant="secondary" style={{ fontSize:13 }}>🛡️ ID Status</Btn>
-          <Btn onClick={() => onNavigate("go-live")} style={{ fontSize:15 }}>🔴 Go Live</Btn>
+          <Btn onClick={() => {
+            const ks = profile?.kycStatus;
+            const v  = profile?.verified;
+            if (!ks) onNavigate("kyc-streamer");
+            else     onNavigate("kyc-status");
+          }} variant="secondary" style={{ fontSize:13 }}>
+            {profile?.verified ? "✅ Verified" : profile?.kycStatus === "pending" ? "⏳ Pending" : "🛡️ ID Status"}
+          </Btn>
+          {profile?.verified ? (
+            <Btn onClick={() => onNavigate("go-live")} style={{ fontSize:15 }}>🔴 Go Live</Btn>
+          ) : (
+            <Btn onClick={() => onNavigate("kyc-status")} variant="secondary" style={{ fontSize:15 }}
+              title="Complete identity verification to go live">
+              🔒 {profile?.kycStatus === "pending" ? "Verification Pending" : "Verify to Go Live"}
+            </Btn>
+          )}
         </div>
       </div>
 
-      <PendingKYC isStreamer inline onNavigate={onNavigate} />
+      <PendingKYC isStreamer inline onNavigate={onNavigate} verified={profile?.verified} kycStatus={profile?.kycStatus} />
 
       {/* Earnings cards */}
       <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:24 }}>
@@ -3224,6 +3350,17 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   const w = useWindowWidth(); const isMobile = w < 640;
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
+
+  // Check verification before allowing stream
+  const [verified,    setVerified]    = useState(null); // null=loading
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setVerified(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+    .then(r => r.json())
+    .then(data => setVerified(data.ok ? (data.profile?.verified || false) : false))
+    .catch(() => setVerified(false));
+  }, []);
 
   const [streaming,     setStreaming]     = useState(false);
   const [title,         setTitle]         = useState("Luna Vex Live 🎵");
@@ -3382,6 +3519,33 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   };
 
   const fmt = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+
+  // ── Verification gate ────────────────────────────────────────────────────
+  if (verified === null) return (
+    <div style={{ textAlign:"center", padding:"80px 24px", color:COLORS.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
+      <div>Checking verification status…</div>
+    </div>
+  );
+
+  if (verified === false) return (
+    <div style={{ maxWidth:520, margin:"0 auto", padding:"48px 24px" }}>
+      <button onClick={() => onNavigate("streamer-dashboard")} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>← Dashboard</button>
+      <Card style={{ textAlign:"center", padding:"40px 28px" }}>
+        <div style={{ fontSize:64, marginBottom:16 }}>🔒</div>
+        <h2 style={{ margin:"0 0 12px", fontWeight:900 }}>Verification Required</h2>
+        <p style={{ color:COLORS.muted, fontSize:14, lineHeight:1.7, marginBottom:24 }}>
+          You need to complete identity verification before you can go live. This protects both streamers and viewers on Steamr.
+        </p>
+        <Btn onClick={() => onNavigate("kyc-status")} style={{ width:"100%", marginBottom:10 }}>
+          🛡️ Check Verification Status
+        </Btn>
+        <Btn onClick={() => onNavigate("streamer-dashboard")} variant="secondary" style={{ width:"100%" }}>
+          Back to Dashboard
+        </Btn>
+      </Card>
+    </div>
+  );
 
   // ── Camera preview panel ─────────────────────────────────────────────────
   const CameraPreview = () => (
@@ -7722,6 +7886,7 @@ export default function App() {
       case "stream-room":        return <StreamRoomScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} subscriptions={subscriptions} onSubscribe={onSubscribe} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} following={following} onFollow={onFollow} />;
       case "buy-tokens":         return <BuyTokensScreen onNavigate={navigate} viewerTokens={viewerTokens} onPurchase={onPurchase} />;
       case "kyc-streamer":       return <KYCScreen role="streamer" onNavigate={navigate} />;
+      case "kyc-status":         return <KYCStatusScreen onNavigate={navigate} />;
       case "kyc-viewer":         return <KYCScreen role="viewer"   onNavigate={navigate} />;
       case "streamer-dashboard": return <StreamerDashboard onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
       case "go-live":            return <GoLiveScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
