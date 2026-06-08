@@ -1499,7 +1499,7 @@ const QUALITY_PRESETS = [
   {id:"480p", label:"480p SD",  sub:"Standard", bitrate:"1,000 kbps",fps:"30 fps",note:"Low bandwidth",color:"#aa8890"},
 ];
 const CAMERA_DEVICES = [
-  {id:"cam0",label:"Web Cam",              icon:"📷",res:"1080p",note:"Auto-connects to your system camera"},
+  {id:"cam0",label:"Web Cam",              icon:"📷",res:"1080p",useDefault:true,note:"Auto-connects to your system camera"},
   {id:"cam2",label:"OBS Virtual Camera",   icon:"🎥",res:"1080p"},
   {id:"cam1",label:"iPhone (Continuity)",  icon:"📱",res:"4K"},
   {id:"cam3",label:"Android",              icon:"🤖",res:"1080p",note:"Connect via DroidCam or USB"},
@@ -3714,10 +3714,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
                 /* Not yet granted — show static fallback list */
                 <div style={{ display:"flex",flexDirection:"column",gap:5 }}>
                   {CAMERA_DEVICES.map(cam => {
-                    const sel = selectedCam === cam.id;
+                    const sel = cam.useDefault ? selectedCam === "" : selectedCam === cam.id;
                     return (
                       <label key={cam.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?COLORS.accent+"14":COLORS.surface,border:`1px solid ${sel?COLORS.accent:COLORS.border}`,borderRadius:9,cursor:"pointer",transition:"all 0.15s" }}>
-                        <input type="radio" checked={sel} onChange={() => setSelectedCam(cam.id)} style={{ accentColor:COLORS.accent,margin:0 }} />
+                        <input type="radio" checked={sel} onChange={() => setSelectedCam(cam.useDefault ? "" : cam.id)} style={{ accentColor:COLORS.accent,margin:0 }} />
                         <span style={{ fontSize:15 }}>{cam.icon}</span>
                         <div>
                           <div style={{ fontSize:12,fontWeight:700 }}>{cam.label}</div>
