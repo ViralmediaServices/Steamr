@@ -1843,6 +1843,37 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const streamer = STREAMERS.find(s => s.id === selectedStreamerId);
   const streamerName = streamer?.name || "Streamer";
 
+  // ── Viewer presence heartbeat ─────────────────────────────────────────────
+  useEffect(() => {
+    // Generate a stable session ID for this viewing session
+    const sessionId = `viewer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // Use the streamer's email if available in their profile, otherwise fall back to id
+    const streamId  = streamerProfile?.email
+      ? encodeURIComponent(streamerProfile.email)
+      : `id_${selectedStreamerId}`;
+
+    const heartbeat = () => {
+      fetch(`/api/viewer-count?streamId=${streamId}`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId }),
+      }).catch(() => {});
+    };
+
+    heartbeat(); // register immediately on mount
+    const iv = setInterval(heartbeat, 30_000); // refresh every 30 s
+
+    return () => {
+      clearInterval(iv);
+      // Remove viewer on unmount (best-effort — sorted set TTL handles failures)
+      fetch(`/api/viewer-count?streamId=${streamId}`, {
+        method:  "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ sessionId }),
+      }).catch(() => {});
+    };
+  }, [selectedStreamerId]);
+
   const sendTip = () => {
     if (tokens < effectiveTip || effectiveTip < 1) return;
 
@@ -3411,6 +3442,9 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   const [realCameras,   setRealCameras]   = useState([]);
   const [realMics,      setRealMics]      = useState([]);
   const [cameraFacing,  setCameraFacing]  = useState("user"); // user | environment
+  const [viewerCount,   setViewerCount]   = useState(0);
+  const [peakCount,     setPeakCount]     = useState(0);
+  const streamIdRef = useRef(null);
 
   // ── Cleanup stream on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -3497,6 +3531,34 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     return () => clearInterval(t);
   }, [streaming]);
 
+  // ── Real-time viewer count polling ────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      streamIdRef.current = session?.email ? encodeURIComponent(session.email) : null;
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!streaming || !streamIdRef.current) return;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/viewer-count?streamId=${streamIdRef.current}`);
+        const data = await r.json();
+        if (data.ok) {
+          setViewerCount(data.count);
+          setPeakCount(p => Math.max(p, data.count));
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 15000);
+    return () => {
+      clearInterval(iv);
+      setViewerCount(0);
+    };
+  }, [streaming]);
+
   const startStream = () => {
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
@@ -3545,6 +3607,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
           action:        "stream-end",
           durationSecs:  seconds,
           tokensEarned:  sessionTokens,
+          peakViewers:   peakCount,
         }),
       }).catch(() => {});
     }
@@ -3620,7 +3683,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
             <Pill color={COLORS.accent}>🔴 LIVE {fmt(seconds)}</Pill>
           </div>
           <div style={{ position:"absolute",top:12,right:12,background:"#00000088",borderRadius:8,padding:"4px 10px",fontSize:13,zIndex:2 }}>
-            👁 {Math.min(seconds*3,1284)} watching
+            👁 {viewerCount.toLocaleString()} watching
           </div>
         </>
       )}
@@ -3879,7 +3942,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
       {/* Live stats */}
       {streaming && (
         <div style={{ display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginTop:16 }}>
-          {[["👁","Viewers",String(Math.min(seconds*3,1284))],["🪙","Tokens",sessionTokens.toLocaleString()]].map(([icon,label,val]) => (
+          {[["👁","Viewers",viewerCount.toLocaleString()],["🪙","Tokens",sessionTokens.toLocaleString()]].map(([icon,label,val]) => (
             <Card key={label} style={{ textAlign:"center",padding:"12px" }}>
               <div style={{ fontSize:20 }}>{icon}</div>
               <div style={{ fontSize:18,fontWeight:800 }}>{val}</div>
