@@ -359,13 +359,15 @@ export default async function handler(req, res) {
   // ── GET — load full profile ───────────────────────────────────────────────
   if (req.method === "GET") {
     try {
-      const [{ result: accResult }, { result: actResult }] = await Promise.all([
+      const [{ result: accResult }, { result: actResult }, { result: bannerResult }] = await Promise.all([
         kvCommand("GET", accountKey),
         kvCommand("GET", activityKey),
+        kvCommand("GET", `banner:${email}`),
       ]);
 
-      const account  = parse(accResult);
-      const activity = parse(actResult) || {};
+      const account   = parse(accResult);
+      const activity  = parse(actResult) || {};
+      const bannerImg = bannerResult || null;
 
       if (!account) return res.status(404).json({ error: "Account not found" });
 
@@ -389,6 +391,12 @@ export default async function handler(req, res) {
         .filter(d => monthKey(d.day) === monthStr)
         .reduce((s, d) => s + (d.tokens || 0), 0);
 
+      // Merge bannerImg back into streamerProfile for the response
+      // (it is stored separately in Redis to keep the account object small)
+      const streamerProfile = account.streamerProfile
+        ? { ...account.streamerProfile, bannerImg }
+        : null;
+
       return res.status(200).json({
         ok: true,
         profile: {
@@ -406,7 +414,7 @@ export default async function handler(req, res) {
           verifiedAt:      account.verifiedAt   || null,
           kycStatus:       account.kycStatus    || null,
           following:       account.following    || [],
-          streamerProfile:   account.streamerProfile   || null,
+          streamerProfile,
           streamerSchedule:  account.streamerSchedule  || [],
         },
         activity: {
@@ -488,20 +496,6 @@ export default async function handler(req, res) {
         activity.subscriptions = activity.subscriptions || {};
         activity.subscriptions[streamerId] = req.body.sub;
         await kvCommand("SET", activityKey, JSON.stringify(activity));
-
-        // Update streamer's subscriber list — use a Set so it's always accurate
-        // even if the viewer subscribes multiple times or after upgrading tier
-        if (streamerId) {
-          const sKey = `activity:${streamerId}`;
-          const { result: sRes } = await kvCommand("GET", sKey);
-          const sActivity = parse(sRes) || {};
-          const subs = new Set(sActivity.subscriberEmails || []);
-          subs.add(email); // email = the viewer's email (from their auth token)
-          sActivity.subscriberEmails = [...subs];
-          sActivity.subscribers      = sActivity.subscriberEmails.length;
-          await kvCommand("SET", sKey, JSON.stringify(sActivity));
-        }
-
         return res.status(200).json({ ok: true });
       }
 
@@ -511,19 +505,6 @@ export default async function handler(req, res) {
         activity.subscriptions = activity.subscriptions || {};
         delete activity.subscriptions[streamerId];
         await kvCommand("SET", activityKey, JSON.stringify(activity));
-
-        // Remove viewer from streamer's subscriber Set and recompute count
-        if (streamerId) {
-          const sKey = `activity:${streamerId}`;
-          const { result: sRes } = await kvCommand("GET", sKey);
-          const sActivity = parse(sRes) || {};
-          const subs = new Set(sActivity.subscriberEmails || []);
-          subs.delete(email); // email = the viewer's email
-          sActivity.subscriberEmails = [...subs];
-          sActivity.subscribers      = sActivity.subscriberEmails.length;
-          await kvCommand("SET", sKey, JSON.stringify(sActivity));
-        }
-
         return res.status(200).json({ ok: true });
       }
 
