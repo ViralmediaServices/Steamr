@@ -3400,6 +3400,14 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     } catch (_) {}
   };
 
+  // ── Re-attach stream if video element remounts ────────────────────────────
+  useEffect(() => {
+    if (permStatus === "granted" && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  });
+
   // ── Request camera + mic access ───────────────────────────────────────────
   const requestCamera = async (facingOverride) => {
     setPermStatus("requesting");
@@ -3548,7 +3556,18 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
   );
 
   // ── Camera preview panel ─────────────────────────────────────────────────
-  const CameraPreview = () => (
+
+
+  return (
+    <div style={{ maxWidth:700, margin:"0 auto", padding:isMobile?"24px 16px 60px":"48px 24px" }}>
+      <button onClick={() => { stopStream(); onNavigate("streamer-dashboard"); }}
+        style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:20,fontSize:13 }}>
+        ← Dashboard
+      </button>
+      <h2 style={{ margin:`0 0 ${isMobile?16:24}px`, fontSize:isMobile?20:26, fontWeight:800 }}>
+        {streaming ? "🔴 You're Live!" : "🎙️ Start Your Stream"}
+      </h2>
+
     <div style={{ background: streaming ? "linear-gradient(135deg,#1a0a2e,#0a1a2e)" : COLORS.surface,
       borderRadius:16, height:isMobile?220:300, display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center",
@@ -3625,19 +3644,6 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
         </div>
       )}
     </div>
-  );
-
-  return (
-    <div style={{ maxWidth:700, margin:"0 auto", padding:isMobile?"24px 16px 60px":"48px 24px" }}>
-      <button onClick={() => { stopStream(); onNavigate("streamer-dashboard"); }}
-        style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:20,fontSize:13 }}>
-        ← Dashboard
-      </button>
-      <h2 style={{ margin:`0 0 ${isMobile?16:24}px`, fontSize:isMobile?20:26, fontWeight:800 }}>
-        {streaming ? "🔴 You're Live!" : "🎙️ Start Your Stream"}
-      </h2>
-
-      <CameraPreview />
 
       {/* Goal progress during stream */}
       {streaming && goal && (
