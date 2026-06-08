@@ -98,8 +98,9 @@ export default async function handler(req, res) {
     }
 
     // Mark as verified
-    account.verified   = true;
-    account.verifiedAt = new Date().toISOString();
+    account.verified      = true;
+    account.verifiedAt    = new Date().toISOString();
+    account.kycStatus     = "approved";
     await kvCommand("SET", emailKey, JSON.stringify(account));
 
     // Write a real notification for the user
