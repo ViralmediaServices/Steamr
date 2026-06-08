@@ -441,7 +441,10 @@ export default async function handler(req, res) {
           hoursStreamed:  activity.hoursStreamed  || 0,
           peakViewers:    activity.peakViewers    || 0,
           followers:      activity.followers      || 0,
-          subscribers:    activity.subscribers    || 0,
+          // Derive subscriber count from the Set (always accurate) — fall back to stored field
+          subscribers:    Array.isArray(activity.subscriberEmails)
+                            ? activity.subscriberEmails.length
+                            : (activity.subscribers || 0),
           payoutHistory:  activity.payoutHistory  || [],
           streamHistory:  activity.streamHistory  || [],
         },
