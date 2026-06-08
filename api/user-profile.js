@@ -185,6 +185,7 @@ export default async function handler(req, res) {
           followers:      activity.followers      || 0,
           subscribers:    activity.subscribers    || 0,
           payoutHistory:  activity.payoutHistory  || [],
+          streamHistory:  activity.streamHistory  || [],
         },
       });
     } catch (err) {
@@ -235,15 +236,17 @@ export default async function handler(req, res) {
       if (action === "stream-start") {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
-        activity.totalStreams  = (activity.totalStreams || 0) + 1;
-        activity.lastStreamAt = new Date().toISOString();
+        activity.totalStreams       = (activity.totalStreams || 0) + 1;
+        activity.lastStreamAt      = new Date().toISOString();
+        activity.currentStreamTitle = req.body.streamTitle || "Untitled Stream";
+        activity.currentStreamStart = new Date().toISOString();
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
 
       // ── Stream end — save real duration + tokens earned ──────────────────
       if (action === "stream-end") {
-        const { durationSecs = 0, tokensEarned = 0, peakViewers = 0 } = req.body;
+        const { durationSecs = 0, tokensEarned = 0, peakViewers = 0, streamTitle } = req.body;
         const actResult  = (await kvCommand("GET", activityKey)).result;
         const activity   = parse(actResult) || {};
 
@@ -252,7 +255,7 @@ export default async function handler(req, res) {
         activity.allTimeTokens   = (activity.allTimeTokens  || 0) + tokensEarned;
         activity.availableTokens = (activity.availableTokens || 0) + tokensEarned;
 
-        // Update daily earnings history (used to compute today/week/month on GET)
+        // Update daily earnings history
         const todayStr = dateKey(new Date());
         activity.dailyEarnings = activity.dailyEarnings || [];
         const existing = activity.dailyEarnings.find(d => d.day === todayStr);
@@ -261,12 +264,36 @@ export default async function handler(req, res) {
         } else {
           activity.dailyEarnings.unshift({ day: todayStr, tokens: tokensEarned });
         }
-        activity.dailyEarnings = activity.dailyEarnings.slice(0, 730); // keep ~2 years
+        activity.dailyEarnings = activity.dailyEarnings.slice(0, 730);
 
         // Update all-time peak viewers
         if (peakViewers > (activity.peakViewers || 0)) {
           activity.peakViewers = peakViewers;
         }
+
+        // Save individual stream record for analytics history
+        const title = streamTitle || activity.currentStreamTitle || "Untitled Stream";
+        const startedAt = activity.currentStreamStart || new Date().toISOString();
+        const durationMins = Math.round(durationSecs / 60);
+        const durationStr  = durationMins >= 60
+          ? `${Math.floor(durationMins/60)}h ${durationMins%60}m`
+          : `${durationMins}m`;
+
+        activity.streamHistory = activity.streamHistory || [];
+        activity.streamHistory.unshift({
+          title,
+          date:        todayStr,
+          startedAt,
+          durationSecs,
+          duration:    durationStr,
+          tokensEarned,
+          peakViewers,
+        });
+        activity.streamHistory = activity.streamHistory.slice(0, 100); // keep last 100 streams
+
+        // Clear current stream tracking fields
+        delete activity.currentStreamTitle;
+        delete activity.currentStreamStart;
 
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
