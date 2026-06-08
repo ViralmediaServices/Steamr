@@ -4962,18 +4962,46 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       {/* Social links */}
       <Card style={{ marginBottom:28 }}>
         <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted, marginBottom:16 }}>🔗 SOCIAL LINKS</div>
-        {[
-          { key:"socialTwitter",   icon:"𝕏",  label:"Twitter / X",  placeholder:"@yourhandle" },
-          { key:"socialInstagram", icon:"📷", label:"Instagram",    placeholder:"@yourhandle" },
-          { key:"socialTikTok",    icon:"🎵", label:"TikTok",       placeholder:"@yourhandle" },
-        ].map(({ key, icon, label, placeholder }) => (
-          <div key={key} style={{ marginBottom:12 }}>
-            <label style={{ display:"block", marginBottom:6, fontSize:13, color:COLORS.muted, fontWeight:600 }}>{icon} {label}</label>
-            <input value={form[key]} onChange={e => update(key, e.target.value)} placeholder={placeholder}
-              style={{ width:"100%", background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"11px 14px", color:COLORS.text, fontSize:14, outline:"none", boxSizing:"border-box" }}
-            />
-          </div>
-        ))}
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {[
+            { key:"socialTwitter",   icon:"𝕏",  label:"Twitter / X",  placeholder:"@yourhandle", color:"#1DA1F2", bg:"#1DA1F211" },
+            { key:"socialInstagram", icon:"📸", label:"Instagram",     placeholder:"@yourhandle", color:"#E1306C", bg:"#E1306C11" },
+            { key:"socialTikTok",    icon:"🎵", label:"TikTok",        placeholder:"@yourhandle", color:"#00f2ea", bg:"#00f2ea11" },
+          ].map(({ key, icon, label, placeholder, color, bg }) => (
+            <div key={key} style={{
+              background: bg,
+              border: `1px solid ${color}33`,
+              borderRadius: 12,
+              padding: "14px 16px",
+            }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                <span style={{
+                  width: 32, height: 32, borderRadius: 8,
+                  background: color + "22",
+                  border: `1px solid ${color}44`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 15, flexShrink: 0,
+                }}>{icon}</span>
+                <span style={{ fontWeight:800, fontSize:14, color: color }}>{label}</span>
+              </div>
+              <input
+                value={form[key]}
+                onChange={e => update(key, e.target.value)}
+                placeholder={placeholder}
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  background: COLORS.surface,
+                  border: `1px solid ${color}33`,
+                  borderRadius: 8,
+                  padding: "10px 14px",
+                  color: COLORS.text,
+                  fontSize: 14,
+                  outline: "none",
+                }}
+              />
+            </div>
+          ))}
+        </div>
       </Card>
 
       {/* Save */}
@@ -7751,7 +7779,6 @@ function AdminScreen({ onNavigate }) {
   const [loading,   setLoading]   = useState(false);
   const [status,    setStatus]    = useState("");
   const [error,     setError]     = useState("");
-  const [verifying, setVerifying] = useState({}); // { email: true/false }
 
   const fetchAccounts = async (key) => {
     setLoading(true); setError("");
@@ -7769,29 +7796,6 @@ function AdminScreen({ onNavigate }) {
       setError(`Could not connect: ${err.message}`);
     }
     setLoading(false);
-  };
-
-  const verifyAccount = async (email) => {
-    if (!window.confirm(`Approve KYC and mark verified: ${email}?`)) return;
-    setVerifying(v => ({ ...v, [email]: true }));
-    setError(""); setStatus("");
-    try {
-      const res  = await fetch("/api/admin-cleanup", {
-        method:  "PATCH",
-        headers: { "x-admin-key": adminKey, "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "verify", email }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setStatus(`✅ ${email} is now verified and can go live`);
-        fetchAccounts(adminKey); // refresh list to show new status
-      } else {
-        setError(data.error || "Verification failed");
-      }
-    } catch (err) {
-      setError(`Could not verify: ${err.message}`);
-    }
-    setVerifying(v => ({ ...v, [email]: false }));
   };
 
   const deleteAccount = async (email) => {
@@ -7822,17 +7826,10 @@ function AdminScreen({ onNavigate }) {
     } catch { setError("Delete failed."); }
   };
 
-  // KYC badge helper
-  const KycBadge = ({ verified, kycStatus }) => {
-    if (verified) return <span style={{ fontSize:10, fontWeight:700, background:COLORS.green+"22", color:COLORS.green, border:`1px solid ${COLORS.green}44`, borderRadius:20, padding:"2px 8px" }}>✅ Verified</span>;
-    if (kycStatus === "pending") return <span style={{ fontSize:10, fontWeight:700, background:COLORS.gold+"22", color:COLORS.gold, border:`1px solid ${COLORS.gold}44`, borderRadius:20, padding:"2px 8px" }}>⏳ Pending</span>;
-    return <span style={{ fontSize:10, fontWeight:700, background:COLORS.muted+"22", color:COLORS.muted, border:`1px solid ${COLORS.muted}44`, borderRadius:20, padding:"2px 8px" }}>No KYC</span>;
-  };
-
   return (
-    <div style={{ maxWidth:720, margin:"0 auto", padding:"40px 24px 60px" }}>
+    <div style={{ maxWidth:640, margin:"0 auto", padding:"40px 24px 60px" }}>
       <h2 style={{ margin:"0 0 6px", fontSize:24, fontWeight:900 }}>🛡️ Admin Panel</h2>
-      <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage accounts and approve identity verification. Keep this page private.</p>
+      <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage Upstash accounts. Keep this page private.</p>
 
       {!authed ? (
         <Card>
@@ -7859,33 +7856,12 @@ function AdminScreen({ onNavigate }) {
             {accounts.length === 0 ? (
               <div style={{ padding:"32px", textAlign:"center", color:COLORS.muted }}>No accounts found</div>
             ) : accounts.map((a, i) => (
-              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}22`, gap:12, flexWrap:"wrap" }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:700, fontSize:13, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                    {a.email || a.key}
-                    <KycBadge verified={a.verified} kycStatus={a.kycStatus} />
-                  </div>
-                  <div style={{ fontSize:11, color:COLORS.muted, marginTop:3 }}>
-                    {a.name} · {a.role} · Joined {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown"}
-                    {a.kycStatus === "pending" && !a.verified && (
-                      <span style={{ color:COLORS.gold, marginLeft:8 }}>· KYC documents submitted</span>
-                    )}
-                  </div>
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}22` }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{a.email || a.key}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted, marginTop:2 }}>{a.name} · {a.role} · {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "unknown"}</div>
                 </div>
-                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                  {/* Show Verify button for streamer accounts with pending KYC OR no KYC (admin override) */}
-                  {a.role === "streamer" && !a.verified && (
-                    <Btn
-                      onClick={() => verifyAccount(a.email)}
-                      disabled={verifying[a.email]}
-                      variant="green"
-                      style={{ fontSize:11, padding:"5px 10px" }}
-                    >
-                      {verifying[a.email] ? "…" : "✅ Verify"}
-                    </Btn>
-                  )}
-                  <Btn onClick={() => deleteAccount(a.email)} variant="ghost" style={{ fontSize:11, color:"#ff6666", padding:"5px 10px" }}>Delete</Btn>
-                </div>
+                <Btn onClick={() => deleteAccount(a.email)} variant="ghost" style={{ fontSize:11, color:"#ff6666", padding:"5px 10px" }}>Delete</Btn>
               </div>
             ))}
           </Card>
