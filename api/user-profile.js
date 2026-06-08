@@ -1,6 +1,7 @@
 // api/user-profile.js
-// GET  — load the logged-in user's profile from Upstash
-// POST — update profile data (displayName, bio, avatarImg)
+// GET   — load the logged-in user's profile from Upstash
+// POST  — update profile / actions (follow, subscribe, stream-start, stream-end, tip, payout-request)
+// PATCH — update token balance
 
 const KV_URL   = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
@@ -26,6 +27,23 @@ async function getEmailFromToken(token) {
   return result || null;
 }
 
+// Returns Monday of the ISO week for a given Date
+function isoWeekKey(date) {
+  const d = new Date(date);
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - day + 1);
+  return d.toISOString().split("T")[0]; // e.g. "2026-06-02"
+}
+
+function dateKey(date) {
+  return new Date(date).toISOString().split("T")[0]; // "2026-06-07"
+}
+
+function monthKey(date) {
+  const d = new Date(date);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 export default async function handler(req, res) {
   const token = req.headers["x-auth-token"] || req.query?.token || req.body?.token;
   if (!token) return res.status(401).json({ error: "No token provided" });
@@ -45,54 +63,73 @@ export default async function handler(req, res) {
       ]);
 
       const account  = parse(accResult);
-      const activity = parse(actResult) || {
-        tokenBalance: 350,
-        totalSpent:   0,
-        tipsCount:    0,
-        tipHistory:   [],
-        giftsCount:   0,
-        achievements: [],
-      };
+      const activity = parse(actResult) || {};
 
       if (!account) return res.status(404).json({ error: "Account not found" });
+
+      // Recalculate period-based earnings using dailyEarnings history
+      const now       = new Date();
+      const todayStr  = dateKey(now);
+      const weekStr   = isoWeekKey(now);
+      const monthStr  = monthKey(now);
+
+      const daily = activity.dailyEarnings || [];
+
+      const todayTokens = daily
+        .filter(d => d.day === todayStr)
+        .reduce((s, d) => s + (d.tokens || 0), 0);
+
+      const weekTokens = daily
+        .filter(d => isoWeekKey(d.day) === weekStr)
+        .reduce((s, d) => s + (d.tokens || 0), 0);
+
+      const monthTokens = daily
+        .filter(d => monthKey(d.day) === monthStr)
+        .reduce((s, d) => s + (d.tokens || 0), 0);
 
       return res.status(200).json({
         ok: true,
         profile: {
-          email:        account.email,
-          name:         account.name,
-          displayName:  account.displayName  || account.name,
-          username:     account.username     || account.email.split("@")[0],
-          bio:          account.bio          || "",
-          avatarImg:    account.avatarImg    || null,
-          role:         account.role,
-          joinDate:     account.createdAt    ? new Date(account.createdAt).toLocaleDateString("en-US", { month:"long", year:"numeric" }) : "Recently",
-          verified:     account.verified     || false,
-          verifiedAt:   account.verifiedAt   || null,
-          kycStatus:    account.kycStatus    || null,
-          following:       account.following       || [],
+          email:           account.email,
+          name:            account.name,
+          displayName:     account.displayName  || account.name,
+          username:        account.username     || account.email.split("@")[0],
+          bio:             account.bio          || "",
+          avatarImg:       account.avatarImg    || null,
+          role:            account.role,
+          joinDate:        account.createdAt
+                             ? new Date(account.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+                             : "Recently",
+          verified:        account.verified     || false,
+          verifiedAt:      account.verifiedAt   || null,
+          kycStatus:       account.kycStatus    || null,
+          following:       account.following    || [],
           streamerProfile: account.streamerProfile || null,
         },
         activity: {
-          tokenBalance:  activity.tokenBalance  || 350,
-          totalSpent:    activity.totalSpent    || 0,
-          tipsCount:     activity.tipsCount     || 0,
-          tipHistory:    activity.tipHistory    || [],
-          giftsCount:    activity.giftsCount    || 0,
-          achievements:  activity.achievements  || [],
-          subscriptions:  activity.subscriptions  || {},
-          ppvPurchased:   activity.ppvPurchased   || [],
-          // Streamer stats
-          todayTokens:    activity.todayTokens    || 0,
-          weekTokens:     activity.weekTokens     || 0,
-          monthTokens:    activity.monthTokens    || 0,
+          // Viewer fields
+          tokenBalance:   activity.tokenBalance  ?? 0,
+          totalSpent:     activity.totalSpent    || 0,
+          tipsCount:      activity.tipsCount     || 0,
+          tipHistory:     activity.tipHistory    || [],
+          giftsCount:     activity.giftsCount    || 0,
+          achievements:   activity.achievements  || [],
+          subscriptions:  activity.subscriptions || {},
+          ppvPurchased:   activity.ppvPurchased  || [],
+          // Streamer earnings — calculated from real daily history
+          todayTokens,
+          weekTokens,
+          monthTokens,
           allTimeTokens:  activity.allTimeTokens  || 0,
-          totalStreams:    activity.totalStreams    || 0,
-          hoursStreamed:   activity.hoursStreamed   || 0,
-          peakViewers:    activity.peakViewers     || 0,
-          followers:      activity.followers       || 0,
-          subscribers:    activity.subscribers     || 0,
-          payoutHistory:  activity.payoutHistory   || [],
+          availableTokens: activity.availableTokens || 0,
+          dailyEarnings:  daily.slice(0, 30),
+          // Streamer stats
+          totalStreams:   activity.totalStreams   || 0,
+          hoursStreamed:  activity.hoursStreamed  || 0,
+          peakViewers:    activity.peakViewers    || 0,
+          followers:      activity.followers      || 0,
+          subscribers:    activity.subscribers    || 0,
+          payoutHistory:  activity.payoutHistory  || [],
         },
       });
     } catch (err) {
@@ -101,7 +138,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── POST — update profile fields OR follow/unfollow a streamer ──────────────
+  // ── POST — update profile fields or perform actions ───────────────────────
   if (req.method === "POST") {
     try {
       const { displayName, bio, avatarImg, username, streamerId, action } = req.body;
@@ -110,8 +147,8 @@ export default async function handler(req, res) {
       const account = parse(accResult);
       if (!account) return res.status(404).json({ error: "Account not found" });
 
-      // Follow / unfollow action
-      if (streamerId && action) {
+      // ── Follow / unfollow ────────────────────────────────────────────────
+      if (streamerId && action === "follow" || action === "unfollow") {
         const following = new Set(account.following || []);
         if (action === "follow")   following.add(Number(streamerId));
         if (action === "unfollow") following.delete(Number(streamerId));
@@ -120,7 +157,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true, following: account.following });
       }
 
-      // Subscribe / unsubscribe action
+      // ── Subscribe / unsubscribe ──────────────────────────────────────────
       if (action === "subscribe" && req.body.sub) {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
@@ -139,32 +176,74 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      // Stream start — increment total streams counter
+      // ── Stream start ─────────────────────────────────────────────────────
       if (action === "stream-start") {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
-        activity.totalStreams = (activity.totalStreams || 0) + 1;
+        activity.totalStreams  = (activity.totalStreams || 0) + 1;
         activity.lastStreamAt = new Date().toISOString();
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
 
-      // Stream end — save duration + tokens earned
+      // ── Stream end — save real duration + tokens earned ──────────────────
       if (action === "stream-end") {
         const { durationSecs = 0, tokensEarned = 0 } = req.body;
         const actResult  = (await kvCommand("GET", activityKey)).result;
         const activity   = parse(actResult) || {};
+
         const hoursAdded = Math.round((durationSecs / 3600) * 10) / 10;
-        activity.hoursStreamed   = Math.round(((activity.hoursStreamed || 0) + hoursAdded) * 10) / 10;
+        activity.hoursStreamed    = Math.round(((activity.hoursStreamed || 0) + hoursAdded) * 10) / 10;
         activity.allTimeTokens   = (activity.allTimeTokens  || 0) + tokensEarned;
-        activity.weekTokens      = (activity.weekTokens     || 0) + tokensEarned;
-        activity.monthTokens     = (activity.monthTokens    || 0) + tokensEarned;
-        activity.todayTokens     = (activity.todayTokens    || 0) + tokensEarned;
+        activity.availableTokens = (activity.availableTokens || 0) + tokensEarned;
+
+        // Update daily earnings history (used to compute today/week/month on GET)
+        const todayStr = dateKey(new Date());
+        activity.dailyEarnings = activity.dailyEarnings || [];
+        const existing = activity.dailyEarnings.find(d => d.day === todayStr);
+        if (existing) {
+          existing.tokens = (existing.tokens || 0) + tokensEarned;
+        } else {
+          activity.dailyEarnings.unshift({ day: todayStr, tokens: tokensEarned });
+        }
+        activity.dailyEarnings = activity.dailyEarnings.slice(0, 60); // keep 60 days
+
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
 
-      // PPV purchase action
+      // ── Payout request ───────────────────────────────────────────────────
+      if (action === "payout-request") {
+        const { amountUSD } = req.body;
+        const actResult = (await kvCommand("GET", activityKey)).result;
+        const activity  = parse(actResult) || {};
+
+        const availableTokens = activity.availableTokens || 0;
+        const availableUSD    = availableTokens * 0.05;
+        const requestedUSD    = Number(amountUSD) || availableUSD;
+
+        if (requestedUSD < 20)
+          return res.status(400).json({ error: "Minimum payout is $20" });
+        if (requestedUSD > availableUSD + 0.01)
+          return res.status(400).json({ error: "Amount exceeds available balance" });
+
+        const tokensToDeduct = Math.ceil(requestedUSD / 0.05);
+        activity.availableTokens = Math.max(0, availableTokens - tokensToDeduct);
+
+        activity.payoutHistory = activity.payoutHistory || [];
+        activity.payoutHistory.unshift({
+          date:        new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          amount:      requestedUSD,
+          status:      "pending",
+          requestedAt: new Date().toISOString(),
+        });
+        activity.payoutHistory = activity.payoutHistory.slice(0, 50);
+
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true, remaining: activity.availableTokens });
+      }
+
+      // ── PPV purchase ─────────────────────────────────────────────────────
       if (action === "ppv-purchase" && req.body.itemId) {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
@@ -179,7 +258,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-      // Tip action — record tip in activity
+      // ── Tip (viewer sending a tip) ────────────────────────────────────────
       if (action === "tip" && req.body.tip) {
         const tip      = req.body.tip;
         const actResult = (await kvCommand("GET", activityKey)).result;
@@ -190,37 +269,37 @@ export default async function handler(req, res) {
         activity.tipHistory = [
           { streamer: tip.streamer, streamerId: tip.streamerId, tokens: tip.tokens, date: tip.date },
           ...(activity.tipHistory || []),
-        ].slice(0, 100); // keep last 100 tips
+        ].slice(0, 100);
 
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
 
-      // Update profile fields
-      if (displayName     !== undefined) account.displayName     = displayName;
-      if (bio             !== undefined) account.bio             = bio;
-      if (avatarImg       !== undefined) account.avatarImg       = avatarImg;
-      if (username        !== undefined) account.username        = username;
+      // ── Update profile fields ────────────────────────────────────────────
+      if (displayName !== undefined) account.displayName = displayName;
+      if (bio         !== undefined) account.bio         = bio;
+      if (avatarImg   !== undefined) account.avatarImg   = avatarImg;
+      if (username    !== undefined) account.username    = username;
       if (req.body.streamerProfile !== undefined) account.streamerProfile = req.body.streamerProfile;
 
       await kvCommand("SET", accountKey, JSON.stringify(account));
       return res.status(200).json({ ok: true });
+
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── PATCH — update token balance ──────────────────────────────────────────
+  // ── PATCH — update viewer token balance ───────────────────────────────────
   if (req.method === "PATCH") {
     try {
       const { tokenBalance } = req.body;
       if (tokenBalance === undefined) return res.status(400).json({ error: "tokenBalance required" });
 
-      const key = activityKey;
-      const { result: actResult } = await kvCommand("GET", key);
+      const { result: actResult } = await kvCommand("GET", activityKey);
       const activity = parse(actResult) || {};
       activity.tokenBalance = Math.max(0, Number(tokenBalance));
-      await kvCommand("SET", key, JSON.stringify(activity));
+      await kvCommand("SET", activityKey, JSON.stringify(activity));
 
       return res.status(200).json({ ok: true, tokenBalance: activity.tokenBalance });
     } catch (err) {
