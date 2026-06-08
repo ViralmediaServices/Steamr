@@ -5514,100 +5514,306 @@ function PrivateShowScreen({ onNavigate, addToast }) {
 // ── SCHEDULE SCREEN ────────────────────────────────────────────────────────────
 function ScheduleScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
+  const [schedule,      setSchedule]      = useState([]);
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [showEditor,    setShowEditor]    = useState(false);
+  const [editSlots,     setEditSlots]     = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [reminded,      setReminded]      = useState(new Set());
+
   const today = new Date().getDay();
-  const HOURS = Array.from({length:20},(_,i)=>i+6); // 6am–1am
+  const HOURS = Array.from({ length: 20 }, (_, i) => i + 6); // 6am–1am
   const ROW_H = 48;
-  const toggleReminder = (id) => setReminded(prev=>{const next=new Set(prev);next.has(id)?next.delete(id):next.add(id);return next;});
+
+  const SLOT_COLORS = ["#ff2d55","#ff6b35","#4a9edd","#9b59b6","#00e5a0","#f39c12","#27ae60","#e74c3c"];
+
+  const TIME_OPTIONS = Array.from({ length: 18 }, (_, i) => {
+    const h = i + 6;
+    const label = h > 12 ? `${h-12}:00 pm` : h === 12 ? "12:00 pm" : `${h}:00 am`;
+    return { value: h, label };
+  });
+
+  const DURATION_OPTIONS = [
+    { value: 0.5, label: "30 min" }, { value: 1, label: "1 hr" },
+    { value: 1.5, label: "1.5 hrs"}, { value: 2, label: "2 hrs" },
+    { value: 2.5, label: "2.5 hrs"}, { value: 3, label: "3 hrs" },
+    { value: 4,   label: "4 hrs" }, { value: 5, label: "5 hrs" },
+    { value: 6,   label: "6 hrs" },
+  ];
+
+  const fmtHour = h => {
+    const w = Math.floor(h), m = h % 1 ? "30" : "00";
+    return w > 12 ? `${w-12}:${m}pm` : w === 12 ? `12:${m}pm` : `${w}:${m}am`;
+  };
+
+  // ── Load schedule from API ─────────────────────────────────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setSchedule(data.profile?.streamerSchedule || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  // ── Editor helpers ─────────────────────────────────────────────────────────
+  const openEditor = () => {
+    setEditSlots(schedule.map(s => ({ ...s })));
+    setShowEditor(true);
+  };
+
+  const addSlot = () => setEditSlots(prev => [...prev, {
+    id:        `slot_${Date.now()}`,
+    day:       1,
+    startHour: 20,
+    duration:  2,
+    title:     "My Stream",
+    color:     SLOT_COLORS[prev.length % SLOT_COLORS.length],
+  }]);
+
+  const removeSlot = id => setEditSlots(prev => prev.filter(s => s.id !== id));
+  const updateSlot = (id, key, val) =>
+    setEditSlots(prev => prev.map(s => s.id === id ? { ...s, [key]: val } : s));
+
+  const saveSchedule = async () => {
+    setSaving(true);
+    const token = localStorage.getItem("steamr_token");
+    try {
+      const r = await fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": token, "Content-Type": "application/json" },
+        body:    JSON.stringify({ token, action: "schedule-update", schedule: editSlots }),
+      });
+      const data = await r.json();
+      if (data.ok) { setSchedule(editSlots); setShowEditor(false); setSelectedEvent(null); }
+    } catch {}
+    setSaving(false);
+  };
+
+  // ── Select style helper ────────────────────────────────────────────────────
+  const selStyle = { width:"100%", background:COLORS.card, border:`1px solid ${COLORS.border}`,
+    borderRadius:8, padding:"8px 10px", color:COLORS.text, fontSize:12,
+    outline:"none", cursor:"pointer" };
+
+  if (loading) return (
+    <div style={{ textAlign:"center", padding:"80px 24px", color:COLORS.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⏳</div><div>Loading schedule…</div>
+    </div>
+  );
 
   return (
     <div style={{ padding:isMobile?"12px":"24px 24px 48px" }}>
       <div style={{ maxWidth:1100, margin:"0 auto" }}>
-        <h2 style={{ margin:"0 0 4px", fontSize:isMobile?20:24, fontWeight:900 }}>📅 Stream Schedule</h2>
-        <p style={{ color:COLORS.muted, fontSize:13, margin:"0 0 20px" }}>This week's upcoming streams from people you follow</p>
 
-        <div style={{ overflowX:"auto" }}>
-          <div style={{ minWidth: isMobile?700:800 }}>
-            <div style={{ display:"grid", gridTemplateColumns:`56px repeat(7,1fr)`, border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden", background:COLORS.card }}>
-              <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}` }} />
-              {SCHEDULE_DAYS.map((d,idx) => (
-                <div key={d} style={{ background:idx===today?COLORS.accent+"22":COLORS.surface,
-                  borderBottom:`1px solid ${COLORS.border}`, borderLeft:`1px solid ${COLORS.border}`,
-                  padding:"8px 4px", textAlign:"center" }}>
-                  <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{d}</div>
-                  {idx===today&&<div style={{ fontSize:10, color:COLORS.accent, fontWeight:700, marginTop:1 }}>Today</div>}
-                </div>
-              ))}
-              {HOURS.flatMap(hour => [
-                <div key={`tl-${hour}`} style={{ background:COLORS.surface, borderTop:`1px solid ${COLORS.border}`,
-                  display:"flex", alignItems:"flex-start", padding:"3px 6px",
-                  fontSize:9, color:COLORS.muted, height:ROW_H, boxSizing:"border-box" }}>
-                  {hour>12?`${hour-12}pm`:hour===12?"12pm":`${hour}am`}
-                </div>,
-                ...SCHEDULE_DAYS.map((_,dayIdx)=>{
-                  const events = SCHEDULE_EVENTS.filter(e=>e.day===dayIdx&&e.startHour===hour);
-                  return (
-                    <div key={`${hour}-${dayIdx}`} style={{ borderTop:`1px solid ${COLORS.border}22`, borderLeft:`1px solid ${COLORS.border}`,
-                      background:dayIdx===today?"rgba(255,45,85,0.04)":"transparent",
-                      height:ROW_H, position:"relative", boxSizing:"border-box", padding:2 }}>
-                      {events.map(ev=>(
-                        <div key={ev.id} onClick={()=>setSelectedEvent(ev===selectedEvent?null:ev)}
-                          style={{ background:ev.color+"dd", borderRadius:5, padding:"2px 5px",
-                            cursor:"pointer", fontSize:9, fontWeight:700, color:"#fff",
-                            height:`${Math.min(ev.duration*ROW_H-4,ROW_H-4)}px`, overflow:"hidden", lineHeight:1.3,
-                            border:`2px solid ${ev.isYours?"rgba(255,255,255,0.7)":"transparent"}`,
-                            opacity:selectedEvent&&selectedEvent.id!==ev.id?0.55:1, transition:"opacity 0.15s" }}>
-                          {ev.avatar} {ev.title}
-                        </div>
-                      ))}
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+          <div>
+            <h2 style={{ margin:"0 0 4px", fontSize:isMobile?20:24, fontWeight:900 }}>📅 Stream Schedule</h2>
+            <p style={{ color:COLORS.muted, fontSize:13, margin:0 }}>Your recurring weekly stream times</p>
+          </div>
+          <Btn onClick={openEditor} style={{ fontSize:13 }}>
+            ✏️ {schedule.length === 0 ? "Set Up Schedule" : "Edit Schedule"}
+          </Btn>
+        </div>
+
+        {/* Empty state or calendar */}
+        {schedule.length === 0 ? (
+          <Card style={{ textAlign:"center", padding:"60px 24px" }}>
+            <div style={{ fontSize:48, marginBottom:16 }}>📅</div>
+            <div style={{ fontWeight:800, fontSize:18, marginBottom:8 }}>No schedule set yet</div>
+            <div style={{ color:COLORS.muted, fontSize:13, marginBottom:24, lineHeight:1.6 }}>
+              Set your recurring stream times so followers always know when to tune in
+            </div>
+            <Btn onClick={openEditor}>✏️ Set Up Your Schedule</Btn>
+          </Card>
+        ) : (
+          <>
+            <div style={{ overflowX:"auto" }}>
+              <div style={{ minWidth:isMobile?700:800 }}>
+                <div style={{ display:"grid", gridTemplateColumns:`56px repeat(7,1fr)`,
+                  border:`1px solid ${COLORS.border}`, borderRadius:14, overflow:"hidden", background:COLORS.card }}>
+
+                  {/* Day headers */}
+                  <div style={{ background:COLORS.surface, borderBottom:`1px solid ${COLORS.border}` }} />
+                  {SCHEDULE_DAYS.map((d, idx) => (
+                    <div key={d} style={{ background:idx===today?COLORS.accent+"22":COLORS.surface,
+                      borderBottom:`1px solid ${COLORS.border}`, borderLeft:`1px solid ${COLORS.border}`,
+                      padding:"8px 4px", textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:COLORS.muted, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{d}</div>
+                      {idx===today && <div style={{ fontSize:10, color:COLORS.accent, fontWeight:700, marginTop:1 }}>Today</div>}
                     </div>
-                  );
-                }),
-              ])}
-            </div>
-          </div>
-        </div>
+                  ))}
 
-        {selectedEvent && (
-          <div style={{ marginTop:20, background:COLORS.card, border:`1px solid ${selectedEvent.color}55`,
-            borderRadius:16, padding:20, display:"flex", gap:16, alignItems:"flex-start", flexWrap:"wrap" }}>
-            <div style={{ width:50, height:50, borderRadius:"50%", background:selectedEvent.color+"33",
-              display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>
-              {selectedEvent.avatar}
-            </div>
-            <div style={{ flex:1, minWidth:200 }}>
-              <div style={{ fontWeight:800, fontSize:16, marginBottom:4 }}>{selectedEvent.title}</div>
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:10 }}>
-                <span style={{ fontSize:12, color:COLORS.muted }}>👤 {selectedEvent.streamerName}</span>
-                <span style={{ fontSize:12, color:COLORS.muted }}>🗓 {SCHEDULE_DAYS[selectedEvent.day]}</span>
-                <span style={{ fontSize:12, color:COLORS.muted }}>🕐 {selectedEvent.startHour>12?`${selectedEvent.startHour-12}pm`:selectedEvent.startHour===12?"12pm":`${selectedEvent.startHour}am`} · {selectedEvent.duration}h</span>
+                  {/* Time rows */}
+                  {HOURS.flatMap(hour => [
+                    <div key={`tl-${hour}`} style={{ background:COLORS.surface, borderTop:`1px solid ${COLORS.border}`,
+                      display:"flex", alignItems:"flex-start", padding:"3px 6px",
+                      fontSize:9, color:COLORS.muted, height:ROW_H, boxSizing:"border-box" }}>
+                      {hour>12?`${hour-12}pm`:hour===12?"12pm":`${hour}am`}
+                    </div>,
+                    ...SCHEDULE_DAYS.map((_, dayIdx) => {
+                      const events = schedule.filter(e => e.day === dayIdx && Math.floor(e.startHour) === hour);
+                      return (
+                        <div key={`${hour}-${dayIdx}`}
+                          style={{ borderTop:`1px solid ${COLORS.border}22`, borderLeft:`1px solid ${COLORS.border}`,
+                            background:dayIdx===today?"rgba(255,45,85,0.04)":"transparent",
+                            height:ROW_H, position:"relative", boxSizing:"border-box", padding:2 }}>
+                          {events.map(ev => (
+                            <div key={ev.id} onClick={() => setSelectedEvent(ev===selectedEvent?null:ev)}
+                              style={{ background:ev.color+"dd", borderRadius:5, padding:"2px 5px",
+                                cursor:"pointer", fontSize:9, fontWeight:700, color:"#fff",
+                                height:`${Math.min(ev.duration*ROW_H-4, ROW_H-4)}px`,
+                                overflow:"hidden", lineHeight:1.3,
+                                border:"2px solid rgba(255,255,255,0.7)",
+                                opacity:selectedEvent&&selectedEvent.id!==ev.id?0.55:1,
+                                transition:"opacity 0.15s" }}>
+                              {ev.title}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }),
+                  ])}
+                </div>
               </div>
-              {selectedEvent.isYours&&<Pill color={COLORS.accent}>Your Stream</Pill>}
             </div>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
-              <Btn onClick={()=>toggleReminder(selectedEvent.id)} variant={reminded.has(selectedEvent.id)?"green":"secondary"} style={{ fontSize:12, padding:"8px 14px" }}>
-                {reminded.has(selectedEvent.id)?"✓ Reminded":"🔔 Remind Me"}
-              </Btn>
-              <Btn onClick={()=>onNavigate("profile",{streamerId:selectedEvent.streamerId})} variant="ghost" style={{ fontSize:12, padding:"8px 14px" }}>Profile</Btn>
-              <button onClick={()=>setSelectedEvent(null)} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:18 }}>✕</button>
-            </div>
-          </div>
-        )}
 
-        <div style={{ marginTop:16, display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:COLORS.muted }}>
-            <div style={{ width:14, height:14, borderRadius:3, border:"2px solid rgba(255,255,255,0.6)", background:"rgba(255,45,85,0.6)" }} />Your streams
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:COLORS.muted }}>
-            <div style={{ width:14, height:14, borderRadius:3, background:"rgba(74,158,221,0.6)" }} />Following
+            {/* Selected event detail */}
+            {selectedEvent && (
+              <div style={{ marginTop:20, background:COLORS.card, border:`1px solid ${selectedEvent.color}55`,
+                borderRadius:16, padding:20, display:"flex", gap:16, alignItems:"flex-start", flexWrap:"wrap" }}>
+                <div style={{ width:50, height:50, borderRadius:"50%", background:selectedEvent.color+"33",
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>📅</div>
+                <div style={{ flex:1, minWidth:200 }}>
+                  <div style={{ fontWeight:800, fontSize:16, marginBottom:6 }}>{selectedEvent.title}</div>
+                  <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:12, color:COLORS.muted }}>🗓 Every {SCHEDULE_DAYS[selectedEvent.day]}</span>
+                    <span style={{ fontSize:12, color:COLORS.muted }}>🕐 {fmtHour(selectedEvent.startHour)} · {selectedEvent.duration}h</span>
+                    <Pill color={COLORS.accent}>Your Stream</Pill>
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <Btn onClick={openEditor} variant="secondary" style={{ fontSize:12, padding:"8px 14px" }}>✏️ Edit</Btn>
+                  <button onClick={() => setSelectedEvent(null)}
+                    style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:18 }}>✕</button>
+                </div>
+              </div>
+            )}
+
+            {/* Legend */}
+            <div style={{ marginTop:14, display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:COLORS.muted }}>
+                <div style={{ width:14, height:14, borderRadius:3, border:"2px solid rgba(255,255,255,0.6)", background:"rgba(255,45,85,0.6)" }} />
+                Recurring stream slots
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Schedule editor modal ───────────────────────────────────────────── */}
+      {showEditor && (
+        <div onClick={e => e.target===e.currentTarget && setShowEditor(false)}
+          style={{ position:"fixed", inset:0, background:"#000000cc", display:"flex",
+            alignItems:"center", justifyContent:"center", zIndex:9000, padding:16, overflowY:"auto" }}>
+          <div style={{ background:COLORS.bg, border:`1px solid ${COLORS.border}`, borderRadius:20,
+            padding:isMobile?20:28, width:"100%", maxWidth:560, maxHeight:"90vh", overflowY:"auto" }}>
+
+            {/* Modal header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:22 }}>
+              <h3 style={{ margin:0, fontSize:20, fontWeight:800 }}>📅 Weekly Schedule</h3>
+              <button onClick={() => setShowEditor(false)}
+                style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", fontSize:22 }}>✕</button>
+            </div>
+
+            {/* Slot list */}
+            {editSlots.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"28px 0", color:COLORS.muted, marginBottom:16 }}>
+                <div style={{ fontSize:36, marginBottom:8 }}>📭</div>
+                <div style={{ fontSize:13 }}>No time slots yet — add your first stream below</div>
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:14, marginBottom:16 }}>
+                {editSlots.map((slot, idx) => (
+                  <div key={slot.id} style={{ background:COLORS.surface, borderRadius:14, padding:16,
+                    border:`2px solid ${slot.color}44` }}>
+
+                    {/* Slot header */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                        <div style={{ width:12, height:12, borderRadius:3, background:slot.color, flexShrink:0 }} />
+                        <span style={{ fontWeight:700, fontSize:13, color:COLORS.muted }}>Slot {idx+1}</span>
+                      </div>
+                      <button onClick={() => removeSlot(slot.id)}
+                        style={{ background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>
+                    </div>
+
+                    {/* Title input */}
+                    <input value={slot.title}
+                      onChange={e => updateSlot(slot.id, "title", e.target.value)}
+                      placeholder="Stream title…"
+                      style={{ width:"100%", background:COLORS.card, border:`1px solid ${COLORS.border}`,
+                        borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13,
+                        outline:"none", boxSizing:"border-box", marginBottom:10 }} />
+
+                    {/* Day / Time / Duration */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:10 }}>
+                      <div>
+                        <div style={{ fontSize:10, color:COLORS.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>Day</div>
+                        <select value={slot.day} onChange={e => updateSlot(slot.id, "day", Number(e.target.value))} style={selStyle}>
+                          {SCHEDULE_DAYS.map((d,i) => <option key={d} value={i}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, color:COLORS.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>Start</div>
+                        <select value={slot.startHour} onChange={e => updateSlot(slot.id, "startHour", Number(e.target.value))} style={selStyle}>
+                          {TIME_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, color:COLORS.muted, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>Duration</div>
+                        <select value={slot.duration} onChange={e => updateSlot(slot.id, "duration", Number(e.target.value))} style={selStyle}>
+                          {DURATION_OPTIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Color picker */}
+                    <div>
+                      <div style={{ fontSize:10, color:COLORS.muted, marginBottom:6, textTransform:"uppercase", letterSpacing:0.5 }}>Color</div>
+                      <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
+                        {SLOT_COLORS.map(c => (
+                          <button key={c} onClick={() => updateSlot(slot.id, "color", c)}
+                            style={{ width:24, height:24, borderRadius:"50%", background:c, cursor:"pointer",
+                              border:slot.color===c?"3px solid #fff":"2px solid transparent",
+                              outline:"none", boxSizing:"border-box", transition:"border 0.15s" }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add slot button */}
+            <Btn onClick={addSlot} variant="secondary" style={{ width:"100%", marginBottom:14 }}>
+              + Add Time Slot
+            </Btn>
+
+            {/* Save / Cancel */}
+            <div style={{ display:"flex", gap:10 }}>
+              <Btn onClick={() => setShowEditor(false)} variant="ghost" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={saveSchedule} style={{ flex:2 }} disabled={saving}>
+                {saving ? "Saving…" : "💾 Save Schedule"}
+              </Btn>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
-
 // ── LEADERBOARD SCREEN ────────────────────────────────────────────────────────
 function LeaderboardScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
