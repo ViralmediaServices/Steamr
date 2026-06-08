@@ -2112,15 +2112,35 @@ function WishlistSection({ wishlist, viewerTokens, onGift, isOwn }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewerTokens = 350, onCancelSub }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [tab,      setTab]     = useState("overview");
-  const [profile,  setProfile] = useState(null);
-  const [activity, setActivity]= useState(null);
-  const [loading,  setLoading] = useState(true);
-  const [error,    setError]   = useState("");
+  const [tab,         setTab]        = useState("overview");
+  const [profile,     setProfile]    = useState(null);
+  const [activity,    setActivity]   = useState(null);
+  const [loading,     setLoading]    = useState(true);
+  const [error,       setError]      = useState("");
+  const [subProfiles, setSubProfiles] = useState({});
 
   const subCount    = Object.keys(subscriptions).length;
   const followCount = following ? following.size : 0;
-  const [confirmId, setConfirmId] = useState(null); // tracks which sub has cancel open
+  const [confirmId, setConfirmId] = useState(null);
+
+  // Fetch real streamer profiles for all subscriptions — public lookup, no auth token
+  useEffect(() => {
+    const ids = Object.keys(subscriptions);
+    if (ids.length === 0) return;
+    ids.forEach(id => {
+      const sub      = subscriptions[id];
+      const lookupId = sub?.streamerEmail || id;
+      if (!lookupId) return;
+      fetch(`/api/user-profile?publicId=${encodeURIComponent(lookupId)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok && data.profile) {
+            setSubProfiles(prev => ({ ...prev, [id]: data.profile }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [subscriptions]);
 
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
@@ -2316,16 +2336,22 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
         <Card>
           <div style={{ fontWeight:700,fontSize:14,marginBottom:14 }}>Active Subscriptions</div>
           {subCount > 0 ? Object.entries(subscriptions).map(([id,sub]) => {
-            const isConfirm = confirmId === id;
+            const isConfirm   = confirmId === id;
+            const sp          = subProfiles[id];
+            const displayName = sp?.displayName || sp?.name || sub.streamerName || "Streamer";
+            const avatarImg   = sp?.avatarImg   || sub.streamerAvatar || null;
+            const streamerNav = sub.streamerEmail || id;
             return (
               <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div onClick={() => onNavigate("profile",{streamerId:id})}
-                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0 }}>
-                    {"🎭"}
+                  <div onClick={() => onNavigate("profile",{streamerId:streamerNav})}
+                    style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0,overflow:"hidden" }}>
+                    {avatarImg
+                      ? <img src={avatarImg} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
+                      : "🎭"}
                   </div>
-                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:id})}>
-                    <div style={{ fontWeight:700,fontSize:13 }}>{sub.streamerName || "Streamer"}</div>
+                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:streamerNav})}>
+                    <div style={{ fontWeight:700,fontSize:13 }}>{displayName}</div>
                     <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
                   </div>
                   <SubBadge tierName={sub.tierName} />
@@ -2347,7 +2373,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                         style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Keep Subscription
                       </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
+                      <button onClick={() => { onCancelSub && onCancelSub(id); setConfirmId(null); }}
                         style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Yes, Cancel
                       </button>
