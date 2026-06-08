@@ -172,6 +172,10 @@ export default async function handler(req, res) {
             const { result: vcResult } = await kvCommand("ZCARD", vKey);
             const viewers = Number(vcResult) || 0;
 
+            // bannerImg stored in its own key (kept separate from account object)
+            const { result: bannerRes } = await kvCommand("GET", `banner:${email}`);
+            const bannerImg = bannerRes || null;
+
             const isNew = activity.liveStartedAt
               ? Date.now() - new Date(activity.liveStartedAt).getTime() < 30 * 60 * 1000
               : false;
@@ -187,7 +191,7 @@ export default async function handler(req, res) {
               avatarImg:   account.avatarImg  || null,
               avatar:      "🎭",
               bannerColor: sp.bannerColor || "#1a0a2e",
-              bannerImg:   sp.bannerImg   || null,
+              bannerImg:   bannerImg,
               roomSubject: sp.roomSubject || "",
               live:        true,
               isNew,
@@ -210,6 +214,105 @@ export default async function handler(req, res) {
 
     } catch (err) {
       console.error("live-streamers error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── All streamers list (live + offline) — for BrowseScreen ──────────────────
+  // Returns every registered streamer, with live status and viewer counts.
+  // Live streamers are sorted first, then offline by follower count.
+  if (req.query?.all === "true") {
+    try {
+      // Scan all user:* keys to find streamers
+      const userKeys = [];
+      let cursor = "0";
+      do {
+        const { result } = await kvCommand("SCAN", cursor, "MATCH", "user:*", "COUNT", "100");
+        if (!result || !Array.isArray(result)) break;
+        cursor = result[0];
+        if (Array.isArray(result[1])) userKeys.push(...result[1]);
+      } while (cursor !== "0");
+
+      if (userKeys.length === 0) {
+        return res.status(200).json({ ok: true, streamers: [] });
+      }
+
+      const VIEWER_TTL_MS = 45_000;
+      const allStreamers = [];
+
+      await Promise.all(
+        userKeys.map(async (userKey) => {
+          try {
+            const { result: accResult } = await kvCommand("GET", userKey);
+            const account = parse(accResult);
+            if (!account || account.role !== "streamer") return;
+
+            const email = account.email || userKey.replace(/^user:/, "");
+            const sp = account.streamerProfile || {};
+
+            // Fetch activity and bannerImg in parallel
+            const [{ result: actResult }, { result: bannerRes }] = await Promise.all([
+              kvCommand("GET", `activity:${email}`),
+              kvCommand("GET", `banner:${email}`),
+            ]);
+            const activity = parse(actResult) || {};
+            const bannerImg = bannerRes || null;
+
+            const isLive = activity.isLive || false;
+            let viewers = 0;
+
+            if (isLive) {
+              const streamId = encodeURIComponent(email);
+              const vKey = `viewers:${streamId}`;
+              const now  = Date.now();
+              await kvCommand("ZREMRANGEBYSCORE", vKey, 0, now - VIEWER_TTL_MS);
+              const { result: vcResult } = await kvCommand("ZCARD", vKey);
+              viewers = Number(vcResult) || 0;
+            }
+
+            const isNew = isLive && activity.liveStartedAt
+              ? Date.now() - new Date(activity.liveStartedAt).getTime() < 30 * 60 * 1000
+              : false;
+
+            allStreamers.push({
+              id:          email,
+              email,
+              name:        account.displayName || account.name || "Streamer",
+              displayName: account.displayName || account.name || "Streamer",
+              category:    sp.category    || "Female",
+              region:      sp.region      || "",
+              tags:        sp.tags        || [],
+              avatarImg:   account.avatarImg  || null,
+              avatar:      "🎭",
+              bannerColor: sp.bannerColor || "#1a0a2e",
+              bannerImg,
+              roomSubject: sp.roomSubject || "",
+              live:        isLive,
+              isNew,
+              viewers,
+              followers:   activity.followers  || 0,
+              verified:    account.verified || false,
+              streamTitle: activity.currentStreamTitle || "",
+              liveStartedAt: activity.liveStartedAt   || null,
+              goal: (sp.goalLabel && sp.goalTarget) ? {
+                current: 0, target: sp.goalTarget, label: sp.goalLabel,
+              } : null,
+            });
+          } catch { /* skip accounts that fail */ }
+        })
+      );
+
+      // Live streamers first (sorted by viewers), then offline (sorted by followers)
+      allStreamers.sort((a, b) => {
+        if (a.live !== b.live) return a.live ? -1 : 1;
+        if (a.live) return (b.viewers || 0) - (a.viewers || 0);
+        return (b.followers || 0) - (a.followers || 0);
+      });
+
+      return res.status(200).json({ ok: true, streamers: allStreamers });
+
+    } catch (err) {
+      console.error("all-streamers error:", err.message);
       return res.status(500).json({ error: err.message });
     }
   }
