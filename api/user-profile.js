@@ -391,8 +391,7 @@ export default async function handler(req, res) {
         .filter(d => monthKey(d.day) === monthStr)
         .reduce((s, d) => s + (d.tokens || 0), 0);
 
-      // Merge bannerImg back into streamerProfile for the response
-      // (it is stored separately in Redis to keep the account object small)
+      // Merge bannerImg back into streamerProfile (stored separately to keep account object small)
       const streamerProfile = account.streamerProfile
         ? { ...account.streamerProfile, bannerImg }
         : null;
@@ -496,6 +495,19 @@ export default async function handler(req, res) {
         activity.subscriptions = activity.subscriptions || {};
         activity.subscriptions[streamerId] = req.body.sub;
         await kvCommand("SET", activityKey, JSON.stringify(activity));
+
+        // Update streamer's subscriber Set — accurate and idempotent
+        if (streamerId) {
+          const sKey = `activity:${streamerId}`;
+          const { result: sRes } = await kvCommand("GET", sKey);
+          const sActivity = parse(sRes) || {};
+          const subs = new Set(sActivity.subscriberEmails || []);
+          subs.add(email); // email = this viewer's email
+          sActivity.subscriberEmails = [...subs];
+          sActivity.subscribers      = sActivity.subscriberEmails.length;
+          await kvCommand("SET", sKey, JSON.stringify(sActivity));
+        }
+
         return res.status(200).json({ ok: true });
       }
 
@@ -505,6 +517,19 @@ export default async function handler(req, res) {
         activity.subscriptions = activity.subscriptions || {};
         delete activity.subscriptions[streamerId];
         await kvCommand("SET", activityKey, JSON.stringify(activity));
+
+        // Remove viewer from streamer's subscriber Set
+        if (streamerId) {
+          const sKey = `activity:${streamerId}`;
+          const { result: sRes } = await kvCommand("GET", sKey);
+          const sActivity = parse(sRes) || {};
+          const subs = new Set(sActivity.subscriberEmails || []);
+          subs.delete(email); // email = this viewer's email
+          sActivity.subscriberEmails = [...subs];
+          sActivity.subscribers      = sActivity.subscriberEmails.length;
+          await kvCommand("SET", sKey, JSON.stringify(sActivity));
+        }
+
         return res.status(200).json({ ok: true });
       }
 
