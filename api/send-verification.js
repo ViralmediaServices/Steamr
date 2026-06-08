@@ -4,6 +4,24 @@
 
 import https from "https";
 
+const KV_URL   = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+
+async function kvCommand(command, ...args) {
+  const res = await fetch(KV_URL, {
+    method:  "POST",
+    headers: { Authorization: `Bearer ${KV_TOKEN}`, "Content-Type": "application/json" },
+    body:    JSON.stringify([command, ...args]),
+  });
+  return res.json();
+}
+
+function parse(result) {
+  if (!result) return null;
+  if (typeof result === "object") return result;
+  try { return JSON.parse(result); } catch { return null; }
+}
+
 function resendRequest(payload) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -102,6 +120,20 @@ export default async function handler(req, res) {
       reply_to: "noreply@steamr.app",
       html,
     });
+
+    // Mark account as pending in Upstash
+    try {
+      const emailKey = `user:${email.toLowerCase().trim()}`;
+      const { result } = await kvCommand("GET", emailKey);
+      const account = parse(result);
+      if (account) {
+        account.kycStatus    = "pending";
+        account.kycSubmittedAt = new Date().toISOString();
+        await kvCommand("SET", emailKey, JSON.stringify(account));
+      }
+    } catch (err) {
+      console.error("Could not update kycStatus:", err.message);
+    }
 
     return res.status(200).json({ ok: true });
   } catch (err) {
