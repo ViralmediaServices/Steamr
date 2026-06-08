@@ -7171,7 +7171,6 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
           <Btn onClick={() => onNavigate("leaderboard")} variant={screen==="leaderboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🏆</Btn>
           <Btn onClick={() => onNavigate("buy-tokens")} variant={screen==="buy-tokens"?"gold":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🪙 Tokens</Btn>
           <Btn onClick={() => onNavigate("ppv-content")} variant={screen==="ppv-content"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🎬</Btn>
-          <Btn onClick={() => onNavigate("gift-cards")} variant={screen==="gift-cards"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🎁</Btn>
         </>}
         {isStreamer && <>
           <Btn onClick={() => onNavigate("streamer-dashboard")} variant={screen==="streamer-dashboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Dashboard</Btn>
