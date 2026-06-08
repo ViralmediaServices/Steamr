@@ -3608,6 +3608,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
           durationSecs:  seconds,
           tokensEarned:  sessionTokens,
           peakViewers:   peakCount,
+          streamTitle:   title,
         }),
       }).catch(() => {});
     }
@@ -6034,34 +6035,68 @@ function ConnectionMeter({ strength = 4 }) {
 // ANALYTICS SCREEN
 // ══════════════════════════════════════════════════════════════════════════════
 function AnalyticsScreen({ onNavigate }) {
-  const w        = useWindowWidth(); const isMobile = w < 640;
-  const [period, setPeriod] = useState("30d");
-  const [tab,    setTab]    = useState("earnings"); // "earnings" | "viewers"
+  const w = useWindowWidth(); const isMobile = w < 640;
+  const [period,   setPeriod]  = useState("30d");
+  const [tab,      setTab]     = useState("earnings");
+  const [activity, setActivity] = useState(null);
+  const [loading,  setLoading]  = useState(true);
 
-  const slice = period === "7d" ? 7 : 30;
-  const data  = ANALYTICS_DAILY.slice(-slice);
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setActivity(data.activity); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const totalTokens  = data.reduce((s, d) => s + d.tokens,  0);
-  const totalViewers = data.reduce((s, d) => s + d.viewers, 0);
-  const avgTokens    = Math.round(totalTokens / data.length);
-  const peakViewers  = Math.max(...data.map(d => d.viewers));
+  // ── Filter daily earnings by selected period ─────────────────────────────
+  const allDaily     = activity?.dailyEarnings || [];
+  const streamHistory = activity?.streamHistory || [];
+  const cutoff       = new Date();
+  cutoff.setDate(cutoff.getDate() - (period === "7d" ? 7 : 30));
+  const cutoffStr    = cutoff.toISOString().split("T")[0];
+
+  const data         = allDaily.filter(d => d.day >= cutoffStr);
+  const streams      = streamHistory.filter(s => s.date >= cutoffStr);
+
+  // ── Period stats ─────────────────────────────────────────────────────────
+  const totalTokens  = data.reduce((s, d) => s + (d.tokens || 0), 0);
   const totalUSD     = totalTokens * 0.05;
+  const avgTokens    = data.length ? Math.round(totalTokens / data.length) : 0;
+  const peakDay      = data.reduce((max, d) => d.tokens > max ? d.tokens : max, 0);
+  const streamCount  = streams.length;
+  const peakViewers  = streams.reduce((max, s) => (s.peakViewers||0) > max ? (s.peakViewers||0) : max, 0);
+  const totalViewers = streams.reduce((s, st) => s + (st.peakViewers || 0), 0);
 
-  // Chart data
-  const earningsChartData = data.map(d => ({ label: d.day, value: d.tokens }));
-  const viewersChartData  = ANALYTICS_STREAMS.map(s => ({ label: s.date, value: s.viewers }));
-
-  // Compare to previous period
-  const prevData     = ANALYTICS_DAILY.slice(-(slice*2), -slice);
-  const prevTokens   = prevData.reduce((s, d) => s + d.tokens, 0);
+  // Compare to previous period for delta
+  const prevCutoff   = new Date(cutoff);
+  prevCutoff.setDate(prevCutoff.getDate() - (period === "7d" ? 7 : 30));
+  const prevCutoffStr = prevCutoff.toISOString().split("T")[0];
+  const prevData     = allDaily.filter(d => d.day >= prevCutoffStr && d.day < cutoffStr);
+  const prevTokens   = prevData.reduce((s, d) => s + (d.tokens || 0), 0);
   const tokenDelta   = prevTokens ? Math.round(((totalTokens - prevTokens) / prevTokens) * 100) : 0;
 
+  // ── Chart data ───────────────────────────────────────────────────────────
+  const earningsChartData = [...data].reverse().map(d => ({ label: d.day.slice(5), value: d.tokens }));
+  const viewersChartData  = [...streams].reverse().map(s => ({ label: s.date.slice(5), value: s.peakViewers || 0 }));
+
   const STATS = [
-    {label:"Earned",      value:`$${fmtUSD(totalUSD)}`,               sub:`${tokenDelta > 0 ? "↑" : "↓"} ${Math.abs(tokenDelta)}% vs prev`,  subColor: tokenDelta>=0?COLORS.green:COLORS.accent, color:COLORS.green,  icon:"💰"},
-    {label:"Total Viewers",value:totalViewers.toLocaleString(),         sub:`Peak ${peakViewers.toLocaleString()}`,                             subColor:COLORS.muted,                              color:COLORS.accent, icon:"👁"},
-    {label:"Avg Daily",    value:`🪙 ${avgTokens.toLocaleString()}`,    sub:`$${fmtUSD(avgTokens*0.05)} / day`,                                subColor:COLORS.muted,                              color:COLORS.gold,   icon:"📈"},
-    {label:"Streams",      value:ANALYTICS_STREAMS.length,              sub:`${period === "7d" ? 3 : 10} this period`,                          subColor:COLORS.muted,                              color:COLORS.accentC,icon:"📡"},
+    { label:"Earned",        value:`$${fmtUSD(totalUSD)}`,            sub: prevTokens ? `${tokenDelta >= 0 ? "↑" : "↓"} ${Math.abs(tokenDelta)}% vs prev` : "No prev data",  subColor:tokenDelta>=0?COLORS.green:COLORS.accent, color:COLORS.green,   icon:"💰" },
+    { label:"Peak Viewers",  value:peakViewers.toLocaleString(),       sub:`${totalViewers.toLocaleString()} total`,        subColor:COLORS.muted,                              color:COLORS.accent,  icon:"👁" },
+    { label:"Avg Daily",     value:`🪙 ${avgTokens.toLocaleString()}`, sub:`$${fmtUSD(avgTokens*0.05)} / day`,             subColor:COLORS.muted,                              color:COLORS.gold,    icon:"📈" },
+    { label:"Streams",       value:streamCount.toLocaleString(),       sub:`${activity?.totalStreams||0} all time`,         subColor:COLORS.muted,                              color:COLORS.accentC, icon:"📡" },
   ];
+
+  if (loading) return (
+    <div style={{ maxWidth:920, margin:"0 auto", padding:"80px 24px", textAlign:"center", color:COLORS.muted }}>
+      <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>
+      <div>Loading analytics…</div>
+    </div>
+  );
+
+  const isEmpty = allDaily.length === 0 && streamHistory.length === 0;
 
   return (
     <div style={{ maxWidth:920, margin:"0 auto", padding:"32px 24px 60px" }}>
@@ -6074,7 +6109,6 @@ function AnalyticsScreen({ onNavigate }) {
           </button>
           <h2 style={{ margin:0, fontSize:24, fontWeight:800 }}>📊 Stream Analytics</h2>
         </div>
-        {/* Period selector */}
         <div style={{ display:"flex", background:COLORS.surface, borderRadius:10, padding:4, border:`1px solid ${COLORS.border}`, gap:2 }}>
           {["7d","30d"].map(p => (
             <button key={p} onClick={() => setPeriod(p)} style={{
@@ -6087,161 +6121,186 @@ function AnalyticsScreen({ onNavigate }) {
         </div>
       </div>
 
-      {/* ── Summary stat cards ── */}
-      <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:24 }}>
-        {STATS.map(stat => (
-          <Card key={stat.label} style={{ padding:"16px 18px" }}>
-            <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>
-              {stat.icon} {stat.label}
-            </div>
-            <div style={{ fontSize:22, fontWeight:900, color:stat.color, marginBottom:4 }}>{stat.value}</div>
-            <div style={{ fontSize:11, color:stat.subColor, fontWeight:600 }}>{stat.sub}</div>
-          </Card>
-        ))}
-      </div>
-
-      {/* ── Chart tabs ── */}
-      <div style={{ display:"flex", gap:4, marginBottom:16 }}>
-        {[["earnings","💰 Earnings"],["viewers","👁 Viewers"]].map(([key,lbl]) => (
-          <button key={key} onClick={() => setTab(key)} style={{
-            background: tab===key ? COLORS.card  : "transparent",
-            color:      tab===key ? COLORS.text  : COLORS.muted,
-            border:`1px solid ${tab===key ? COLORS.border : "transparent"}`,
-            borderRadius:8, padding:"7px 18px", cursor:"pointer",
-            fontWeight:700, fontSize:13, transition:"all 0.18s",
-          }}>{lbl}</button>
-        ))}
-      </div>
-
-      {/* ── Earnings area chart ── */}
-      {tab === "earnings" && (
-        <Card style={{ marginBottom:20, padding:"20px 20px 14px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
-            <div>
-              <div style={{ fontWeight:800, fontSize:16 }}>Earnings Over Time</div>
-              <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>Daily token earnings — {period}</div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontWeight:900, fontSize:20, color:COLORS.green }}>${fmtUSD(totalUSD)}</div>
-              <div style={{ fontSize:11, color: tokenDelta>=0?COLORS.green:COLORS.accent, fontWeight:700 }}>
-                {tokenDelta>=0?"↑":"↓"} {Math.abs(tokenDelta)}% vs prev period
-              </div>
-            </div>
+      {isEmpty ? (
+        <Card style={{ textAlign:"center", padding:"60px 24px" }}>
+          <div style={{ fontSize:48, marginBottom:16 }}>📡</div>
+          <div style={{ fontWeight:800, fontSize:18, marginBottom:8 }}>No stream data yet</div>
+          <div style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>
+            Go live and complete a stream to see your analytics here
           </div>
-
-          <AreaChart data={earningsChartData} color={COLORS.accent} height={140} />
-
-          {/* X axis labels */}
-          <div style={{ display:"flex", justifyContent:"space-between", marginTop:6, padding:"0 4px" }}>
-            {[data[0], data[Math.floor(data.length*0.33)], data[Math.floor(data.length*0.66)], data[data.length-1]].map((d,i) => (
-              <div key={i} style={{ fontSize:10, color:COLORS.muted }}>{d?.day}</div>
-            ))}
-          </div>
-
-          {/* Y-axis legend */}
-          <div style={{ display:"flex", gap:16, marginTop:14, paddingTop:14, borderTop:`1px solid ${COLORS.border}`, flexWrap:"wrap" }}>
-            {[
-              {label:"Peak day", value:`🪙 ${Math.max(...data.map(d=>d.tokens)).toLocaleString()}`, color:COLORS.gold},
-              {label:"Best USD",  value:`$${fmtUSD(Math.max(...data.map(d=>d.tokens))*0.05)}`,      color:COLORS.green},
-              {label:"Avg/day",   value:`🪙 ${avgTokens.toLocaleString()}`,                          color:COLORS.muted},
-            ].map(x => (
-              <div key={x.label} style={{ fontSize:12 }}>
-                <div style={{ color:COLORS.muted, fontSize:10 }}>{x.label}</div>
-                <div style={{ fontWeight:800, color:x.color }}>{x.value}</div>
-              </div>
-            ))}
-          </div>
+          <Btn onClick={() => onNavigate("go-live")}>🔴 Go Live Now</Btn>
         </Card>
-      )}
-
-      {/* ── Viewer bar chart ── */}
-      {tab === "viewers" && (
-        <Card style={{ marginBottom:20, padding:"20px 20px 14px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
-            <div>
-              <div style={{ fontWeight:800, fontSize:16 }}>Viewers Per Stream</div>
-              <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>Last {ANALYTICS_STREAMS.length} streams</div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{ fontWeight:900, fontSize:20, color:COLORS.accent }}>{peakViewers.toLocaleString()}</div>
-              <div style={{ fontSize:11, color:COLORS.muted }}>peak viewers</div>
-            </div>
-          </div>
-
-          <BarChart data={viewersChartData} color={COLORS.green} height={130} />
-
-          {/* Stream labels below bars */}
-          <div style={{ display:"flex", marginTop:8 }}>
-            {ANALYTICS_STREAMS.map((s,i) => (
-              <div key={i} style={{ flex:1, textAlign:"center", fontSize:8.5, color:COLORS.muted,
-                overflow:"hidden", whiteSpace:"nowrap", padding:"0 1px" }}>
-                {s.date}
-              </div>
+      ) : (
+        <>
+          {/* ── Summary stat cards ── */}
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)", gap:12, marginBottom:24 }}>
+            {STATS.map(stat => (
+              <Card key={stat.label} style={{ padding:"16px 18px" }}>
+                <div style={{ fontSize:11, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>
+                  {stat.icon} {stat.label}
+                </div>
+                <div style={{ fontSize:22, fontWeight:900, color:stat.color, marginBottom:4 }}>{stat.value}</div>
+                <div style={{ fontSize:11, color:stat.subColor, fontWeight:600 }}>{stat.sub}</div>
+              </Card>
             ))}
           </div>
 
-          <div style={{ display:"flex", gap:16, marginTop:14, paddingTop:14, borderTop:`1px solid ${COLORS.border}`, flexWrap:"wrap" }}>
-            {[
-              {label:"Avg viewers",  value:Math.round(totalViewers/data.length).toLocaleString(), color:COLORS.muted},
-              {label:"Peak",         value:peakViewers.toLocaleString(),                          color:COLORS.accent},
-              {label:"Total views",  value:totalViewers.toLocaleString(),                         color:COLORS.green},
-            ].map(x => (
-              <div key={x.label} style={{ fontSize:12 }}>
-                <div style={{ color:COLORS.muted, fontSize:10 }}>{x.label}</div>
-                <div style={{ fontWeight:800, color:x.color }}>{x.value}</div>
-              </div>
+          {/* ── Chart tabs ── */}
+          <div style={{ display:"flex", gap:4, marginBottom:16 }}>
+            {[["earnings","💰 Earnings"],["viewers","👁 Viewers"]].map(([key,lbl]) => (
+              <button key={key} onClick={() => setTab(key)} style={{
+                background: tab===key ? COLORS.card  : "transparent",
+                color:      tab===key ? COLORS.text  : COLORS.muted,
+                border:`1px solid ${tab===key ? COLORS.border : "transparent"}`,
+                borderRadius:8, padding:"7px 18px", cursor:"pointer",
+                fontWeight:700, fontSize:13, transition:"all 0.18s",
+              }}>{lbl}</button>
             ))}
           </div>
-        </Card>
-      )}
 
-      {/* ── Recent streams table ── */}
-      <Card>
-        <div style={{ fontWeight:800, fontSize:16, marginBottom:16 }}>📋 Recent Streams</div>
-
-        {isMobile ? (
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            {ANALYTICS_STREAMS.map((s, i) => (
-              <div key={i} style={{ padding:"13px", background:COLORS.surface, borderRadius:10, border:`1px solid ${COLORS.border}` }}>
-                <div style={{ fontWeight:700, marginBottom:6 }}>{s.title}</div>
-                <div style={{ display:"flex", gap:12, flexWrap:"wrap", fontSize:12, color:COLORS.muted }}>
-                  <span>📅 {s.date}</span>
-                  <span>👁 {s.viewers.toLocaleString()}</span>
-                  <span style={{ color:COLORS.gold }}>🪙 {s.tokens.toLocaleString()}</span>
-                  <span>⏱ {s.duration}</span>
-                  <span style={{ color:COLORS.green, fontWeight:700 }}>${fmtUSD(s.tokens*0.05)}</span>
+          {/* ── Earnings chart ── */}
+          {tab === "earnings" && (
+            <Card style={{ marginBottom:20, padding:"20px 20px 14px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:16 }}>Earnings Over Time</div>
+                  <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>Daily token earnings — {period}</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontWeight:900, fontSize:20, color:COLORS.green }}>${fmtUSD(totalUSD)}</div>
+                  <div style={{ fontSize:11, color:tokenDelta>=0?COLORS.green:COLORS.accent, fontWeight:700 }}>
+                    {prevTokens ? `${tokenDelta>=0?"↑":"↓"} ${Math.abs(tokenDelta)}% vs prev period` : "First period"}
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div style={{ display:"grid", gridTemplateColumns:"2.2fr 70px 90px 100px 75px 80px",
-              gap:12, padding:"8px 14px", background:COLORS.surface, borderRadius:8, marginBottom:6 }}>
-              {["Stream","Date","Viewers","Tokens","Time","Earned"].map(h => (
-                <div key={h} style={{ fontSize:10, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>
-              ))}
-            </div>
-            {ANALYTICS_STREAMS.map((s, i) => (
-              <div key={i} style={{ display:"grid", gridTemplateColumns:"2.2fr 70px 90px 100px 75px 80px",
-                gap:12, padding:"11px 14px", borderBottom:`1px solid ${COLORS.border}22`, alignItems:"center",
-                transition:"background 0.15s",
-              }}>
-                <div style={{ fontWeight:700, fontSize:13 }}>{s.title}</div>
-                <div style={{ fontSize:12, color:COLORS.muted }}>{s.date}</div>
-                <div style={{ fontSize:13 }}>👁 {s.viewers.toLocaleString()}</div>
-                <div style={{ fontSize:13, color:COLORS.gold, fontWeight:700 }}>🪙 {s.tokens.toLocaleString()}</div>
-                <div style={{ fontSize:12, color:COLORS.muted }}>{s.duration}</div>
-                <div style={{ fontSize:13, fontWeight:800, color:COLORS.green }}>${fmtUSD(s.tokens*0.05)}</div>
+
+              {earningsChartData.length > 0 ? (
+                <>
+                  <AreaChart data={earningsChartData} color={COLORS.accent} height={140} />
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:6, padding:"0 4px" }}>
+                    {[earningsChartData[0], earningsChartData[Math.floor(earningsChartData.length*0.33)],
+                      earningsChartData[Math.floor(earningsChartData.length*0.66)], earningsChartData[earningsChartData.length-1]
+                    ].filter(Boolean).map((d,i) => (
+                      <div key={i} style={{ fontSize:10, color:COLORS.muted }}>{d.label}</div>
+                    ))}
+                  </div>
+                  <div style={{ display:"flex", gap:16, marginTop:14, paddingTop:14, borderTop:`1px solid ${COLORS.border}`, flexWrap:"wrap" }}>
+                    {[
+                      { label:"Peak day", value:`🪙 ${peakDay.toLocaleString()}`,          color:COLORS.gold  },
+                      { label:"Best USD",  value:`$${fmtUSD(peakDay*0.05)}`,               color:COLORS.green },
+                      { label:"Avg/day",   value:`🪙 ${avgTokens.toLocaleString()}`,        color:COLORS.muted },
+                    ].map(x => (
+                      <div key={x.label} style={{ fontSize:12 }}>
+                        <div style={{ color:COLORS.muted, fontSize:10 }}>{x.label}</div>
+                        <div style={{ fontWeight:800, color:x.color }}>{x.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ height:140, display:"flex", alignItems:"center", justifyContent:"center", color:COLORS.muted, fontSize:13 }}>
+                  No streams in this period
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* ── Viewers chart ── */}
+          {tab === "viewers" && (
+            <Card style={{ marginBottom:20, padding:"20px 20px 14px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:16 }}>Peak Viewers Per Stream</div>
+                  <div style={{ color:COLORS.muted, fontSize:12, marginTop:2 }}>Last {streams.length} streams in period</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontWeight:900, fontSize:20, color:COLORS.accent }}>{peakViewers.toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted }}>peak viewers</div>
+                </div>
               </div>
-            ))}
-          </>
-        )}
-      </Card>
+
+              {viewersChartData.length > 0 ? (
+                <>
+                  <BarChart data={viewersChartData} color={COLORS.green} height={130} />
+                  <div style={{ display:"flex", marginTop:8 }}>
+                    {viewersChartData.map((d,i) => (
+                      <div key={i} style={{ flex:1, textAlign:"center", fontSize:8.5, color:COLORS.muted,
+                        overflow:"hidden", whiteSpace:"nowrap", padding:"0 1px" }}>
+                        {d.label}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ height:130, display:"flex", alignItems:"center", justifyContent:"center", color:COLORS.muted, fontSize:13 }}>
+                  No streams in this period
+                </div>
+              )}
+
+              <div style={{ display:"flex", gap:16, marginTop:14, paddingTop:14, borderTop:`1px solid ${COLORS.border}`, flexWrap:"wrap" }}>
+                {[
+                  { label:"Peak",        value:peakViewers.toLocaleString(),                                        color:COLORS.accent },
+                  { label:"Avg/stream",  value:streams.length ? Math.round(totalViewers/streams.length).toLocaleString() : "0", color:COLORS.muted },
+                  { label:"Streams",     value:streamCount.toLocaleString(),                                        color:COLORS.green  },
+                ].map(x => (
+                  <div key={x.label} style={{ fontSize:12 }}>
+                    <div style={{ color:COLORS.muted, fontSize:10 }}>{x.label}</div>
+                    <div style={{ fontWeight:800, color:x.color }}>{x.value}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* ── Recent streams table ── */}
+          <Card>
+            <div style={{ fontWeight:800, fontSize:16, marginBottom:16 }}>📋 Recent Streams</div>
+            {streams.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"24px", color:COLORS.muted, fontSize:13 }}>
+                No streams in this period
+              </div>
+            ) : isMobile ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {streams.map((s, i) => (
+                  <div key={i} style={{ padding:"13px", background:COLORS.surface, borderRadius:10, border:`1px solid ${COLORS.border}` }}>
+                    <div style={{ fontWeight:700, marginBottom:6 }}>{s.title}</div>
+                    <div style={{ display:"flex", gap:12, flexWrap:"wrap", fontSize:12, color:COLORS.muted }}>
+                      <span>📅 {s.date}</span>
+                      <span>👁 {(s.peakViewers||0).toLocaleString()}</span>
+                      <span style={{ color:COLORS.gold }}>🪙 {(s.tokensEarned||0).toLocaleString()}</span>
+                      <span>⏱ {s.duration || "—"}</span>
+                      <span style={{ color:COLORS.green, fontWeight:700 }}>${fmtUSD((s.tokensEarned||0)*0.05)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div style={{ display:"grid", gridTemplateColumns:"2.2fr 90px 90px 100px 75px 80px",
+                  gap:12, padding:"8px 14px", background:COLORS.surface, borderRadius:8, marginBottom:6 }}>
+                  {["Stream","Date","Viewers","Tokens","Duration","Earned"].map(h => (
+                    <div key={h} style={{ fontSize:10, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>
+                  ))}
+                </div>
+                {streams.map((s, i) => (
+                  <div key={i} style={{ display:"grid", gridTemplateColumns:"2.2fr 90px 90px 100px 75px 80px",
+                    gap:12, padding:"11px 14px", borderBottom:`1px solid ${COLORS.border}22`, alignItems:"center" }}>
+                    <div style={{ fontWeight:700, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.title}</div>
+                    <div style={{ fontSize:12, color:COLORS.muted }}>{s.date}</div>
+                    <div style={{ fontSize:13 }}>👁 {(s.peakViewers||0).toLocaleString()}</div>
+                    <div style={{ fontSize:13, color:COLORS.gold, fontWeight:700 }}>🪙 {(s.tokensEarned||0).toLocaleString()}</div>
+                    <div style={{ fontSize:12, color:COLORS.muted }}>{s.duration || "—"}</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:COLORS.green }}>${fmtUSD((s.tokensEarned||0)*0.05)}</div>
+                  </div>
+                ))}
+              </>
+            )}
+          </Card>
+        </>
+      )}
     </div>
   );
 }
-
 // ══════════════════════════════════════════════════════════════════════════════
 // LIVE VIEWER MAP
 // ══════════════════════════════════════════════════════════════════════════════
@@ -6537,30 +6596,66 @@ function SearchResultsScreen({ onNavigate, initialQuery = "" }) {
 // ══════════════════════════════════════════════════════════════════════════════
 function EarningsScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const [period, setPeriod] = useState("30d");
+  const [period,     setPeriod]     = useState("30d");
   const [showPayout, setShowPayout] = useState(false);
   const [payoutSent, setPayoutSent] = useState(false);
+  const [activity,   setActivity]   = useState(null);
+  const [loading,    setLoading]    = useState(true);
+  const [cashoutAmt, setCashoutAmt] = useState("");
 
-  const thisMonth  = ANALYTICS_DAILY.slice(-30).reduce((s,d)=>s+d.usd,0);
-  const lastPayout = PAYOUT_HISTORY[0]?.amount || 0;
-  const pending    = Math.max(0, thisMonth - lastPayout);
-  const totalEver  = PAYOUT_HISTORY.reduce((s,p)=>s+p.amount,0) + thisMonth;
+  useEffect(() => {
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setLoading(false); return; }
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(data => { if (data.ok) setActivity(data.activity); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
-  const chartData = (period==="7d"?ANALYTICS_DAILY.slice(-7):period==="30d"?ANALYTICS_DAILY.slice(-30):ANALYTICS_DAILY)
-    .map(d=>({label:d.label,value:d.usd}));
+  const daily          = activity?.dailyEarnings || [];
+  const payoutHistory  = activity?.payoutHistory  || [];
+  const availableTokens = activity?.availableTokens || 0;
+  const subscribers    = activity?.subscribers     || 0;
+  const availableUSD   = availableTokens * 0.05;
+
+  // Period filter
+  const cutoff    = new Date();
+  cutoff.setDate(cutoff.getDate() - (period === "7d" ? 7 : period === "30d" ? 30 : 90));
+  const cutoffStr = cutoff.toISOString().split("T")[0];
+  const filtered  = daily.filter(d => d.day >= cutoffStr);
+
+  const periodUSD  = filtered.reduce((s, d) => s + (d.tokens || 0) * 0.05, 0);
+  const totalEver  = daily.reduce((s, d) => s + (d.tokens || 0) * 0.05, 0);
+  const chartData  = [...filtered].reverse().map(d => ({ label: d.day.slice(5), value: d.tokens * 0.05 }));
 
   const STATS = [
-    {label:"Total Earned", value:`$${fmtUSD(totalEver)}`,  icon:"💸", color:COLORS.gold},
-    {label:"This Month",   value:`$${fmtUSD(thisMonth)}`,  icon:"📅", color:COLORS.green},
-    {label:"Pending",      value:`$${fmtUSD(pending)}`,    icon:"⏳", color:COLORS.accent},
-    {label:"Subscribers",  value:"47",                      icon:"⭐", color:COLORS.accentC},
+    { label:"Total Earned", value:`$${fmtUSD(totalEver)}`,      icon:"💸", color:COLORS.gold    },
+    { label:"This Period",  value:`$${fmtUSD(periodUSD)}`,      icon:"📅", color:COLORS.green   },
+    { label:"Available",    value:`$${fmtUSD(availableUSD)}`,   icon:"⏳", color:COLORS.accent  },
+    { label:"Subscribers",  value:subscribers.toLocaleString(), icon:"⭐", color:COLORS.accentC },
   ];
 
+  if (loading) return (
+    <div style={{maxWidth:900,margin:"0 auto",padding:"80px 24px",textAlign:"center",color:COLORS.muted}}>
+      <div style={{fontSize:36,marginBottom:12}}>⏳</div>
+      <div>Loading earnings…</div>
+    </div>
+  );
+
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:"32px 24px 60px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-        <h2 style={{margin:0,fontSize:24,fontWeight:900}}>💰 Earnings & Payouts</h2>
-        <Btn onClick={()=>setShowPayout(true)} variant="green" style={{fontSize:13}}>Request Payout</Btn>
+    <div style={{maxWidth:900,margin:"0 auto",padding:"32px 24px 60px"}}>      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
+        <div>
+          <button onClick={() => onNavigate("streamer-dashboard")}
+            style={{background:"none",border:"none",color:COLORS.muted,cursor:"pointer",fontSize:13,padding:0,marginBottom:6}}>
+            ← Dashboard
+          </button>
+          <h2 style={{margin:0,fontSize:24,fontWeight:900}}>💰 Earnings & Payouts</h2>
+        </div>
+        <Btn onClick={()=>setShowPayout(true)} variant="green" style={{fontSize:13}}
+          disabled={availableUSD < 20}>
+          {availableUSD >= 20 ? "Request Payout" : `Need $${fmtUSD(20 - availableUSD)} more`}
+        </Btn>
       </div>
 
       {/* Stat cards */}
@@ -6585,21 +6680,33 @@ function EarningsScreen({ onNavigate }) {
             ))}
           </div>
         </div>
-        <AreaChart data={chartData} color={COLORS.gold} height={130} label="USD" />
+        {chartData.length > 0 ? (
+          <AreaChart data={chartData} color={COLORS.gold} height={130} label="USD" />
+        ) : (
+          <div style={{height:130,display:"flex",alignItems:"center",justifyContent:"center",color:COLORS.muted,fontSize:13}}>
+            No earnings in this period — go live to start earning!
+          </div>
+        )}
       </Card>
 
       {/* Payout history */}
       <Card>
         <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>Payout History</div>
-        {PAYOUT_HISTORY.map(p=>(
-          <div key={p.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`}}>
+        {payoutHistory.length === 0 ? (
+          <div style={{textAlign:"center",padding:"24px",color:COLORS.muted,fontSize:13}}>
+            No payouts yet — reach $20 to request your first payout
+          </div>
+        ) : payoutHistory.map((p, i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderBottom:`1px solid ${COLORS.border}22`}}>
             <div>
               <div style={{fontWeight:700,fontSize:13}}>{p.date}</div>
-              <div style={{fontSize:11,color:COLORS.muted}}>{p.method}</div>
+              <div style={{fontSize:11,color:COLORS.muted}}>Bank Transfer</div>
             </div>
             <div style={{textAlign:"right"}}>
               <div style={{fontWeight:800,color:COLORS.green,fontSize:15}}>${fmtUSD(p.amount)}</div>
-              <div style={{fontSize:11,color:COLORS.green}}>✓ {p.status}</div>
+              <div style={{fontSize:11,color:p.status==="pending"?COLORS.gold:COLORS.green}}>
+                {p.status==="pending" ? "⏳ Processing" : "✓ Paid"}
+              </div>
             </div>
           </div>
         ))}
@@ -6607,27 +6714,52 @@ function EarningsScreen({ onNavigate }) {
 
       {/* Payout modal */}
       {showPayout && (
-        <div onClick={e=>e.target===e.currentTarget&&setShowPayout(false)} style={{position:"fixed",inset:0,background:"#000000bb",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9000,padding:16}}>
+        <div onClick={e=>e.target===e.currentTarget&&setShowPayout(false)}
+          style={{position:"fixed",inset:0,background:"#000000bb",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9000,padding:16}}>
           <Card style={{maxWidth:380,width:"100%",padding:"28px"}}>
             {!payoutSent ? (<>
               <h3 style={{margin:"0 0 16px",fontWeight:800}}>Request Payout</h3>
-              <div style={{background:COLORS.green+"18",border:`1px solid ${COLORS.green}44`,borderRadius:12,padding:"16px",marginBottom:20}}>
+              <div style={{background:COLORS.green+"18",border:`1px solid ${COLORS.green}44`,borderRadius:12,padding:"16px",marginBottom:16}}>
                 <div style={{fontSize:12,color:COLORS.muted}}>Available to withdraw</div>
-                <div style={{fontSize:30,fontWeight:900,color:COLORS.green}}>${fmtUSD(pending)}</div>
+                <div style={{fontSize:30,fontWeight:900,color:COLORS.green}}>${fmtUSD(availableUSD)}</div>
+                <div style={{fontSize:11,color:COLORS.muted,marginTop:4}}>🪙 {availableTokens.toLocaleString()} tokens × $0.05</div>
               </div>
-              <div style={{fontSize:12,color:COLORS.muted,lineHeight:1.7,marginBottom:20}}>
-                Processed within 2–3 business days via your registered bank account.
+              <Input label="Amount ($)" value={cashoutAmt} onChange={setCashoutAmt}
+                placeholder={`e.g. ${fmtUSD(availableUSD)}`} />
+              {Number(cashoutAmt) > 0 && Number(cashoutAmt) < 20 && (
+                <div style={{fontSize:11,color:COLORS.accent,marginBottom:8}}>⚠️ Minimum withdrawal is $20.00</div>
+              )}
+              <div style={{fontSize:12,color:COLORS.muted,lineHeight:1.7,marginBottom:16}}>
+                Processed within 2–3 business days.
               </div>
               <div style={{display:"flex",gap:10}}>
                 <Btn onClick={()=>setShowPayout(false)} variant="ghost" style={{flex:1}}>Cancel</Btn>
-                <Btn onClick={()=>setPayoutSent(true)} variant="green" style={{flex:1}}>Confirm</Btn>
+                <Btn onClick={async () => {
+                  const requestedAmt = cashoutAmt ? Number(cashoutAmt) : availableUSD;
+                  if (requestedAmt < 20) return;
+                  const token = localStorage.getItem("steamr_token");
+                  const r = await fetch("/api/user-profile", {
+                    method:"POST",
+                    headers:{"x-auth-token":token,"Content-Type":"application/json"},
+                    body:JSON.stringify({token,action:"payout-request",amountUSD:requestedAmt}),
+                  });
+                  const data = await r.json();
+                  if (data.ok) {
+                    setPayoutSent(true);
+                    // Refresh activity
+                    fetch("/api/user-profile",{headers:{"x-auth-token":token}})
+                      .then(r2=>r2.json()).then(d2=>{if(d2.ok)setActivity(d2.activity);}).catch(()=>{});
+                  }
+                }} variant="green" style={{flex:1}}>Confirm</Btn>
               </div>
             </>) : (<>
               <div style={{textAlign:"center",padding:"16px 0"}}>
                 <div style={{fontSize:48,marginBottom:12}}>✅</div>
                 <h3 style={{margin:"0 0 8px",color:COLORS.green}}>Payout Requested!</h3>
-                <p style={{color:COLORS.muted,fontSize:13,marginBottom:20}}>Your ${fmtUSD(pending)} payout will arrive within 2–3 business days.</p>
-                <Btn onClick={()=>{setShowPayout(false);setPayoutSent(false);}} style={{width:"100%"}}>Done</Btn>
+                <p style={{color:COLORS.muted,fontSize:13,marginBottom:20}}>
+                  Your payout will arrive within 2–3 business days.
+                </p>
+                <Btn onClick={()=>{setShowPayout(false);setPayoutSent(false);setCashoutAmt("");}} style={{width:"100%"}}>Done</Btn>
               </div>
             </>)}
           </Card>
