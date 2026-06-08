@@ -159,7 +159,8 @@ export default async function handler(req, res) {
           verifiedAt:      account.verifiedAt   || null,
           kycStatus:       account.kycStatus    || null,
           following:       account.following    || [],
-          streamerProfile: account.streamerProfile || null,
+          streamerProfile:   account.streamerProfile   || null,
+          streamerSchedule:  account.streamerSchedule  || [],
         },
         activity: {
           // Viewer fields
@@ -359,6 +360,20 @@ export default async function handler(req, res) {
         ].slice(0, 100);
 
         await kvCommand("SET", activityKey, JSON.stringify(activity));
+        return res.status(200).json({ ok: true });
+      }
+
+      // ── Schedule update ─────────────────────────────────────────────────
+      if (action === "schedule-update") {
+        account.streamerSchedule = (req.body.schedule || []).map((slot, i) => ({
+          id:        slot.id        || `slot_${Date.now()}_${i}`,
+          day:       Number(slot.day)       || 0,
+          startHour: Number(slot.startHour) || 20,
+          duration:  Number(slot.duration)  || 2,
+          title:     String(slot.title     || "My Stream").slice(0, 80),
+          color:     String(slot.color     || "#ff2d55").slice(0, 10),
+        }));
+        await kvCommand("SET", accountKey, JSON.stringify(account));
         return res.status(200).json({ ok: true });
       }
 
