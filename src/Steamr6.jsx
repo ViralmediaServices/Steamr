@@ -3400,13 +3400,15 @@ function GoLiveScreen({ onNavigate, addToast, addNotification }) {
     } catch (_) {}
   };
 
-  // ── Re-attach stream if video element remounts ────────────────────────────
+  // ── Attach stream to video element only when permission is granted ──────────
   useEffect(() => {
     if (permStatus === "granted" && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
+      if (videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
+      }
     }
-  });
+  }, [permStatus]);
 
   // ── Request camera + mic access ───────────────────────────────────────────
   const requestCamera = async (facingOverride) => {
