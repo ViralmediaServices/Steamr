@@ -4265,27 +4265,32 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     .then(r => r.json())
     .then(data => {
       if (data.ok) {
+        const sp = data.profile?.streamerProfile || {};
         setForm(f => ({
           ...f,
           displayName: data.profile.displayName || data.profile.name || f.displayName,
           username:    data.profile.username    || f.username,
-          region:      data.profile.streamerProfile?.region || f.region,
+          region:      sp.region      || f.region,
           avatarImg:   data.profile.avatarImg   || f.avatarImg,
-          bio:         data.profile.bio         || f.bio,
-          ...(data.profile.streamerProfile || {}),
-          tags:    data.profile.streamerProfile?.tags    || f.tags,
-          tipMenu: data.profile.streamerProfile?.tipMenu || f.tipMenu,
-          socialTwitter:   data.profile.streamerProfile?.socialLinks?.twitter   || f.socialTwitter,
-          socialInstagram: data.profile.streamerProfile?.socialLinks?.instagram || f.socialInstagram,
-          socialTikTok:    data.profile.streamerProfile?.socialLinks?.tiktok    || f.socialTikTok,
+          bio:         data.profile.bio !== undefined ? data.profile.bio : f.bio,
+          // Only overwrite bannerImg if API returns a real value — never clobber with null
+          ...(sp.bannerImg   ? { bannerImg:   sp.bannerImg   } : {}),
+          ...(sp.bannerColor ? { bannerColor: sp.bannerColor } : {}),
+          roomSubject: sp.roomSubject !== undefined ? sp.roomSubject : f.roomSubject,
+          welcomeMsg:  sp.welcomeMsg  !== undefined ? sp.welcomeMsg  : f.welcomeMsg,
+          tags:        sp.tags    || f.tags,
+          tipMenu:     sp.tipMenu || f.tipMenu,
+          socialTwitter:   sp.socialLinks?.twitter   || f.socialTwitter,
+          socialInstagram: sp.socialLinks?.instagram || f.socialInstagram,
+          socialTikTok:    sp.socialLinks?.tiktok    || f.socialTikTok,
         }));
         // Load wishlist separately (stored in streamerProfile)
-        if (Array.isArray(data.profile.streamerProfile?.wishlist)) {
-          setWishlist(data.profile.streamerProfile.wishlist.map(i => ({...i})));
+        if (Array.isArray(sp.wishlist)) {
+          setWishlist(sp.wishlist.map(i => ({...i})));
         }
         // Load geo-blocking settings
-        if (data.profile.streamerProfile?.geoBlocking) {
-          setGeoBlocking(data.profile.streamerProfile.geoBlocking);
+        if (sp.geoBlocking) {
+          setGeoBlocking(sp.geoBlocking);
         }
       }
     }).catch(() => {});
