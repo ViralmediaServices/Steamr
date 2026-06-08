@@ -484,54 +484,79 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
   const [hovered, setHovered] = useState(false);
   const thumbH = featured ? 185 : 155;
 
+  // Live → stream room, Offline → profile page
+  const handleCardClick = () => {
+    if (s.live && !s.isPrivate) onNavigate("stream-room");
+    else if (!s.live) onNavigate("profile", { streamerId: s.id });
+  };
+
+  const thumbBg = s.live
+    ? (s.bannerImg ? `url(${s.bannerImg}) center/cover no-repeat` : s.bannerColor || COLORS.surface)
+    : (s.bannerImg ? `url(${s.bannerImg}) center/cover no-repeat` : s.bannerColor || COLORS.surface);
+
   return (
     <div
-      onClick={() => s.live && !s.isPrivate && onNavigate("stream-room")}
+      onClick={handleCardClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         background: COLORS.card,
-        border: `1px solid ${hovered && s.live ? (s.isPrivate ? COLORS.gold : COLORS.accent) : COLORS.border}`,
+        border: `1px solid ${hovered ? (s.live ? (s.isPrivate ? COLORS.gold : COLORS.accent) : COLORS.muted) : COLORS.border}`,
         borderRadius: 13, overflow: "hidden",
-        cursor: s.live && !s.isPrivate ? "pointer" : "default",
-        transform: hovered && s.live ? "translateY(-4px)" : "none",
-        boxShadow: hovered && s.live ? `0 10px 28px ${COLORS.accent}22` : "none",
+        cursor: "pointer",
+        transform: hovered ? "translateY(-3px)" : "none",
+        boxShadow: hovered ? (s.live ? `0 10px 28px ${COLORS.accent}22` : `0 6px 18px #00000033`) : "none",
         transition: "all 0.2s",
       }}
     >
       {/* Thumbnail */}
-      <div style={{ height: thumbH, background: s.live ? s.preview : COLORS.surface, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ fontSize: featured ? 52 : 40, opacity: s.live ? 1 : 0.35 }}>{s.avatar}</span>
+      <div style={{ height: thumbH, background: thumbBg, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* Avatar — shown when no banner or live */}
+        {!s.bannerImg && (
+          <span style={{ fontSize: featured ? 52 : 40, opacity: s.live ? 1 : 0.5 }}>{s.avatarImg ? "" : (s.avatar || "🎭")}</span>
+        )}
+        {!s.bannerImg && s.avatarImg && (
+          <img src={s.avatarImg} alt={s.name} style={{ width: featured ? 72 : 56, height: featured ? 72 : 56, borderRadius: "50%", objectFit: "cover", opacity: s.live ? 1 : 0.6 }} />
+        )}
 
         {/* Top-left badges */}
         <div style={{ position: "absolute", top: 7, left: 7, display: "flex", flexDirection: "column", gap: 3 }}>
           {s.live && !s.isPrivate && <Pill color={COLORS.accent}>🔴 LIVE</Pill>}
           {s.isPrivate               && <Pill color={COLORS.gold}>🔒 PRIVATE</Pill>}
-          {!s.live                   && <Pill color={COLORS.muted}>OFFLINE</Pill>}
+          {!s.live                   && <Pill color="#666">OFFLINE</Pill>}
           {s.isNew                   && <Pill color={COLORS.accentC}>NEW</Pill>}
         </div>
 
-        {/* Viewer count — top right */}
+        {/* Viewer count — top right (live only) */}
         {s.live && (
           <div style={{ position: "absolute", top: 7, right: 7, background: "#00000088", borderRadius: 6, padding: "3px 8px", fontSize: 11, color: "#fff", fontWeight: 700 }}>
-            👁 {s.viewers.toLocaleString()}
+            👁 {(s.viewers || 0).toLocaleString()}
+          </div>
+        )}
+
+        {/* Follower count — top right (offline only) */}
+        {!s.live && (
+          <div style={{ position: "absolute", top: 7, right: 7, background: "#00000077", borderRadius: 6, padding: "3px 8px", fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>
+            ♡ {(s.followers || 0).toLocaleString()}
           </div>
         )}
 
         {/* Follow button — bottom right */}
-        <button
-          onClick={e => { e.stopPropagation(); onFollow(); }}
-          style={{
-            position: "absolute", bottom: 7, right: 7,
-            background: isFollowing ? COLORS.accent : "#00000077",
-            border: `1px solid ${isFollowing ? COLORS.accent : "#ffffff33"}`,
-            borderRadius: 7, padding: "4px 10px",
-            color: "#fff", fontSize: 16, cursor: "pointer",
-            transition: "all 0.18s",
-          }}
-        >
-          {isFollowing ? "♥" : "♡"}
-        </button>
+        {onFollow && (
+          <button
+            onClick={e => { e.stopPropagation(); onFollow(); }}
+            style={{
+              position: "absolute", bottom: 7, right: 7,
+              background: isFollowing ? COLORS.accent : "#00000077",
+              border: `1px solid ${isFollowing ? COLORS.accent : "#ffffff33"}`,
+              borderRadius: 7, padding: "4px 10px",
+              color: "#fff", fontSize: 16, cursor: "pointer",
+              transition: "all 0.18s",
+            }}
+          >
+            {isFollowing ? "♥" : "♡"}
+          </button>
+        )}
 
         {/* Spy overlay on private hover */}
         {s.isPrivate && hovered && (
@@ -549,10 +574,10 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
           </div>
         )}
 
-        {/* Offline overlay */}
+        {/* Offline — dim overlay, click to view profile */}
         {!s.live && (
-          <div style={{ position: "absolute", inset: 0, background: "#00000066", display: "flex", alignItems: "flex-end", padding: "8px 10px" }}>
-            <span style={{ fontSize: 11, color: COLORS.muted }}>Was live 2h ago</span>
+          <div style={{ position: "absolute", inset: 0, background: "#00000055", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: 600, letterSpacing: 0.5, background: "#00000077", padding: "4px 10px", borderRadius: 6 }}>View Profile →</div>
           </div>
         )}
       </div>
@@ -1168,11 +1193,11 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
   const [activeTag,  setActiveTag]  = useState("");
   const [showSugg,   setShowSugg]   = useState(false);
 
-  // ── Fetch real live streamers from API ────────────────────────────────────
+  // ── Fetch all streamers (live + offline) from API ────────────────────────────
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
     const headers = token ? { "x-auth-token": token } : {};
-    fetch("/api/user-profile?live=true", { headers })
+    fetch("/api/user-profile?all=true", { headers })
       .then(r => r.json())
       .then(data => {
         if (data.ok) setStreamers(data.streamers || []);
@@ -1198,7 +1223,8 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
 
   const featured  = sort === "featured" ? results.slice(0,3) : [];
   const grid      = sort === "featured" ? results.slice(3)   : results;
-  const liveCount = streamers.filter(s => s.live).length;
+  const liveCount  = streamers.filter(s => s.live).length;
+  const totalCount = streamers.length;
   const justLive  = streamers.filter(s => s.live && s.isNew);
 
   // ── Search suggestions ────────────────────────────────────────────────────
@@ -1375,9 +1401,9 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
       {!loading && !fetchErr && streamers.length === 0 && (
         <div style={{ textAlign:"center", padding:"80px 24px" }}>
           <div style={{ fontSize:64, marginBottom:16 }}>📡</div>
-          <h3 style={{ margin:"0 0 8px", fontSize:20 }}>No live streams right now</h3>
+          <h3 style={{ margin:"0 0 8px", fontSize:20 }}>No streamers yet</h3>
           <p style={{ color:COLORS.muted, fontSize:14, marginBottom:20, lineHeight:1.7 }}>
-            No one is streaming yet — check back soon, or be the first to go live!
+            No streamer accounts have been created yet — check back soon!
           </p>
           <Btn onClick={() => onNavigate("streamer-dashboard")}>🔴 Go Live</Btn>
         </div>
