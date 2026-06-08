@@ -4071,17 +4071,26 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           </Card>
 
           {/* Social links */}
-          {Object.keys(profile.socialLinks).length > 0 && (
+          {Object.keys(profile.socialLinks || {}).length > 0 && (
             <Card style={{ marginBottom:16 }}>
               <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Social</div>
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {Object.entries(profile.socialLinks).map(([platform, handle]) => {
+                {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
                   const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
+                  const cleanHandle = handle.replace(/^@/, "");
+                  const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
+                            : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
+                            : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
+                            : handle;
                   return (
-                    <div key={platform} style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>
+                    <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
+                      style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+                      onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+                    >
                       <span>{icon}</span>
-                      <span style={{ color:COLORS.text, fontWeight:600 }}>{handle}</span>
-                    </div>
+                      <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
+                    </a>
                   );
                 })}
               </div>
