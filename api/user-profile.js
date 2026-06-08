@@ -44,7 +44,62 @@ function monthKey(date) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+// ── Viewer count helpers (sorted-set based, 45s TTL per viewer) ───────────────
+const VIEWER_TTL_MS  = 45_000;
+const VIEWER_KEY_EXP = 120;
+
+async function viewerCount_get(streamId) {
+  const key = `viewers:${streamId}`;
+  const now = Date.now();
+  await kvCommand("ZREMRANGEBYSCORE", key, 0, now - VIEWER_TTL_MS);
+  const { result } = await kvCommand("ZCARD", key);
+  return Number(result) || 0;
+}
+
+async function viewerCount_heartbeat(streamId, sessionId) {
+  const key = `viewers:${streamId}`;
+  const now = Date.now();
+  await kvCommand("ZREMRANGEBYSCORE", key, 0, now - VIEWER_TTL_MS);
+  await kvCommand("ZADD", key, now, sessionId);
+  await kvCommand("EXPIRE", key, VIEWER_KEY_EXP);
+  const { result } = await kvCommand("ZCARD", key);
+  return Number(result) || 0;
+}
+
+async function viewerCount_leave(streamId, sessionId) {
+  const key = `viewers:${streamId}`;
+  await kvCommand("ZREM", key, sessionId);
+  const now = Date.now();
+  await kvCommand("ZREMRANGEBYSCORE", key, 0, now - VIEWER_TTL_MS);
+  const { result } = await kvCommand("ZCARD", key);
+  return Number(result) || 0;
+}
+
 export default async function handler(req, res) {
+  // ── Viewer count — no auth needed ─────────────────────────────────────────
+  const streamId = req.query?.streamId;
+  if (streamId) {
+    try {
+      if (req.method === "GET") {
+        const count = await viewerCount_get(streamId);
+        return res.status(200).json({ ok: true, count });
+      }
+      if (req.method === "POST" && req.body?.action === "viewer-heartbeat") {
+        const { sessionId } = req.body;
+        if (!sessionId) return res.status(400).json({ error: "sessionId required" });
+        const count = await viewerCount_heartbeat(streamId, sessionId);
+        return res.status(200).json({ ok: true, count });
+      }
+      if (req.method === "DELETE") {
+        const { sessionId } = req.body || {};
+        const count = sessionId ? await viewerCount_leave(streamId, sessionId) : 0;
+        return res.status(200).json({ ok: true, count });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const token = req.headers["x-auth-token"] || req.query?.token || req.body?.token;
   if (!token) return res.status(401).json({ error: "No token provided" });
 
