@@ -594,7 +594,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
 
         {/* Tags */}
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
-          {s.tags.slice(0, 3).map(tag => (
+          {(s.tags||[]).slice(0, 3).map(tag => (
             <span key={tag} style={{ fontSize: 10, color: COLORS.muted, background: COLORS.surface, borderRadius: 4, padding: "1px 5px" }}>#{tag}</span>
           ))}
         </div>
@@ -602,7 +602,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
         {/* Goal bar or token count */}
         {s.goal
           ? <GoalBar goal={s.goal} />
-          : <div style={{ fontSize: 11, color: COLORS.gold }}>🪙 {s.tokens.toLocaleString()} earned today</div>
+          : <div style={{ fontSize: 11, color: COLORS.gold }}>🪙 {(s.tokens||0).toLocaleString()} earned today</div>
         }
       </div>
     </div>
@@ -4156,8 +4156,8 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
                     <div>
                       <div style={{ fontWeight:700, fontSize:13, marginBottom:5 }}>{s.title}</div>
                       <div style={{ display:"flex", gap:14, fontSize:12, color:COLORS.muted }}>
-                        <span>👁 {s.viewers.toLocaleString()}</span>
-                        <span>🪙 {s.tokens.toLocaleString()}</span>
+                        <span>👁 {(s.viewers||0).toLocaleString()}</span>
+                        <span>🪙 {(s.tokens||0).toLocaleString()}</span>
                         <span>⏱ {s.duration}</span>
                       </div>
                     </div>
@@ -6079,7 +6079,7 @@ function DiscoveryScreen({ onNavigate }) {
                     <div style={{ fontSize:28, marginBottom:8 }}>{s.avatar}</div>
                     <div style={{ fontWeight:700, fontSize:14 }}>{s.name}</div>
                     <div style={{ fontSize:12, color:COLORS.muted, marginBottom:6 }}>{s.category}</div>
-                    {s.live&&<Pill color={COLORS.accent} style={{ fontSize:9 }}>🔴 LIVE · {s.viewers.toLocaleString()}</Pill>}
+                    {s.live&&<Pill color={COLORS.accent} style={{ fontSize:9 }}>🔴 LIVE · {(s.viewers||0).toLocaleString()}</Pill>}
                   </div>
                 ))}
               </div>
@@ -6146,7 +6146,7 @@ function DiscoveryScreen({ onNavigate }) {
                           <div style={{ position:"absolute", top:4, left:4 }}><Pill color={COLORS.accent} style={{ fontSize:8 }}>🔴 LIVE</Pill></div>
                         </div>
                         <div style={{ fontWeight:700, fontSize:13 }}>{s.name}</div>
-                        <div style={{ fontSize:11, color:COLORS.muted }}>👁 {s.viewers.toLocaleString()}</div>
+                        <div style={{ fontSize:11, color:COLORS.muted }}>👁 {(s.viewers||0).toLocaleString()}</div>
                       </div>
                     ))}
                   </div>
