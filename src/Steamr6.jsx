@@ -486,7 +486,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
 
   // Live → stream room, Offline → profile page
   const handleCardClick = () => {
-    if (s.live && !s.isPrivate) onNavigate("stream-room");
+    if (s.live && !s.isPrivate) onNavigate("stream-room", { streamerId: s.id });
     else if (!s.live) onNavigate("profile", { streamerId: s.id });
   };
 
@@ -561,7 +561,7 @@ function StreamCard({ streamer: s, onNavigate, isFollowing, onFollow, featured =
         {/* Spy overlay on private hover */}
         {s.isPrivate && hovered && (
           <div
-            onClick={e => { e.stopPropagation(); onNavigate("stream-room"); }}
+            onClick={e => { e.stopPropagation(); onNavigate("stream-room", { streamerId: s.id }); }}
             style={{
               position: "absolute", inset: 0, background: "#00000099",
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -1156,18 +1156,18 @@ const MIC_DEVICES = [
 
 // ── DISCOVERY DATA ────────────────────────────────────────────────────────────
 const DISCOVERY_CATS = [
-  {name:"Female",   icon:"🌸",gradient:"linear-gradient(135deg,#ff2d55,#c0163a)", count:6240,hot:true},
-  {name:"Male",     icon:"⚡",gradient:"linear-gradient(135deg,#4a9edd,#2d6ea8)", count:3180},
-  {name:"Couples",  icon:"💑",gradient:"linear-gradient(135deg,#00e5a0,#00966a)", count:1840},
-  {name:"Trans",    icon:"🦋",gradient:"linear-gradient(135deg,#b06fd8,#7040a8)", count:920},
-  {name:"Gaming",   icon:"🎮",gradient:"linear-gradient(135deg,#6c5ce7,#4a3ea8)", count:2100,hot:true},
-  {name:"Music",    icon:"🎵",gradient:"linear-gradient(135deg,#fd79a8,#c0163a)", count:1560},
-  {name:"Fitness",  icon:"💪",gradient:"linear-gradient(135deg,#e17055,#c0392b)", count:840},
-  {name:"Art",      icon:"🎨",gradient:"linear-gradient(135deg,#00b894,#007a60)", count:720},
-  {name:"Cooking",  icon:"🍳",gradient:"linear-gradient(135deg,#fdcb6e,#e17055)", count:480},
-  {name:"Comedy",   icon:"😂",gradient:"linear-gradient(135deg,#a29bfe,#6c5ce7)", count:390},
-  {name:"ASMR",     icon:"🎙️",gradient:"linear-gradient(135deg,#74b9ff,#0984e3)", count:1240,hot:true},
-  {name:"Wellness", icon:"🧘",gradient:"linear-gradient(135deg,#55efc4,#00b894)", count:560},
+  {name:"Female",   icon:"🌸",gradient:"linear-gradient(135deg,#ff2d55,#c0163a)", hot:true},
+  {name:"Male",     icon:"⚡",gradient:"linear-gradient(135deg,#4a9edd,#2d6ea8)"},
+  {name:"Couples",  icon:"💑",gradient:"linear-gradient(135deg,#00e5a0,#00966a)"},
+  {name:"Trans",    icon:"🦋",gradient:"linear-gradient(135deg,#b06fd8,#7040a8)"},
+  {name:"Gaming",   icon:"🎮",gradient:"linear-gradient(135deg,#6c5ce7,#4a3ea8)", hot:true},
+  {name:"Music",    icon:"🎵",gradient:"linear-gradient(135deg,#fd79a8,#c0163a)"},
+  {name:"Fitness",  icon:"💪",gradient:"linear-gradient(135deg,#e17055,#c0392b)"},
+  {name:"Art",      icon:"🎨",gradient:"linear-gradient(135deg,#00b894,#007a60)"},
+  {name:"Cooking",  icon:"🍳",gradient:"linear-gradient(135deg,#fdcb6e,#e17055)"},
+  {name:"Comedy",   icon:"😂",gradient:"linear-gradient(135deg,#a29bfe,#6c5ce7)"},
+  {name:"ASMR",     icon:"🎙️",gradient:"linear-gradient(135deg,#74b9ff,#0984e3)", hot:true},
+  {name:"Wellness", icon:"🧘",gradient:"linear-gradient(135deg,#55efc4,#00b894)"},
 ];
 const DISCOVERY_TAGS = [
   {tag:"lovense",count:4820,hot:true},{tag:"interactive",count:3910,hot:true},{tag:"new",count:2100,hot:true},
@@ -1375,7 +1375,7 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
           </div>
           <div style={{ display:"flex", gap:12, overflowX:"auto", paddingBottom:6 }}>
             {justLive.map(s => (
-              <div key={s.id} onClick={() => onNavigate("stream-room")} style={{ cursor:"pointer", flexShrink:0, width:128 }}>
+              <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId: s.id })} style={{ cursor:"pointer", flexShrink:0, width:128 }}>
                 <div style={{ width:128, height:72, background:s.preview, borderRadius:10, border:`2px solid ${COLORS.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, marginBottom:6, position:"relative" }}>
                   {s.avatar}
                   <div style={{ position:"absolute", top:5, left:5, background:COLORS.accent, color:"#fff", fontSize:8, fontWeight:800, borderRadius:4, padding:"2px 6px", letterSpacing:0.5 }}>NEW</div>
@@ -2347,7 +2347,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
                         style={{ flex:1,padding:"8px",background:COLORS.card,border:`1px solid ${COLORS.border}`,borderRadius:8,color:COLORS.text,cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Keep Subscription
                       </button>
-                      <button onClick={() => { onCancelSub && onCancelSub(Number(id)); setConfirmId(null); }}
+                      <button onClick={() => { onCancelSub && onCancelSub(id); setConfirmId(null); }}
                         style={{ flex:1,padding:"8px",background:"#ff4444",border:"none",borderRadius:8,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700 }}>
                         Yes, Cancel
                       </button>
@@ -3957,7 +3957,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     tipMenu: [], wishlist: [], streamHistory: [], subscriptionTiers: SUBSCRIPTION_TIERS,
   });
 
-  const isLiveNow = isOwnProfile ? isStreamerLive : false; // real live status from API if needed
+  const isLiveNow = isOwnProfile ? isStreamerLive : false;
   const isFollowing = following.has(profile.id);
   const currentSub  = subscriptions[profile.id] || null;
   const [showModal, setShowModal] = useState(false);
@@ -3974,10 +3974,13 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       .catch(() => {});
   }, [isOwnProfile]);
 
-  // Own profile → real count from API; other profiles → profile data (static for now)
-  const displayFollowers = isOwnProfile
-    ? (realFollowers ?? profile.followers ?? 0)
-    : (profile.followers ?? 0);
+  // Optimistic follower count — updates immediately on follow/unfollow click
+  const [localFollowers, setLocalFollowers] = useState(null);
+  // Reset whenever profile changes (new streamer loaded)
+  useEffect(() => { setLocalFollowers(null); }, [streamerId]);
+
+  const baseFollowers  = isOwnProfile ? (realFollowers ?? profile.followers ?? 0) : (profile.followers ?? 0);
+  const displayFollowers = localFollowers ?? baseFollowers;
 
   const backScreen = isOwnProfile ? "streamer-dashboard" : "viewer-browse";
 
@@ -4024,10 +4027,17 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           ) : (
             <>
               {isLiveNow && (
-                <Btn onClick={() => onNavigate("stream-room")} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
+                <Btn onClick={() => onNavigate("stream-room", { streamerId })} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
               )}
               <Btn
-                onClick={() => onFollow(profile.id, profile.email)}
+                onClick={() => {
+                  const nowFollowing = !isFollowing;
+                  onFollow(profile.id, profile.email, profile.name);
+                  setLocalFollowers(f => {
+                    const base = f ?? baseFollowers;
+                    return nowFollowing ? base + 1 : Math.max(0, base - 1);
+                  });
+                }}
                 variant={isFollowing ? "ghost" : "secondary"}
                 style={{ fontSize:13, padding:"8px 18px" }}
               >
@@ -4096,30 +4106,38 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             </div>
           </Card>
 
-          {/* Social links */}
-          {Object.keys(profile.socialLinks || {}).length > 0 && (
+          {/* Social links — always show on own profile; on public only if links exist */}
+          {(isOwnProfile || Object.keys(profile.socialLinks || {}).length > 0) && (
             <Card style={{ marginBottom:16 }}>
               <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Social</div>
-              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
-                  const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
-                  const cleanHandle = handle.replace(/^@/, "");
-                  const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
-                            : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
-                            : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
-                            : handle;
-                  return (
-                    <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
-                      style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
-                      onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
-                      onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
-                    >
-                      <span>{icon}</span>
-                      <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
-                    </a>
-                  );
-                })}
-              </div>
+              {Object.keys(profile.socialLinks || {}).length > 0 ? (
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
+                    if (!handle) return null;
+                    const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
+                    const cleanHandle = handle.replace(/^@/, "");
+                    const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
+                              : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
+                              : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
+                              : handle;
+                    return (
+                      <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
+                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+                      >
+                        <span>{icon}</span>
+                        <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ color:COLORS.muted, fontSize:13 }}>
+                  No social links added yet —{" "}
+                  <span onClick={() => onNavigate("edit-profile")} style={{ color:COLORS.accent, cursor:"pointer", fontWeight:600 }}>add them in Edit Profile</span>
+                </div>
+              )}
             </Card>
           )}
 
@@ -6072,7 +6090,7 @@ function DiscoveryScreen({ onNavigate }) {
             ) : (
               <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(180px,1fr))", gap:12 }}>
                 {filteredStreamers.map(s => (
-                  <div key={s.id} onClick={() => s.live?onNavigate("stream-room"):onNavigate("profile",{streamerId:s.id})}
+                  <div key={s.id} onClick={() => s.live?onNavigate("stream-room",{streamerId:s.id}):onNavigate("profile",{streamerId:s.id})}
                     style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12, padding:14, cursor:"pointer", transition:"all 0.2s" }}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=COLORS.accent;e.currentTarget.style.transform="translateY(-2px)"}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=COLORS.border;e.currentTarget.style.transform="none"}}>
@@ -6135,7 +6153,7 @@ function DiscoveryScreen({ onNavigate }) {
                   </div>
                   <div style={{ display:"flex", gap:10, overflowX:"auto" }}>
                     {fs.map(s => (
-                      <div key={s.id} onClick={() => onNavigate("stream-room")}
+                      <div key={s.id} onClick={() => onNavigate("stream-room", { streamerId: s.id })}
                         style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12,
                           padding:12, cursor:"pointer", flexShrink:0, width:140, transition:"all 0.2s" }}
                         onMouseEnter={e=>e.currentTarget.style.borderColor=COLORS.accent}
@@ -7479,7 +7497,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 350, following, subs
                   const displayName = profile?.displayName || profile?.name || sub.streamerName || "Streamer";
                   const avatarImg   = profile?.avatarImg || null;
                   return (
-                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId:Number(id) })}
+                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId: id })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
