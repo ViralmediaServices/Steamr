@@ -188,7 +188,7 @@ export default async function handler(req, res) {
 
       // ── Stream end — save real duration + tokens earned ──────────────────
       if (action === "stream-end") {
-        const { durationSecs = 0, tokensEarned = 0 } = req.body;
+        const { durationSecs = 0, tokensEarned = 0, peakViewers = 0 } = req.body;
         const actResult  = (await kvCommand("GET", activityKey)).result;
         const activity   = parse(actResult) || {};
 
@@ -207,6 +207,11 @@ export default async function handler(req, res) {
           activity.dailyEarnings.unshift({ day: todayStr, tokens: tokensEarned });
         }
         activity.dailyEarnings = activity.dailyEarnings.slice(0, 60); // keep 60 days
+
+        // Update all-time peak viewers
+        if (peakViewers > (activity.peakViewers || 0)) {
+          activity.peakViewers = peakViewers;
+        }
 
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
