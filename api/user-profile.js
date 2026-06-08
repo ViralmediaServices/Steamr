@@ -179,6 +179,9 @@ export default async function handler(req, res) {
           allTimeTokens:  daily.reduce((s, d) => s + (d.tokens || 0), 0),
           availableTokens: activity.availableTokens || 0,
           dailyEarnings:  daily.slice(0, 30),
+          // Live status — real-time flag set by stream-start / stream-end
+          isLive:         activity.isLive         || false,
+          liveStartedAt:  activity.liveStartedAt  || null,
           // Streamer stats
           totalStreams:   activity.totalStreams   || 0,
           hoursStreamed:  activity.hoursStreamed  || 0,
@@ -237,10 +240,12 @@ export default async function handler(req, res) {
       if (action === "stream-start") {
         const actResult = (await kvCommand("GET", activityKey)).result;
         const activity  = parse(actResult) || {};
-        activity.totalStreams       = (activity.totalStreams || 0) + 1;
-        activity.lastStreamAt      = new Date().toISOString();
+        activity.totalStreams        = (activity.totalStreams || 0) + 1;
+        activity.lastStreamAt       = new Date().toISOString();
         activity.currentStreamTitle = req.body.streamTitle || "Untitled Stream";
         activity.currentStreamStart = new Date().toISOString();
+        activity.isLive             = true;
+        activity.liveStartedAt      = new Date().toISOString();
         await kvCommand("SET", activityKey, JSON.stringify(activity));
         return res.status(200).json({ ok: true });
       }
@@ -292,7 +297,9 @@ export default async function handler(req, res) {
         });
         activity.streamHistory = activity.streamHistory.slice(0, 100); // keep last 100 streams
 
-        // Clear current stream tracking fields
+        // Clear live status and stream tracking fields
+        activity.isLive = false;
+        delete activity.liveStartedAt;
         delete activity.currentStreamTitle;
         delete activity.currentStreamStart;
 
