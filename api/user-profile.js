@@ -347,6 +347,28 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Agora RTC token — no auth needed ──────────────────────────────────────
+  // Called by GoLiveScreen (role=publisher) and StreamRoomScreen (role=subscriber).
+  // Returns a short-lived token so the client can join the Agora channel.
+  if (req.query?.action === "agora-token") {
+    try {
+      const { RtcTokenBuilder, RtcRole } = await import("agora-token");
+      const appId   = process.env.AGORA_APP_ID;
+      const appCert = process.env.AGORA_APP_CERT;
+      if (!appId || !appCert) {
+        return res.status(500).json({ error: "Agora credentials not configured" });
+      }
+      const channel = String(req.query.channel || "").slice(0, 64);
+      if (!channel) return res.status(400).json({ error: "channel required" });
+      const role = req.query.role === "publisher" ? RtcRole.PUBLISHER : RtcRole.SUBSCRIBER;
+      // buildTokenWithUid(appId, appCert, channel, uid, role, tokenExpirySecs, privilegeExpirySecs)
+      const token = RtcTokenBuilder.buildTokenWithUid(appId, appCert, channel, 0, role, 3600, 3600);
+      return res.status(200).json({ ok: true, token, appId });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const token = req.headers["x-auth-token"] || req.query?.token || req.body?.token;
   if (!token) return res.status(401).json({ error: "No token provided" });
 
