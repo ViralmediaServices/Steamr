@@ -4155,6 +4155,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           wishlist:    sp.wishlist   || [],
           subscriptionTiers: SUBSCRIPTION_TIERS,
           email:       p.email       || "",
+          isLive:      data.activity?.isLive || false,
         });
       }
     })
@@ -4168,10 +4169,58 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     tipMenu: [], wishlist: [], streamHistory: [], subscriptionTiers: SUBSCRIPTION_TIERS,
   });
 
-  const isLiveNow = isOwnProfile ? isStreamerLive : false;
+  const isLiveNow = isOwnProfile ? isStreamerLive : (fetchedProfile?.isLive || false);
   const isFollowing = following.has(profile.id);
   const currentSub  = subscriptions[profile.id] || null;
   const [showModal, setShowModal] = useState(false);
+
+  // ── Agora: embed live feed on profile when streamer is live ────────────────
+  const agoraClientRef     = useRef(null);
+  const [liveVideoActive, setLiveVideoActive] = useState(false);
+
+  useEffect(() => {
+    if (!isLiveNow || !profile.email || isOwnProfile) return;
+    let client = null;
+    let cancelled = false;
+
+    const joinChannel = async () => {
+      try {
+        const AgoraRTC = await loadAgora();
+        client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        agoraClientRef.current = client;
+        await client.setClientRole("audience");
+        const { token, appId } = await getAgoraToken(profile.email, "subscriber");
+        await client.join(appId, profile.email, token, 0);
+
+        client.on("user-published", async (user, mediaType) => {
+          if (cancelled) return;
+          await client.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            setTimeout(() => {
+              if (!cancelled && user.videoTrack) {
+                user.videoTrack.play("agora-profile-vid");
+                setLiveVideoActive(true);
+              }
+            }, 100);
+          }
+          if (mediaType === "audio" && user.audioTrack) user.audioTrack.play();
+        });
+
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "video" && !cancelled) setLiveVideoActive(false);
+        });
+        client.on("user-left", () => { if (!cancelled) setLiveVideoActive(false); });
+      } catch { /* video unavailable — profile still renders */ }
+    };
+
+    joinChannel();
+    return () => {
+      cancelled = true;
+      setLiveVideoActive(false);
+      if (client) client.leave().catch(() => {});
+      agoraClientRef.current = null;
+    };
+  }, [isLiveNow, profile.email, isOwnProfile]);
 
   // Real-time follower count — fetched fresh from API when viewing own profile
   const [realFollowers, setRealFollowers] = useState(null);
@@ -4198,15 +4247,37 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
   return (
     <div style={{ maxWidth: 980, margin: "0 auto", paddingBottom: 60 }}>
 
-      {/* ── Banner ── */}
+      {/* ── Banner / Live Feed ── */}
       <div style={{
-        height: isMobile?230:210,
-        background: profile.bannerImg
-          ? `url(${profile.bannerImg}) center/cover no-repeat`
-          : `linear-gradient(135deg, ${profile.bannerColor} 0%, ${profile.bannerColor}bb 100%)`,
+        height: isLiveNow ? (isMobile?280:450) : (isMobile?230:210),
+        background: isLiveNow
+          ? "#0a0a1a"
+          : (profile.bannerImg
+              ? `url(${profile.bannerImg}) center/cover no-repeat`
+              : `linear-gradient(135deg, ${profile.bannerColor} 0%, ${profile.bannerColor}bb 100%)`),
         position: "relative",
         marginBottom: 56,
+        overflow: "hidden",
+        transition: "height 0.3s ease",
       }}>
+
+        {/* Live video feed */}
+        {isLiveNow && !isOwnProfile && (
+          <>
+            <div id="agora-profile-vid" style={{ position:"absolute", inset:0, zIndex:0 }} />
+            {!liveVideoActive && (
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", zIndex:1 }}>
+                <div style={{ fontSize:36, marginBottom:8, animation:"pulse 1.4s ease-in-out infinite" }}>📡</div>
+                <div style={{ color:"#ffffff99", fontSize:13 }}>Connecting to live feed…</div>
+              </div>
+            )}
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom,rgba(0,0,0,0.35) 0%,transparent 35%,transparent 55%,rgba(0,0,0,0.6) 100%)", zIndex:2 }} />
+            <button
+              onClick={() => onNavigate("stream-room")}
+              style={{ position:"absolute", bottom:68, right:isMobile?12:20, zIndex:10, background:COLORS.accent, border:"none", borderRadius:10, color:"#fff", fontSize:13, fontWeight:800, padding:"10px 18px", cursor:"pointer", boxShadow:"0 2px 12px #00000055" }}
+            >↗ Enter Stream Room</button>
+          </>
+        )}
         {/* Back button */}
         <button
           onClick={() => onNavigate(backScreen || "viewer-browse")}
@@ -4238,7 +4309,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
           ) : (
             <>
               {isLiveNow && (
-                <Btn onClick={() => onNavigate("stream-room")} style={{ fontSize:13, padding:"8px 16px" }}>🔴 Watch Live</Btn>
+                <Pill color={COLORS.accent}>🔴 LIVE</Pill>
               )}
               <Btn
                 onClick={() => {
