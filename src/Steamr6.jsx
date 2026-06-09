@@ -5990,130 +5990,6 @@ function ScheduleScreen({ onNavigate }) {
   );
 }
 // ── LEADERBOARD SCREEN ────────────────────────────────────────────────────────
-function LeaderboardScreen({ onNavigate }) {
-  const w = useWindowWidth(); const isMobile = w < 640;
-  const [period,  setPeriod]  = useState("today");
-  const [type,    setType]    = useState("tippers");
-  const [loading, setLoading] = useState(true);
-  const [data,    setData]    = useState([]);
-
-  useEffect(() => {
-    setLoading(true);
-    setData([]);
-    const token = localStorage.getItem("steamr_token");
-    fetch(`/api/leaderboard?type=${type}&period=${period}`, {
-      headers: token ? { "x-auth-token": token } : {},
-    })
-    .then(r => r.json())
-    .then(res => { if (res.ok) setData(res.entries || []); })
-    .catch(() => {})
-    .finally(() => setLoading(false));
-  }, [type, period]);
-
-  const PERIODS = [["today","Today"],["weekly","This Week"],["alltime","All Time"]];
-  const TYPES   = [["tippers","Top Tippers 🪙"],["streamers","Top Streamers 📡"]];
-  const medal = r => r===1?"🥇":r===2?"🥈":r===3?"🥉":"";
-  const maxVal = data[0]?.tokens || 1;
-
-  return (
-    <div style={{ maxWidth:640, margin:"0 auto", padding:isMobile?"16px":"24px 24px 48px" }}>
-      <h2 style={{ margin:"0 0 4px", fontSize:isMobile?20:24, fontWeight:900 }}>🏆 Leaderboard</h2>
-      <p style={{ color:COLORS.muted, fontSize:13, margin:"0 0 24px" }}>Top performers on Steamr</p>
-
-      <div style={{ display:"flex", background:COLORS.surface, borderRadius:10, padding:4, gap:4, marginBottom:16 }}>
-        {TYPES.map(([k,label]) => (
-          <button key={k} onClick={() => setType(k)}
-            style={{ flex:1, background:type===k?COLORS.card:"transparent",
-              border:type===k?`1px solid ${COLORS.border}`:"1px solid transparent",
-              color:type===k?COLORS.text:COLORS.muted, borderRadius:8, padding:"9px",
-              cursor:"pointer", fontWeight:type===k?700:400, fontSize:isMobile?12:13, transition:"all 0.2s" }}>{label}</button>
-        ))}
-      </div>
-
-      <div style={{ display:"flex", borderBottom:`1px solid ${COLORS.border}`, marginBottom:24 }}>
-        {PERIODS.map(([k,label]) => (
-          <button key={k} onClick={() => setPeriod(k)}
-            style={{ background:"none", border:"none", borderBottom:`2px solid ${period===k?COLORS.gold:"transparent"}`,
-              color:period===k?COLORS.gold:COLORS.muted, fontWeight:period===k?700:400,
-              padding:"8px 16px", cursor:"pointer", fontSize:13, marginBottom:-1, transition:"all 0.2s" }}>{label}</button>
-        ))}
-      </div>
-
-      {/* Skeleton */}
-      {loading && (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          {[...Array(6)].map((_,i) => (
-            <div key={i} style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:"13px 18px", display:"flex", alignItems:"center", gap:14 }}>
-              <SkeletonBox width={34} height={22} radius={4} />
-              <SkeletonBox width={42} height={42} radius={21} />
-              <div style={{ flex:1 }}>
-                <SkeletonBox height={14} width="50%" style={{ marginBottom:8 }} />
-                <SkeletonBox height={4} radius={2} />
-              </div>
-              <SkeletonBox width={70} height={20} radius={6} />
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display: loading ? "none" : "flex", flexDirection:"column", gap:10 }}>
-        {data.length === 0 && !loading ? (
-          <div style={{ textAlign:"center", padding:"60px 24px", color:COLORS.muted }}>
-            <div style={{ fontSize:48, marginBottom:16 }}>🏆</div>
-            <div style={{ fontWeight:700, fontSize:16, marginBottom:8, color:COLORS.text }}>No entries yet</div>
-            <div style={{ fontSize:13, marginBottom:24 }}>
-              {type === "tippers" ? "Be the first to tip a streamer!" : "Be the first to go live!"}
-            </div>
-            <Btn onClick={() => onNavigate(type==="tippers"?"viewer-browse":"go-live")} style={{ fontSize:13 }}>
-              {type==="tippers"?"Browse Streams":"🔴 Go Live Now"}
-            </Btn>
-          </div>
-        ) : data.map(entry => (
-          <div key={entry.rank}
-            style={{ background:entry.isYours?COLORS.accent+"18":entry.rank<=3?COLORS.gold+"0a":COLORS.card,
-              border:`1px solid ${entry.isYours?COLORS.accent+"66":entry.rank<=3?COLORS.gold+"33":COLORS.border}`,
-              borderRadius:14, padding:"13px 18px", transform:entry.rank===1?"scale(1.01)":"none", transition:"transform 0.2s" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-              <div style={{ width:34, textAlign:"center", flexShrink:0 }}>
-                {medal(entry.rank)?<span style={{ fontSize:22 }}>{medal(entry.rank)}</span>
-                  :<span style={{ fontSize:16, fontWeight:800, color:COLORS.muted }}>{entry.rank}</span>}
-              </div>
-              <div style={{ width:42, height:42, borderRadius:"50%", background:COLORS.surface,
-                display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>{entry.avatar}</div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                  <span style={{ fontWeight:700, fontSize:15 }}>{entry.name}</span>
-                  {entry.isYours&&<Pill color={COLORS.accent} style={{ fontSize:9 }}>You</Pill>}
-                </div>
-                <div style={{ background:COLORS.border, borderRadius:4, height:4, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${(entry.tokens/maxVal)*100}%`,
-                    background:entry.rank===1?`linear-gradient(90deg,${COLORS.gold},#ffd700)`:entry.rank===2?"linear-gradient(90deg,#c0c0c0,#aaa)":entry.rank===3?"linear-gradient(90deg,#cd7f32,#a05a20)":`linear-gradient(90deg,${COLORS.accent},${COLORS.accentC})`,
-                    transition:"width 0.8s ease", borderRadius:4 }} />
-                </div>
-              </div>
-              <div style={{ textAlign:"right", flexShrink:0 }}>
-                <div style={{ fontWeight:800, fontSize:16, color:entry.rank===1?COLORS.gold:COLORS.text }}>🪙 {entry.tokens.toLocaleString()}</div>
-                {type==="streamers"&&entry.viewers&&<div style={{ fontSize:11, color:COLORS.muted }}>👁 {entry.viewers.toLocaleString()}</div>}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {data.length > 0 && (
-      <div style={{ marginTop:28, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:14, padding:20, textAlign:"center" }}>
-        <p style={{ margin:"0 0 14px", color:COLORS.muted, fontSize:13 }}>
-          {type==="tippers"?"Tip more to climb the leaderboard and earn exclusive badges!":"Go live more to grow your fanbase and rank up!"}
-        </p>
-        <Btn onClick={() => onNavigate(type==="tippers"?"viewer-browse":"go-live")} style={{ fontSize:13 }}>
-          {type==="tippers"?"Browse Streams":"🔴 Go Live Now"}
-        </Btn>
-      </div>
-      )}
-    </div>
-  );
-}
-
 // ── DISCOVERY SCREEN ──────────────────────────────────────────────────────────
 function DiscoveryScreen({ onNavigate }) {
   const w = useWindowWidth(); const isMobile = w < 640;
@@ -8217,7 +8093,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
 
   // Use logged-in role to determine nav side — never rely on screen name alone
   const ALL_AUTHED = ["viewer-browse","stream-room","buy-tokens","kyc-viewer","fan-club",
-    "leaderboard","discovery","private-show","viewer-profile","ppv-content","gift-cards",
+    "discovery","private-show","viewer-profile","ppv-content","gift-cards",
     "search","notifications","viewer-dashboard","viewer-edit-profile","streamer-dashboard",
     "go-live","kyc-streamer","profile","edit-profile","settings","schedule","analytics","earnings","login"];
   // Derive role from localStorage directly as fallback if userRole prop is null
@@ -8246,7 +8122,6 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"Browse",          screen:"viewer-browse",   onClick:() => go("viewer-browse")    },
     { label:"🔍 Discover",    screen:"discovery",       onClick:() => go("discovery")         },
     { label:"👑 Fan Club",   screen:"fan-club",        onClick:() => go("fan-club")          },
-    { label:"🏆 Rankings",   screen:"leaderboard",     onClick:() => go("leaderboard")       },
     { label:"🪙 Buy Tokens", screen:"buy-tokens",      onClick:() => go("buy-tokens")        },
     { label:"🎬 Exclusive",  screen:"ppv-content",     onClick:() => go("ppv-content")       },
 
@@ -8325,7 +8200,6 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
           <Btn onClick={() => onNavigate("viewer-browse")} variant={screen==="viewer-browse"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Browse</Btn>
           <Btn onClick={() => onNavigate("discovery")} variant={screen==="discovery"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🔍 Discover</Btn>
           <Btn onClick={() => onNavigate("fan-club")} variant={screen==="fan-club"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👑 Fan Club</Btn>
-          <Btn onClick={() => onNavigate("leaderboard")} variant={screen==="leaderboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🏆</Btn>
           <Btn onClick={() => onNavigate("buy-tokens")} variant={screen==="buy-tokens"?"gold":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🪙 Tokens</Btn>
           <Btn onClick={() => onNavigate("ppv-content")} variant={screen==="ppv-content"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🎬</Btn>
         </>}
@@ -8394,7 +8268,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
 }
 
 // ── APP ───────────────────────────────────────────────────────────────────────
-const AUTHED = ["viewer-browse","stream-room","buy-tokens","streamer-dashboard","go-live","kyc-streamer","kyc-viewer","profile","edit-profile","settings","fan-club","private-show","schedule","leaderboard","discovery","analytics","viewer-profile","notifications","search","earnings","ppv-content","gift-cards","viewer-dashboard","viewer-edit-profile"];
+const AUTHED = ["viewer-browse","stream-room","buy-tokens","streamer-dashboard","go-live","kyc-streamer","kyc-viewer","profile","edit-profile","settings","fan-club","private-show","schedule","discovery","analytics","viewer-profile","notifications","search","earnings","ppv-content","gift-cards","viewer-dashboard","viewer-edit-profile"];
 
 export default function App() {
   const [screen, setScreen] = useState(() => {
@@ -8767,7 +8641,6 @@ export default function App() {
       case "fan-club":           return <FanClubFeed subscriptions={subscriptions} onNavigate={navigate} addToast={addToast} />;
       case "private-show":       return <PrivateShowScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} viewerTokens={viewerTokens} />;
       case "schedule":           return <ScheduleScreen onNavigate={navigate} />;
-      case "leaderboard":        return <LeaderboardScreen onNavigate={navigate} />;
       case "discovery":          return <DiscoveryScreen onNavigate={navigate} />;
       case "analytics":          return <AnalyticsScreen onNavigate={navigate} />;
       case "viewer-profile":       return <ViewerProfileScreen onNavigate={navigate} subscriptions={subscriptions} following={following} viewerTokens={viewerTokens} onCancelSub={onCancelSub} />;
