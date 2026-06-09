@@ -3484,6 +3484,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const agoraClientRef = useRef(null);
   const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
+  const [agoraError,  setAgoraError]  = useState("");
   const liveChatRef = useRef(null);
   const [liveMsgs, setLiveMsgs]   = useState([]);
 
@@ -3726,8 +3727,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       await client.publish(localTracksRef.current);
       setAgoraStatus("connected");
     } catch (agoraErr) {
+      const msg = agoraErr?.message || String(agoraErr);
       setAgoraStatus("failed");
-      console.error("Agora publish error:", agoraErr?.message || agoraErr);
+      setAgoraError(msg);
+      console.error("Agora publish error:", msg);
     }
   };
 
@@ -3756,6 +3759,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     stopStream();
     setStreaming(false);
     setAgoraStatus("idle");
+    setAgoraError("");
     onStreamingChange && onStreamingChange(false);
     setSeconds(0);
     setSessionTokens(0);
@@ -4107,7 +4111,16 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
           <div style={{ fontSize:12, flex:1 }}>
             {agoraStatus==="connected"  && <><span style={{ fontWeight:700, color:COLORS.green }}>📡 Live feed active</span><span style={{ color:COLORS.muted }}> — viewers can see your stream</span></>}
             {agoraStatus==="connecting" && <><span style={{ fontWeight:700, color:COLORS.gold }}>📡 Connecting viewers…</span></>}
-            {agoraStatus==="failed"     && <><span style={{ fontWeight:700, color:"#ff4444" }}>📡 Video relay failed</span><span style={{ color:COLORS.muted }}> — check Vercel env vars (AGORA_APP_ID / AGORA_APP_CERT)</span></>}
+            {agoraStatus==="failed"     && (
+              <div style={{ flex:1 }}>
+                <span style={{ fontWeight:700, color:"#ff4444" }}>📡 Video relay failed</span>
+                {agoraError && <div style={{ fontSize:11, color:"#ff6666", marginTop:2, wordBreak:"break-word" }}>{agoraError}</div>}
+                <button onClick={startStream}
+                  style={{ marginTop:6, background:"none", border:"1px solid #ff444488", borderRadius:6, color:"#ff6666", fontSize:11, padding:"3px 10px", cursor:"pointer", fontWeight:700 }}>
+                  ↻ Retry Connection
+                </button>
+              </div>
+            )}
             {agoraStatus==="idle"       && <span style={{ color:COLORS.muted }}>📡 Video relay not started</span>}
           </div>
         </div>
