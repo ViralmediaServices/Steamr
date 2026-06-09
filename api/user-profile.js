@@ -352,7 +352,8 @@ export default async function handler(req, res) {
   // Returns a short-lived token so the client can join the Agora channel.
   if (req.query?.action === "agora-token") {
     try {
-      const { RtcTokenBuilder, RtcRole } = await import("agora-token");
+      const _agoraToken   = await import("agora-token");
+      const { RtcTokenBuilder, RtcRole } = _agoraToken.default ?? _agoraToken;
       const appId   = process.env.AGORA_APP_ID;
       const appCert = process.env.AGORA_APP_CERT;
       if (!appId || !appCert) {
