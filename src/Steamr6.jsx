@@ -4360,14 +4360,13 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
               : `linear-gradient(135deg, ${profile.bannerColor} 0%, ${profile.bannerColor}bb 100%)`),
         position: "relative",
         marginBottom: 56,
-        overflow: "hidden",
         transition: "height 0.3s ease",
       }}>
 
         {/* Live video feed */}
         {isLiveNow && !isOwnProfile && (
           <>
-            <div id="agora-profile-vid" style={{ position:"absolute", inset:0, zIndex:0 }} />
+            <div id="agora-profile-vid" style={{ position:"absolute", inset:0, zIndex:0, overflow:"hidden", borderRadius:"inherit" }} />
             {!liveVideoActive && (
               <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", zIndex:1 }}>
                 <div style={{ fontSize:36, marginBottom:8, animation:"pulse 1.4s ease-in-out infinite" }}>📡</div>
