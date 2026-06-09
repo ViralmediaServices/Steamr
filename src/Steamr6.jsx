@@ -1997,46 +1997,79 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           <GoalBar goal={goal} large />
         </Card>
 
-        <Card>
-          {/* Streamer header */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:12, marginBottom:12 }}>
-            <div>
-              <h3
-                onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
-                style={{ margin:"0 0 6px", fontSize:20, fontWeight:800, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:8 }}
-              >
-                {streamerProfile?.name || streamerName}
-                <span style={{ fontSize:11, color:COLORS.muted, fontWeight:400 }}>👤 View profile</span>
-              </h3>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {streamerProfile?.category && <Pill color={CAT_COLOR[streamerProfile.category] || COLORS.accentB}>{streamerProfile.category}</Pill>}
+        <Card style={{ marginBottom:14 }}>
+          {/* ── Mini public profile ── */}
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+            {/* Avatar */}
+            <div onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
+              style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+                background:COLORS.card, border:`2px solid ${COLORS.border}`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:24, cursor:"pointer" }}>
+              {streamerProfile?.avatarImg
+                ? <img src={streamerProfile.avatarImg} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                : <span>{streamerProfile?.avatar || "🎭"}</span>}
+            </div>
+
+            {/* Name + category + tags */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                <h3
+                  onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
+                  style={{ margin:0, fontSize:17, fontWeight:800, cursor:"pointer", color:COLORS.text }}
+                >
+                  {streamerProfile?.name || streamerName}
+                </h3>
+                <Pill color={COLORS.accent}>🔴 LIVE</Pill>
+              </div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                {streamerProfile?.category && (
+                  <Pill color={CAT_COLOR[streamerProfile.category] || COLORS.accentB}>{streamerProfile.category}</Pill>
+                )}
                 {(streamerProfile?.tags || []).slice(0,3).map(tag => (
                   <span key={tag} style={{ fontSize:11, color:COLORS.muted, background:COLORS.surface, borderRadius:4, padding:"2px 6px" }}>#{tag}</span>
                 ))}
               </div>
             </div>
+
+            {/* Profile button */}
+            <button
+              onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
+              style={{ background:"none", border:`1px solid ${COLORS.border}`, borderRadius:8,
+                padding:"6px 11px", color:COLORS.muted, fontSize:11, cursor:"pointer", flexShrink:0 }}
+            >👤 Profile</button>
           </div>
 
           {/* Room subject */}
           {streamerProfile?.roomSubject && (
-            <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginBottom:14, padding:"8px 12px", background:COLORS.surface, borderRadius:8, lineHeight:1.5 }}>
-              {streamerProfile.roomSubject}
+            <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginBottom:10,
+              padding:"8px 12px", background:COLORS.surface, borderRadius:8, lineHeight:1.5 }}>
+              📢 {streamerProfile.roomSubject}
             </div>
           )}
 
-          {/* Tip menu from profile */}
-          {streamerProfile?.tipMenu?.length > 0 && (
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>💰 Tip Menu</div>
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              {streamerProfile.tipMenu.map((item, i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:COLORS.surface, borderRadius:7 }}>
-                  <span style={{ minWidth:46, fontSize:11, fontWeight:800, color:COLORS.gold, background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}33`, borderRadius:5, padding:"2px 5px", textAlign:"center" }}>🪙 {item.tokens}</span>
-                  <span style={{ fontSize:12, color:COLORS.muted, flex:1 }}>{item.action}</span>
-                </div>
-              ))}
+          {/* Welcome message */}
+          {streamerProfile?.welcomeMsg && (
+            <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10,
+              padding:"8px 12px", background:COLORS.accent+"0a", border:`1px solid ${COLORS.accent}22`,
+              borderRadius:8, lineHeight:1.5 }}>
+              👋 {streamerProfile.welcomeMsg}
             </div>
-          </div>
+          )}
+
+          {/* Tip menu */}
+          {streamerProfile?.tipMenu?.filter(t => t.action).length > 0 && (
+            <div>
+              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>💰 Tip Menu</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                {streamerProfile.tipMenu.filter(t => t.action).map((item, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 10px", background:COLORS.surface, borderRadius:7 }}>
+                    <span style={{ minWidth:46, fontSize:11, fontWeight:800, color:COLORS.gold, background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}33`, borderRadius:5, padding:"2px 5px", textAlign:"center" }}>🪙 {item.tokens}</span>
+                    <span style={{ fontSize:12, color:COLORS.muted, flex:1 }}>{item.action}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </Card>
       </div>
