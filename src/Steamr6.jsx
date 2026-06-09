@@ -1579,11 +1579,15 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           avatar:      p.avatarImg   || "🎭",
           avatarImg:   p.avatarImg   || null,
           category:    sp.category   || p.category || "Female",
-          tags:        sp.tags       || [],
-          roomSubject: sp.roomSubject|| "",
-          welcomeMsg:  sp.welcomeMsg || "",
-          tipMenu:     sp.tipMenu    || [],
-          email:       p.email       || "",
+          tags:        sp.tags        || [],
+          region:      sp.region      || "",
+          bio:         p.bio          || "",
+          socialLinks: sp.socialLinks || {},
+          roomSubject: sp.roomSubject || "",
+          welcomeMsg:  sp.welcomeMsg  || "",
+          tipMenu:     sp.tipMenu     || [],
+          followers:   data.activity?.followers || 0,
+          email:       p.email        || "",
         });
         setStreamerName(p.displayName || p.name || "Streamer");
         if (sp.goalLabel && sp.goalTarget) {
@@ -1998,49 +2002,54 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         </Card>
 
         <Card style={{ marginBottom:14 }}>
-          {/* ── Mini public profile ── */}
-          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
-            {/* Avatar */}
-            <div onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
-              style={{ width:52, height:52, borderRadius:"50%", overflow:"hidden", flexShrink:0,
-                background:COLORS.card, border:`2px solid ${COLORS.border}`,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:24, cursor:"pointer" }}>
+
+          {/* ── Avatar + name row ── */}
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+            <div style={{ width:56, height:56, borderRadius:"50%", overflow:"hidden", flexShrink:0,
+              background:COLORS.card, border:`2px solid ${COLORS.border}`,
+              display:"flex", alignItems:"center", justifyContent:"center", fontSize:26 }}>
               {streamerProfile?.avatarImg
                 ? <img src={streamerProfile.avatarImg} alt="avatar" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                 : <span>{streamerProfile?.avatar || "🎭"}</span>}
             </div>
-
-            {/* Name + category + tags */}
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
-                <h3
-                  onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
-                  style={{ margin:0, fontSize:17, fontWeight:800, cursor:"pointer", color:COLORS.text }}
-                >
+                <h3 style={{ margin:0, fontSize:17, fontWeight:800, color:COLORS.text }}>
                   {streamerProfile?.name || streamerName}
                 </h3>
                 <Pill color={COLORS.accent}>🔴 LIVE</Pill>
               </div>
-              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-                {streamerProfile?.category && (
-                  <Pill color={CAT_COLOR[streamerProfile.category] || COLORS.accentB}>{streamerProfile.category}</Pill>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                {streamerProfile?.followers > 0 && (
+                  <span style={{ fontSize:12, color:COLORS.muted }}>
+                    <strong style={{ color:COLORS.text }}>{(streamerProfile.followers).toLocaleString()}</strong> followers
+                  </span>
                 )}
-                {(streamerProfile?.tags || []).slice(0,3).map(tag => (
-                  <span key={tag} style={{ fontSize:11, color:COLORS.muted, background:COLORS.surface, borderRadius:4, padding:"2px 6px" }}>#{tag}</span>
-                ))}
+                {streamerProfile?.region && (
+                  <span style={{ fontSize:11, color:COLORS.muted }}>📍 {streamerProfile.region}</span>
+                )}
               </div>
             </div>
-
-            {/* Profile button */}
-            <button
-              onClick={() => onNavigate("profile", { streamerId: selectedStreamerId })}
-              style={{ background:"none", border:`1px solid ${COLORS.border}`, borderRadius:8,
-                padding:"6px 11px", color:COLORS.muted, fontSize:11, cursor:"pointer", flexShrink:0 }}
-            >👤 Profile</button>
           </div>
 
-          {/* Room subject */}
+          {/* ── Category + tags ── */}
+          <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:12 }}>
+            {streamerProfile?.category && (
+              <Pill color={CAT_COLOR[streamerProfile.category] || COLORS.accentB}>{streamerProfile.category}</Pill>
+            )}
+            {(streamerProfile?.tags || []).map(tag => (
+              <span key={tag} style={{ fontSize:11, color:COLORS.muted, background:COLORS.surface, borderRadius:4, padding:"2px 6px" }}>#{tag}</span>
+            ))}
+          </div>
+
+          {/* ── Bio ── */}
+          {streamerProfile?.bio && (
+            <p style={{ margin:"0 0 12px", fontSize:13, color:COLORS.muted, lineHeight:1.7 }}>
+              {streamerProfile.bio}
+            </p>
+          )}
+
+          {/* ── Room subject ── */}
           {streamerProfile?.roomSubject && (
             <div style={{ fontSize:12, color:COLORS.muted, fontStyle:"italic", marginBottom:10,
               padding:"8px 12px", background:COLORS.surface, borderRadius:8, lineHeight:1.5 }}>
@@ -2048,16 +2057,45 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             </div>
           )}
 
-          {/* Welcome message */}
+          {/* ── Welcome message ── */}
           {streamerProfile?.welcomeMsg && (
-            <div style={{ fontSize:12, color:COLORS.muted, marginBottom:10,
+            <div style={{ fontSize:12, color:COLORS.muted, marginBottom:12,
               padding:"8px 12px", background:COLORS.accent+"0a", border:`1px solid ${COLORS.accent}22`,
               borderRadius:8, lineHeight:1.5 }}>
               👋 {streamerProfile.welcomeMsg}
             </div>
           )}
 
-          {/* Tip menu */}
+          {/* ── Social links ── */}
+          {Object.keys(streamerProfile?.socialLinks || {}).some(k => streamerProfile.socialLinks[k]) && (
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:6 }}>Social</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[
+                  { key:"twitter",   icon:"𝕏",  label:"Twitter / X" },
+                  { key:"instagram", icon:"📷", label:"Instagram"   },
+                  { key:"tiktok",    icon:"🎵", label:"TikTok"      },
+                ].map(({ key, icon, label }) => {
+                  const handle = (streamerProfile.socialLinks || {})[key];
+                  if (!handle) return null;
+                  const clean = handle.replace(/^@/, "");
+                  const url = key === "twitter"   ? `https://twitter.com/${clean}`
+                            : key === "instagram" ? `https://instagram.com/${clean}`
+                            : `https://tiktok.com/@${clean}`;
+                  return (
+                    <a key={key} href={url} target="_blank" rel="noopener noreferrer"
+                      style={{ display:"flex", alignItems:"center", gap:5, background:COLORS.surface,
+                        border:`1px solid ${COLORS.border}`, borderRadius:7, padding:"5px 10px",
+                        textDecoration:"none", color:COLORS.text, fontSize:12 }}>
+                      <span>{icon}</span><span style={{ fontWeight:600 }}>@{clean}</span>
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Tip menu ── */}
           {streamerProfile?.tipMenu?.filter(t => t.action).length > 0 && (
             <div>
               <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:8 }}>💰 Tip Menu</div>
