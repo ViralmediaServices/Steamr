@@ -323,18 +323,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Public geo-block fetch — no auth needed ────────────────────────────────
-  const geoBlockId = req.query?.geoBlockId;
-  if (geoBlockId) {
-    try {
-      const { result } = await kvCommand("GET", `geo:block:${geoBlockId}`);
-      const geoBlocking = parse(result) || { enabled: false, blocked: [] };
-      return res.status(200).json({ ok: true, geoBlocking });
-    } catch {
-      return res.status(200).json({ ok: true, geoBlocking: { enabled: false, blocked: [] } });
-    }
-  }
-
   // ── Viewer count — no auth needed ─────────────────────────────────────────
   const streamId = req.query?.streamId;
   if (streamId) {
