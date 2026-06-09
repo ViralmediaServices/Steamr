@@ -8812,8 +8812,8 @@ export default function App() {
                   padding:"7px 10px",cursor:"pointer",color:COLORS.text,fontSize:16,lineHeight:1 }}>
                 {isDark?"☀️":"🌙"}
               </button>
-              <Btn onClick={() => navigate("signup-streamer")} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>Streamer Login</Btn>
-              <Btn onClick={() => navigate("signup-viewer")} style={{ fontSize:13,padding:"7px 16px" }}>Viewer Login</Btn>
+              <Btn onClick={() => navigate("login")} variant="ghost" style={{ fontSize:13,padding:"7px 16px" }}>Streamer Login</Btn>
+              <Btn onClick={() => navigate("login")} style={{ fontSize:13,padding:"7px 16px" }}>Viewer Login</Btn>
             </div>
           </div>
         )}
