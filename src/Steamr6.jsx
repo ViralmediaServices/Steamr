@@ -768,6 +768,7 @@ function ForgotPasswordScreen({ onNavigate }) {
   const [loading,  setLoading]  = useState(false);
   const [sent,     setSent]     = useState(false);
   const [error,    setError]    = useState("");
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const handleSubmit = () => {
     setError("");
@@ -788,13 +789,13 @@ function ForgotPasswordScreen({ onNavigate }) {
   };
 
   return (
-    <div style={{ maxWidth:420, margin:"0 auto", padding:"60px 24px" }}>
+    <div style={{ maxWidth:420, margin:"0 auto", padding:isMobile?"40px 16px":"60px 24px" }}>
       <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
         <SteamrLogo height={120} glow />
       </div>
 
       {!sent ? (<>
-        <h2 style={{ margin:"0 0 6px", fontSize:26, fontWeight:900, textAlign:"center" }}>Reset Password</h2>
+        <h2 style={{ margin:"0 0 6px", fontSize:isMobile?22:26, fontWeight:900, textAlign:"center" }}>Reset Password</h2>
         <p style={{ color:COLORS.muted, fontSize:14, textAlign:"center", marginBottom:32, lineHeight:1.6 }}>
           Enter the email address on your account and we'll send you a reset link.
         </p>
@@ -857,6 +858,7 @@ function ResetPasswordScreen({ resetToken, onNavigate }) {
   const [loading,   setLoading]   = useState(false);
   const [done,      setDone]      = useState(false);
   const [error,     setError]     = useState("");
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const handleReset = () => {
     setError("");
@@ -878,13 +880,13 @@ function ResetPasswordScreen({ resetToken, onNavigate }) {
   };
 
   return (
-    <div style={{ maxWidth:420, margin:"0 auto", padding:"60px 24px" }}>
+    <div style={{ maxWidth:420, margin:"0 auto", padding:isMobile?"40px 16px":"60px 24px" }}>
       <div style={{ display:"flex", justifyContent:"center", marginBottom:24 }}>
         <SteamrLogo height={120} glow />
       </div>
 
       {!done ? (<>
-        <h2 style={{ margin:"0 0 6px", fontSize:26, fontWeight:900, textAlign:"center" }}>Set New Password</h2>
+        <h2 style={{ margin:"0 0 6px", fontSize:isMobile?22:26, fontWeight:900, textAlign:"center" }}>Set New Password</h2>
         <p style={{ color:COLORS.muted, fontSize:14, textAlign:"center", marginBottom:32 }}>Choose a strong password for your account.</p>
         <Card>
           <div style={{ marginBottom:16 }}>
@@ -1008,6 +1010,7 @@ function SignupScreen({ role, onNavigate }) {
   const [blocked, setBlocked] = useState(false);
   const isStreamer = role === "streamer";
   const update = (k) => (v) => setForm(f => ({ ...f, [k]: v }));
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const handleContinue = () => {
     const age = calcAge(form.dob);
@@ -1038,13 +1041,13 @@ function SignupScreen({ role, onNavigate }) {
   const stepLabels = isStreamer ? ["Account Details", "Bank Setup"] : ["Account Details", "Membership"];
 
   return (
-    <div style={{ maxWidth: 440, margin: "0 auto", padding: "40px 24px" }}>
+    <div style={{ maxWidth: 440, margin: "0 auto", padding: isMobile?"24px 16px":"40px 24px" }}>
       <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
         <SteamrLogo height={152} />
       </div>
       <button onClick={() => onNavigate("landing")} style={{ background: "none", border: "none", color: COLORS.muted, cursor: "pointer", marginBottom: 20, fontSize: 13 }}>← Back</button>
       <div style={{ marginBottom: 8 }}><Pill color={isStreamer ? COLORS.accent : COLORS.accentC}>{isStreamer ? "Streamer Account" : "Viewer Account"}</Pill></div>
-      <h2 style={{ margin: "0 0 6px", fontSize: 28, fontWeight: 800 }}>{step === 1 ? "Create your account" : isStreamer ? "Set up payments" : "Choose a membership"}</h2>
+      <h2 style={{ margin: "0 0 6px", fontSize: isMobile?22:28, fontWeight: 800 }}>{step === 1 ? "Create your account" : isStreamer ? "Set up payments" : "Choose a membership"}</h2>
       <p style={{ color: COLORS.muted, marginBottom: 32, fontSize: 14 }}>{step === 1 ? "Fill in your details below" : isStreamer ? "Where should we send your earnings?" : "Select a plan to get started"}</p>
       <div style={{ display: "flex", gap: 8, marginBottom: 6 }}>{[1,2].map(s => <div key={s} style={{ flex: 1, height: 4, borderRadius: 4, background: s <= step ? COLORS.accent : COLORS.border, transition: "background 0.3s" }} />)}</div>
       <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>{stepLabels.map((label, i) => <div key={label} style={{ flex: 1, fontSize: 11, color: i+1<=step ? COLORS.accent : COLORS.muted, fontWeight: 600 }}>{label}</div>)}</div>
@@ -3045,7 +3048,7 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
   ];
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 24px" }}>
+    <div style={{ maxWidth:900, margin:"0 auto", padding:isMobile?"16px 12px 48px":"32px 24px" }}>
 
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
@@ -4045,7 +4048,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
 
       {/* ── Banner ── */}
       <div style={{
-        height: 210,
+        height: isMobile?230:210,
         background: profile.bannerImg
           ? `url(${profile.bannerImg}) center/cover no-repeat`
           : `linear-gradient(135deg, ${profile.bannerColor} 0%, ${profile.bannerColor}bb 100%)`,
@@ -4077,7 +4080,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         </div>
 
         {/* Action buttons — top right of banner */}
-        <div style={{ position:"absolute", top:16, right:20, display:"flex", gap:8, alignItems:"center" }}>
+        <div style={{ position:"absolute", top:isMobile?10:16, right:isMobile?10:20, display:"flex", gap:isMobile?4:8, alignItems:"center", flexWrap:"wrap", justifyContent:"flex-end", maxWidth:isMobile?"55%":"none" }}>
           {isOwnProfile ? (
             <Btn onClick={() => onNavigate("edit-profile")} variant="secondary" style={{ fontSize:13, padding:"8px 16px" }}>✏️ Edit Profile</Btn>
           ) : (
@@ -4119,7 +4122,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       {/* ── Name & meta ── */}
       <div style={{ padding:isMobile?"0 16px":"0 28px", marginBottom:28 }}>
         <div style={{ display:"flex", alignItems:"baseline", gap:12, flexWrap:"wrap", marginBottom:6 }}>
-          <h2 style={{ margin:0, fontSize:26, fontWeight:900 }}>{profile.name}</h2>
+          <h2 style={{ margin:0, fontSize:isMobile?22:26, fontWeight:900 }}>{profile.name}</h2>
           {isLiveNow
           ? <Pill color={COLORS.accent}>🔴 LIVE NOW</Pill>
           : (isOwnProfile && <Pill color={COLORS.muted}>⚫ Offline</Pill>)}
@@ -4534,7 +4537,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
   };
 
   return (
-    <div style={{ maxWidth: 700, margin: "0 auto", padding: "32px 24px 60px" }}>
+    <div style={{ maxWidth: 700, margin: "0 auto", padding: isMobile?"16px 12px 60px":"32px 24px 60px" }}>
       <button onClick={() => onNavigate("profile", { streamerId: 1 })} style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:16, fontSize:13 }}>← Back to Profile</button>
       <h2 style={{ margin:"0 0 24px", fontSize:24, fontWeight:800 }}>✏️ Edit Profile</h2>
 
@@ -5048,6 +5051,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
 
 // ── SETTINGS SCREEN ───────────────────────────────────────────────────────────
 function SettingsScreen({ onNavigate, addToast, isStreamer = true, isDark = true, onToggleTheme }) {
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   // ── local state ───────────────────────────────────────────────────────────
   const [pw, setPw]         = useState({ current:"", next:"", confirm:"" });
@@ -5153,10 +5157,10 @@ function SettingsScreen({ onNavigate, addToast, isStreamer = true, isDark = true
   );
 
   return (
-    <div style={{ maxWidth:640, margin:"0 auto", padding:"36px 24px 60px" }}>
+    <div style={{ maxWidth:640, margin:"0 auto", padding:isMobile?"16px 16px 60px":"36px 24px 60px" }}>
 
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:36 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:isMobile?24:36 }}>
         <div style={{ width:52, height:52, borderRadius:14, background:COLORS.card, border:`1px solid ${COLORS.border}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24 }}>⚙️</div>
         <div>
           <h2 style={{ margin:0, fontSize:22, fontWeight:900 }}>Settings</h2>
@@ -5380,7 +5384,7 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
       </div>
 
       {!hasSubs ? (
-        <div style={{ textAlign:"center", padding:"60px 24px" }}>
+        <div style={{ textAlign:"center", padding:isMobile?"40px 16px":"60px 24px" }}>
           <div style={{ fontSize:52, marginBottom:14 }}>👑</div>
           <h3 style={{ margin:"0 0 8px" }}>No subscriptions yet</h3>
           <p style={{ color:COLORS.muted, fontSize:14, marginBottom:24 }}>Subscribe to streamers to unlock exclusive Fan Club content.</p>
@@ -5516,6 +5520,7 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const chatRef  = useRef(null);
   const RATE = 30; // default rate; real rate would come from streamer's profile
   const totalCost = RATE * duration;
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const startShow = () => {
     setPhase("waiting");
@@ -5540,7 +5545,7 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const fmtTime = s => `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
 
   return (
-    <div style={{ maxWidth:520, margin:"0 auto", padding:"24px 20px 48px" }}>
+    <div style={{ maxWidth:520, margin:"0 auto", padding:isMobile?"16px 12px 48px":"24px 20px 48px" }}>
       <button onClick={() => { if(timerRef.current)clearInterval(timerRef.current); onNavigate("stream-room"); }}
         style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>
         ← Back to Stream
@@ -5651,7 +5656,7 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
           <div style={{ fontSize:52, marginBottom:16 }}>🎭</div>
           <h2 style={{ margin:"0 0 6px", fontWeight:900 }}>Show Complete!</h2>
           <p style={{ color:COLORS.muted, fontSize:14, marginBottom:28 }}>Great private session!</p>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:28 }}>
+          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr", gap:12, marginBottom:28 }}>
             {[{label:"Duration",value:fmtTime(elapsed)},{label:"Tokens Spent",value:`🪙 ${spent}`},{label:"USD Value",value:`$${(spent*0.10).toFixed(2)}`}].map(s => (
               <div key={s.label} style={{ background:COLORS.surface, borderRadius:12, padding:14 }}>
                 <div style={{ fontSize:11, color:COLORS.muted, marginBottom:4 }}>{s.label}</div>
@@ -6390,7 +6395,7 @@ function AnalyticsScreen({ onNavigate }) {
   const isEmpty = allDaily.length === 0 && streamHistory.length === 0;
 
   return (
-    <div style={{ maxWidth:920, margin:"0 auto", padding:"32px 24px 60px" }}>
+    <div style={{ maxWidth:920, margin:"0 auto", padding:isMobile?"16px 12px 60px":"32px 24px 60px" }}>
       {/* ── Header ── */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, flexWrap:"wrap", gap:12 }}>
         <div>
@@ -6633,6 +6638,7 @@ function NotificationsCenterScreen({ onNavigate }) {
   const [notifs, setNotifs] = useState([]);
   const [loading,setLoading]= useState(true);
   const [error,  setError]  = useState("");
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const TYPE_ICON  = {tip:"💰", follow:"❤️", sub:"⭐", payout:"💸", system:"⚙️", ppv:"🎬", gift:"🎁", verified:"✅", live:"🔴"};
   const TYPE_COLOR = {tip:COLORS.gold, follow:COLORS.accent, sub:COLORS.accentC, payout:COLORS.green, system:COLORS.muted, ppv:COLORS.accentB, gift:COLORS.gold, verified:COLORS.green, live:COLORS.accent};
@@ -6700,9 +6706,9 @@ function NotificationsCenterScreen({ onNavigate }) {
   const groups = [...new Set(filtered.map(groupNotif))];
 
   return (
-    <div style={{ maxWidth:640, margin:"0 auto", padding:"32px 24px 60px" }}>
+    <div style={{ maxWidth:640, margin:"0 auto", padding:isMobile?"16px 12px 60px":"32px 24px 60px" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-        <h2 style={{ margin:0, fontSize:24, fontWeight:900 }}>
+        <h2 style={{ margin:0, fontSize:isMobile?20:24, fontWeight:900 }}>
           Notifications
           {unread > 0 && <span style={{ marginLeft:8, fontSize:13, fontWeight:700, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:12, padding:"2px 9px" }}>{unread}</span>}
         </h2>
@@ -6927,7 +6933,7 @@ function EarningsScreen({ onNavigate }) {
   );
 
   return (
-    <div style={{maxWidth:900,margin:"0 auto",padding:"32px 24px 60px"}}>      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
+    <div style={{maxWidth:900,margin:"0 auto",padding:isMobile?"16px 12px 60px":"32px 24px 60px"}}>      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,flexWrap:"wrap",gap:12}}>
         <div>
           <button onClick={() => onNavigate("streamer-dashboard")}
             style={{background:"none",border:"none",color:COLORS.muted,cursor:"pointer",fontSize:13,padding:0,marginBottom:6}}>
@@ -7114,7 +7120,7 @@ function PPVContentScreen({ onNavigate, viewerTokens = 350, onSpendTokens }) {
   };
 
   return (
-    <div style={{maxWidth:960,margin:"0 auto",padding:"32px 24px 60px"}}>
+    <div style={{maxWidth:960,margin:"0 auto",padding:isMobile?"16px 12px 60px":"32px 24px 60px"}}>
       <h2 style={{margin:"0 0 4px",fontSize:24,fontWeight:900}}>🎬 My Content</h2>
       <p style={{color:COLORS.muted,fontSize:14,marginBottom:20}}>Videos and clips you own — purchased or unlocked via subscription.</p>
 
@@ -7202,9 +7208,10 @@ function GiftCardScreen({ onNavigate }) {
   const [sent, setSent]          = useState(false);
 
   const pack = GIFT_CARD_AMOUNTS.find(g => g.id === selected);
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   if (sent) return (
-    <div style={{maxWidth:480,margin:"0 auto",padding:"80px 24px",textAlign:"center"}}>
+    <div style={{maxWidth:480,margin:"0 auto",padding:isMobile?"40px 16px":"80px 24px",textAlign:"center"}}>
       <div style={{fontSize:64,marginBottom:16}}>🎁</div>
       <h2 style={{margin:"0 0 10px",fontWeight:900,color:COLORS.gold}}>Gift Card Sent!</h2>
       <p style={{color:COLORS.muted,fontSize:14,marginBottom:28}}>
@@ -7218,9 +7225,9 @@ function GiftCardScreen({ onNavigate }) {
   );
 
   return (
-    <div style={{maxWidth:540,margin:"0 auto",padding:"48px 24px 60px"}}>
+    <div style={{maxWidth:540,margin:"0 auto",padding:isMobile?"24px 16px 60px":"48px 24px 60px"}}>
       <button onClick={()=>onNavigate("viewer-browse")} style={{background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:24,fontSize:13}}>← Back</button>
-      <h2 style={{margin:"0 0 6px",fontSize:26,fontWeight:900}}>🎁 Gift Cards</h2>
+      <h2 style={{margin:"0 0 6px",fontSize:isMobile?22:26,fontWeight:900}}>🎁 Gift Cards</h2>
       <p style={{color:COLORS.muted,fontSize:14,marginBottom:24}}>Give the gift of tokens to a friend or loved one.</p>
 
       {/* Pack selection */}
@@ -7437,7 +7444,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 0, following, subscr
                 <Btn onClick={() => onNavigate("viewer-browse")} variant="ghost" style={{ marginTop:12, fontSize:12 }}>Discover new streamers</Btn>
               </div>
             ) : (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:12 }}>
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(220px,1fr))", gap:12 }}>
                 {liveFollowed.map(s => <StreamCard key={s.id} streamer={s} onNavigate={onNavigate} />)}
               </div>
             )}
@@ -7686,6 +7693,7 @@ function AdminScreen({ onNavigate }) {
   const [loading,   setLoading]   = useState(false);
   const [status,    setStatus]    = useState("");
   const [error,     setError]     = useState("");
+  const w = useWindowWidth(); const isMobile = w < 640;
 
   const fetchAccounts = async (key) => {
     setLoading(true); setError("");
@@ -7734,8 +7742,8 @@ function AdminScreen({ onNavigate }) {
   };
 
   return (
-    <div style={{ maxWidth:640, margin:"0 auto", padding:"40px 24px 60px" }}>
-      <h2 style={{ margin:"0 0 6px", fontSize:24, fontWeight:900 }}>🛡️ Admin Panel</h2>
+    <div style={{ maxWidth:640, margin:"0 auto", padding:isMobile?"16px 12px 60px":"40px 24px 60px" }}>
+      <h2 style={{ margin:"0 0 6px", fontSize:isMobile?20:24, fontWeight:900 }}>🛡️ Admin Panel</h2>
       <p style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>Manage Upstash accounts. Keep this page private.</p>
 
       {!authed ? (
