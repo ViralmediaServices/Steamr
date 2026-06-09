@@ -8578,7 +8578,7 @@ export default function App() {
       const savedScreen = localStorage.getItem("steamr_screen");
       if (token && session?.role) {
         const _default = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
-        const CONTEXT   = new Set(["stream-room","profile","edit-profile","private-show"]);
+        const CONTEXT   = new Set(["edit-profile","private-show"]);
         if (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT.has(savedScreen)) {
           return savedScreen;
         }
@@ -8587,7 +8587,12 @@ export default function App() {
     } catch {}
     return "landing";
   });
-  const [selectedStreamerId, setSelectedStreamerId] = useState(1);
+  const [selectedStreamerId, setSelectedStreamerId] = useState(() => {
+    try {
+      const saved = localStorage.getItem("steamr_streamer_id");
+      return saved || 1;
+    } catch { return 1; }
+  });
   const [profileData,        setProfileData]        = useState({
     id: 1, name: "", displayName: "", avatar: "🎭", avatarImg: null,
     category: "Female", region: "", bannerColor: "#1a0a2e", bannerImg: null,
@@ -8684,7 +8689,7 @@ export default function App() {
         // Restore the last visited screen, fall back to dashboard
         const defaultScreen = session.role === "streamer" ? "streamer-dashboard" : "viewer-dashboard";
         // Don't restore context-dependent screens — they need selectedStreamerId
-        const CONTEXT    = new Set(["stream-room","profile","edit-profile","private-show"]);
+        const CONTEXT    = new Set(["edit-profile","private-show"]);
         const safeScreen = (savedScreen && AUTHED.includes(savedScreen) && !CONTEXT.has(savedScreen))
           ? savedScreen : defaultScreen;
         setScreen(safeScreen);
@@ -8787,12 +8792,18 @@ export default function App() {
 
   const [seenOnboarding, setSeenOnboarding] = useState(false);
   // Screens that need selectedStreamerId context — not safe to restore on refresh alone
-  const NO_PERSIST_SCREENS = new Set(["stream-room","profile","edit-profile","private-show","landing","signup-streamer","signup-viewer","forgot-password","reset-password","admin"]);
+  const NO_PERSIST_SCREENS = new Set(["edit-profile","private-show","landing","signup-streamer","signup-viewer","forgot-password","reset-password","admin"]);
 
   const navigate = (s, opts = {}) => {
     setScreen(s);
     setShowOnboarding(false); // always close modal when navigating
-    if (opts.streamerId != null) setSelectedStreamerId(opts.streamerId);
+    if (opts.streamerId != null) {
+      setSelectedStreamerId(opts.streamerId);
+      // Persist streamer ID so stream-room and profile survive a refresh
+      if (s === "stream-room" || s === "profile") {
+        try { localStorage.setItem("steamr_streamer_id", String(opts.streamerId)); } catch {}
+      }
+    }
     // Only persist screens that can load without extra context
     if (!NO_PERSIST_SCREENS.has(s)) {
       try { localStorage.setItem("steamr_screen", s); } catch {}
