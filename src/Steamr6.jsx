@@ -1762,7 +1762,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     // Deduct from real token balance
     onSpendTokens && onSpendTokens(effectiveTip);
 
-    setGoal(g => ({ ...g, current: Math.min(g.target, g.current + effectiveTip) }));
+    setGoal(g => g ? { ...g, current: Math.min(g.target, g.current + effectiveTip) } : g);
     setMsgs(m => [...m, { user: "You", msg: `sent ${effectiveTip} tokens! 🎉`, tokens: effectiveTip }]);
     setTipped(true);
     addTipAlert("You", effectiveTip, "own");
