@@ -2207,7 +2207,7 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
           avatarImg:   null,
           following:   [],
         });
-        setActivity({ tokenBalance:350, totalSpent:0, tipsCount:0, tipHistory:[], giftsCount:0, achievements:[] });
+        setActivity({ tokenBalance:350, totalSpent:0, tipsCount:0, tipHistory:[], giftsCount:0 });
         setLoading(false); // show screen immediately, then update below
       }
     } catch {}
@@ -2335,23 +2335,6 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
             <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:8 }}>❤️ Following</div>
             <div style={{ fontSize:28,fontWeight:900,color:COLORS.accent }}>{followCount}</div>
             <button onClick={() => setTab("following")} style={{ background:"none",border:"none",color:COLORS.accent,cursor:"pointer",fontSize:12,marginTop:6,padding:0,fontWeight:700 }}>View all →</button>
-          </Card>
-          <Card style={{ padding:"18px", gridColumn:isMobile?"auto":"span 2" }}>
-            <div style={{ fontSize:11,color:COLORS.muted,textTransform:"uppercase",letterSpacing:0.7,marginBottom:12 }}>🏆 Achievements</div>
-            {activity?.achievements?.length > 0 ? (
-              <div style={{ display:"flex",gap:12,flexWrap:"wrap" }}>
-                {activity.achievements.map((a,i) => (
-                  <div key={i} style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:28 }}>{a.icon}</div>
-                    <div style={{ fontSize:10,color:COLORS.muted,marginTop:4 }}>{a.label}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color:COLORS.muted,fontSize:13,textAlign:"center",padding:"16px 0" }}>
-                🎯 Start tipping and following to earn achievements!
-              </div>
-            )}
           </Card>
         </div>
       )}
@@ -7342,7 +7325,6 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 0, following, subscr
   const tipsCount   = activity?.tipsCount  || 0;
   const totalSpent  = activity?.totalSpent || 0;
   const tipHistory  = activity?.tipHistory || [];
-  const achievements = activity?.achievements || [];
 
   // Prefer freshly-fetched API values; fall back to App-level props
   const displayTokens  = localTokens  !== null ? localTokens            : viewerTokens;
@@ -7530,28 +7512,6 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 0, following, subscr
 
         {/* Right sidebar */}
         <div>
-          {/* Achievements */}
-          <Card style={{ marginBottom:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <div style={{ fontWeight:800, fontSize:14 }}>🏆 Achievements</div>
-              <div style={{ fontSize:11, color:COLORS.muted }}>{achievements.length} earned</div>
-            </div>
-            {achievements.length > 0 ? (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-                {achievements.map((a, i) => (
-                  <div key={i} style={{ textAlign:"center" }}>
-                    <div style={{ fontSize:24, marginBottom:3 }}>{a.icon}</div>
-                    <div style={{ fontSize:9, color:COLORS.muted, lineHeight:1.2 }}>{a.label}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize:12, color:COLORS.muted, textAlign:"center", padding:"12px 0", lineHeight:1.6 }}>
-                🎯 Tip streamers, follow creators and subscribe to earn achievements!
-              </div>
-            )}
-          </Card>
-
           {/* Recommended */}
           <Card>
             <div style={{ fontWeight:800, fontSize:14, marginBottom:12 }}>✨ Recommended for You</div>
