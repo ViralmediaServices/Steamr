@@ -369,6 +369,40 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Live chat — no auth needed (shared between streamers and viewers) ────────
+  // GET  ?action=chat&channel=email   → last 50 messages, oldest first
+  // POST ?action=chat&channel=email   → push a new message
+  if (req.query?.action === "chat") {
+    const channel = String(req.query.channel || "").toLowerCase().trim();
+    if (!channel) return res.status(400).json({ error: "channel required" });
+    const key = `chat:${channel}`;
+    try {
+      if (req.method === "GET") {
+        const { result } = await kvCommand("LRANGE", key, 0, 49);
+        const messages = (Array.isArray(result) ? result : [])
+          .map(m => parse(m)).filter(Boolean).reverse(); // oldest→newest
+        return res.status(200).json({ ok: true, messages });
+      }
+      if (req.method === "POST") {
+        const { user, msg, tokens, type = "chat" } = req.body || {};
+        if (!msg?.trim()) return res.status(400).json({ error: "msg required" });
+        const entry = JSON.stringify({
+          type,
+          user:   String(user  || "Viewer").slice(0, 40),
+          msg:    String(msg).trim().slice(0, 300),
+          tokens: tokens || null,
+          time:   new Date().toISOString(),
+        });
+        await kvCommand("LPUSH", key, entry);
+        await kvCommand("LTRIM", key, 0, 99);   // keep last 100
+        await kvCommand("EXPIRE", key, 86400);  // 24 h TTL
+        return res.status(200).json({ ok: true });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const token = req.headers["x-auth-token"] || req.query?.token || req.body?.token;
   if (!token) return res.status(401).json({ error: "No token provided" });
 
