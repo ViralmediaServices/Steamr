@@ -4170,24 +4170,31 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             <Card style={{ marginBottom:16 }}>
               <div style={{ fontSize:11, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Social</div>
               {Object.keys(profile.socialLinks || {}).length > 0 ? (
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  {Object.entries(profile.socialLinks || {}).map(([platform, handle]) => {
+                <div>
+                  {[
+                    { platform:"twitter",   icon:"𝕏",  label:"Twitter / X" },
+                    { platform:"instagram", icon:"📷", label:"Instagram"   },
+                    { platform:"tiktok",    icon:"🎵", label:"TikTok"      },
+                  ].map(({ platform, icon, label }) => {
+                    const handle = (profile.socialLinks || {})[platform];
                     if (!handle) return null;
-                    const icon = platform === "twitter" ? "𝕏" : platform === "instagram" ? "📷" : platform === "tiktok" ? "🎵" : "🔗";
                     const cleanHandle = handle.replace(/^@/, "");
                     const url = platform === "twitter"   ? `https://twitter.com/${cleanHandle}`
                               : platform === "instagram" ? `https://instagram.com/${cleanHandle}`
                               : platform === "tiktok"    ? `https://tiktok.com/@${cleanHandle}`
                               : handle;
                     return (
-                      <a key={platform} href={url} target="_blank" rel="noopener noreferrer"
-                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"7px 14px", fontSize:13, display:"flex", alignItems:"center", gap:6, textDecoration:"none", color:COLORS.text, transition:"border-color 0.15s" }}
-                        onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
-                        onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
-                      >
-                        <span>{icon}</span>
-                        <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
-                      </a>
+                      <div key={platform} style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:11, color:COLORS.muted, fontWeight:600, marginBottom:5 }}>{icon} {label}</div>
+                        <a href={url} target="_blank" rel="noopener noreferrer"
+                          style={{ display:"flex", alignItems:"center", gap:8, background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:10, padding:"10px 14px", textDecoration:"none", color:COLORS.text, fontSize:14, transition:"border-color 0.15s" }}
+                          onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+                          onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}
+                        >
+                          <span style={{ fontSize:16 }}>{icon}</span>
+                          <span style={{ fontWeight:600 }}>@{cleanHandle}</span>
+                        </a>
+                      </div>
                     );
                   })}
                 </div>
