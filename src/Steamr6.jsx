@@ -6001,7 +6001,7 @@ function LeaderboardScreen({ onNavigate }) {
     setLoading(true);
     setData([]);
     const token = localStorage.getItem("steamr_token");
-    fetch(`/api/leaderboard?type=${type}&period=${period}`, {
+    fetch(`/api/user-profile?leaderboard=true&type=${type}&period=${period}`, {
       headers: token ? { "x-auth-token": token } : {},
     })
     .then(r => r.json())
