@@ -2564,13 +2564,13 @@ function ViewerProfileScreen({ onNavigate, subscriptions = {}, following, viewer
             return (
               <div key={id} style={{ padding:"14px 0", borderBottom:`1px solid ${COLORS.border}22` }}>
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-                  <div onClick={() => onNavigate("profile",{streamerId:streamerNav})}
+                  <div onClick={() => onNavigate("stream-room",{streamerId:streamerNav})}
                     style={{ width:44,height:44,borderRadius:"50%",background:COLORS.surface,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,border:`2px solid ${sub.tierColor}44`,cursor:"pointer",flexShrink:0,overflow:"hidden" }}>
                     {avatarImg
                       ? <img src={avatarImg} alt="" style={{ width:"100%",height:"100%",objectFit:"cover" }} />
                       : "🎭"}
                   </div>
-                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("profile",{streamerId:streamerNav})}>
+                  <div style={{ flex:1,cursor:"pointer" }} onClick={() => onNavigate("stream-room",{streamerId:streamerNav})}>
                     <div style={{ fontWeight:700,fontSize:13 }}>{displayName}</div>
                     <div style={{ fontSize:11,color:COLORS.muted }}>Since {sub.since} · Auto-renews monthly</div>
                   </div>
@@ -7794,7 +7794,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 0, following, subscr
                   const avatarImg   = sp?.avatarImg   || sub.streamerAvatar || null;
                   const streamerNav = sub.streamerEmail || id;
                   return (
-                    <div key={id} onClick={() => onNavigate("profile", { streamerId: streamerNav })}
+                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId: streamerNav })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
