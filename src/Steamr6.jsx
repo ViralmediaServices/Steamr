@@ -8118,7 +8118,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"👤 Profile",  screen:"profile",            onClick:() => go("profile",{streamerId:1}) },
   ];
   const VIEWER_LINKS = [
-    { label:"🏠 Dashboard",   screen:"viewer-dashboard", onClick:() => go("viewer-dashboard") },
+    { label:"Dashboard",      screen:"viewer-dashboard", onClick:() => go("viewer-dashboard") },
     { label:"Browse",          screen:"viewer-browse",   onClick:() => go("viewer-browse")    },
     { label:"🔍 Discover",    screen:"discovery",       onClick:() => go("discovery")         },
     { label:"👑 Fan Club",   screen:"fan-club",        onClick:() => go("fan-club")          },
@@ -8196,7 +8196,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     <div style={{ borderBottom:`1px solid ${COLORS.border}`,background:COLORS.surface,padding:"0 24px",display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",height:64,position:"sticky",top:0,zIndex:100 }}>
       <div style={{ display:"flex",gap:8 }}>
         {isViewer && <>
-          <Btn onClick={() => onNavigate("viewer-dashboard")} variant={screen==="viewer-dashboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🏠</Btn>
+          <Btn onClick={() => onNavigate("viewer-dashboard")} variant={screen==="viewer-dashboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Dashboard</Btn>
           <Btn onClick={() => onNavigate("viewer-browse")} variant={screen==="viewer-browse"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Browse</Btn>
           <Btn onClick={() => onNavigate("discovery")} variant={screen==="discovery"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🔍 Discover</Btn>
           <Btn onClick={() => onNavigate("fan-club")} variant={screen==="fan-club"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👑 Fan Club</Btn>
