@@ -7596,7 +7596,7 @@ function ViewerDashboardScreen({ onNavigate, viewerTokens = 0, following, subscr
                   const avatarImg   = sp?.avatarImg   || sub.streamerAvatar || null;
                   const streamerNav = sub.streamerEmail || id;
                   return (
-                    <div key={id} onClick={() => onNavigate("stream-room", { streamerId: streamerNav })}
+                    <div key={id} onClick={() => onNavigate("profile", { streamerId: streamerNav })}
                       style={{ display:"flex", alignItems:"center", gap:14, background:COLORS.card,
                         border:`1px solid ${sub.tierColor}33`, borderRadius:12, padding:"14px 16px", cursor:"pointer" }}>
                       <div style={{ width:44, height:44, borderRadius:"50%", background:COLORS.surface,
