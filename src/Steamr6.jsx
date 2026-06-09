@@ -8123,7 +8123,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
     { label:"🔍 Discover",    screen:"discovery",       onClick:() => go("discovery")         },
     { label:"👑 Fan Club",   screen:"fan-club",        onClick:() => go("fan-club")          },
     { label:"🪙 Buy Tokens", screen:"buy-tokens",      onClick:() => go("buy-tokens")        },
-    { label:"🎬 Exclusive",  screen:"ppv-content",     onClick:() => go("ppv-content")       },
+    { label:"My Content",     screen:"ppv-content",     onClick:() => go("ppv-content")       },
 
     { label:"👤 Profile",    screen:"viewer-profile",  onClick:() => go("viewer-profile")    },
     { label:"🚪 Log Out",    screen:null,              onClick:() => onSignOut()              },
@@ -8201,7 +8201,7 @@ function Nav({ screen, onNavigate, onSignOut, userRole, notifications = [], onMa
           <Btn onClick={() => onNavigate("discovery")} variant={screen==="discovery"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🔍 Discover</Btn>
           <Btn onClick={() => onNavigate("fan-club")} variant={screen==="fan-club"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>👑 Fan Club</Btn>
           <Btn onClick={() => onNavigate("buy-tokens")} variant={screen==="buy-tokens"?"gold":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🪙 Tokens</Btn>
-          <Btn onClick={() => onNavigate("ppv-content")} variant={screen==="ppv-content"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>🎬</Btn>
+          <Btn onClick={() => onNavigate("ppv-content")} variant={screen==="ppv-content"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>My Content</Btn>
         </>}
         {isStreamer && <>
           <Btn onClick={() => onNavigate("streamer-dashboard")} variant={screen==="streamer-dashboard"?"primary":"ghost"} style={{ fontSize:13,padding:"7px 14px" }}>Dashboard</Btn>
