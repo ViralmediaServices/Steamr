@@ -1478,19 +1478,22 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
 // ── AGORA UTILITIES ──────────────────────────────────────────────────────────
 // Lazy-loads the Agora Web SDK from CDN on first use (streamer or viewer).
 let _agoraSDK = null;
+let _agoraLoading = null; // dedup concurrent load calls
 function loadAgora() {
   if (_agoraSDK) return Promise.resolve(_agoraSDK);
   if (typeof window !== "undefined" && window.AgoraRTC) {
     _agoraSDK = window.AgoraRTC;
     return Promise.resolve(_agoraSDK);
   }
-  return new Promise((resolve, reject) => {
+  if (_agoraLoading) return _agoraLoading; // already loading — reuse same promise
+  _agoraLoading = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = "https://download.agora.io/sdk/release/AgoraRTC_N-4.19.0.js";
-    s.onload  = () => { _agoraSDK = window.AgoraRTC; resolve(_agoraSDK); };
-    s.onerror = () => reject(new Error("Failed to load Agora SDK"));
+    s.onload  = () => { _agoraSDK = window.AgoraRTC; _agoraLoading = null; resolve(_agoraSDK); };
+    s.onerror = () => { _agoraLoading = null; reject(new Error("Failed to load Agora SDK")); };
     document.head.appendChild(s);
   });
+  return _agoraLoading;
 }
 async function getAgoraToken(channelName, role = "subscriber") {
   const res = await fetch(
@@ -1710,19 +1713,19 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
-          await client.subscribe(user, mediaType);
-          if (mediaType === "video") {
-            // Small delay to ensure DOM element is mounted
-            setTimeout(() => {
-              if (!cancelled && user.videoTrack) {
-                user.videoTrack.play("agora-remote-vid");
-                setLiveVideoActive(true);
-              }
-            }, 100);
-          }
-          if (mediaType === "audio" && user.audioTrack) {
-            user.audioTrack.play();
-          }
+          try {
+            await client.subscribe(user, mediaType);
+            if (mediaType === "video") {
+              setTimeout(() => {
+                if (cancelled || !user.videoTrack) return;
+                const el = document.getElementById("agora-remote-vid");
+                if (el) { user.videoTrack.play("agora-remote-vid"); setLiveVideoActive(true); }
+              }, 150);
+            }
+            if (mediaType === "audio" && user.audioTrack) {
+              try { user.audioTrack.play(); } catch {}
+            }
+          } catch { /* subscribe failed — video stays in connecting state */ }
         });
 
         client.on("user-unpublished", (user, mediaType) => {
@@ -4194,16 +4197,19 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
 
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
-          await client.subscribe(user, mediaType);
-          if (mediaType === "video") {
-            setTimeout(() => {
-              if (!cancelled && user.videoTrack) {
-                user.videoTrack.play("agora-profile-vid");
-                setLiveVideoActive(true);
-              }
-            }, 100);
-          }
-          if (mediaType === "audio" && user.audioTrack) user.audioTrack.play();
+          try {
+            await client.subscribe(user, mediaType);
+            if (mediaType === "video") {
+              setTimeout(() => {
+                if (cancelled || !user.videoTrack) return;
+                const el = document.getElementById("agora-profile-vid");
+                if (el) { user.videoTrack.play("agora-profile-vid"); setLiveVideoActive(true); }
+              }, 150);
+            }
+            if (mediaType === "audio" && user.audioTrack) {
+              try { user.audioTrack.play(); } catch {}
+            }
+          } catch { /* subscribe failed — profile still renders fine */ }
         });
 
         client.on("user-unpublished", (user, mediaType) => {
@@ -4273,7 +4279,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             )}
             <div style={{ position:"absolute", inset:0, background:"linear-gradient(to bottom,rgba(0,0,0,0.35) 0%,transparent 35%,transparent 55%,rgba(0,0,0,0.6) 100%)", zIndex:2 }} />
             <button
-              onClick={() => onNavigate("stream-room")}
+              onClick={() => onNavigate("stream-room", { streamerId: profile.id || streamerId })}
               style={{ position:"absolute", bottom:68, right:isMobile?12:20, zIndex:10, background:COLORS.accent, border:"none", borderRadius:10, color:"#fff", fontSize:13, fontWeight:800, padding:"10px 18px", cursor:"pointer", boxShadow:"0 2px 12px #00000055" }}
             >↗ Enter Stream Room</button>
           </>
