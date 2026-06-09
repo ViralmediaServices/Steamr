@@ -1475,6 +1475,39 @@ function BrowseScreen({ onNavigate, following, onFollow, viewerTokens = 0 }) {
   );
 }
 
+// ── AGORA UTILITIES ──────────────────────────────────────────────────────────
+// Lazy-loads the Agora Web SDK from CDN on first use (streamer or viewer).
+let _agoraSDK = null;
+function loadAgora() {
+  if (_agoraSDK) return Promise.resolve(_agoraSDK);
+  if (typeof window !== "undefined" && window.AgoraRTC) {
+    _agoraSDK = window.AgoraRTC;
+    return Promise.resolve(_agoraSDK);
+  }
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://download.agora.io/sdk/release/AgoraRTC_N-4.19.0.js";
+    s.onload  = () => { _agoraSDK = window.AgoraRTC; resolve(_agoraSDK); };
+    s.onerror = () => reject(new Error("Failed to load Agora SDK"));
+    document.head.appendChild(s);
+  });
+}
+async function getAgoraToken(channelName, role = "subscriber") {
+  const res = await fetch(
+    `/api/user-profile?action=agora-token&channel=${encodeURIComponent(channelName)}&role=${role}`
+  );
+  if (!res.ok) throw new Error("Token fetch failed");
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || "Token error");
+  return { token: data.token, appId: data.appId };
+}
+// Map UI quality preset ids → Agora encoder configs
+function agoraQualityConfig(qualityId) {
+  if (qualityId === "1080p") return { width:1920, height:1080, frameRate:30, bitrateMax:5000 };
+  if (qualityId === "480p")  return { width:854,  height:480,  frameRate:30, bitrateMax:1500 };
+  return                             { width:1280, height:720,  frameRate:30, bitrateMax:2500 }; // 720p default
+}
+
 // ── STREAM ROOM ───────────────────────────────────────────────────────────────
 function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions = {}, onSubscribe, viewerTokens = 350, onSpendTokens, selectedStreamerId = 1, following = new Set(), onFollow }) {
   const w = useWindowWidth(); const isMobile = w < 768;
@@ -1493,7 +1526,10 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const [showSubModal, setShowSubModal] = useState(false);
   const [tipAlerts,  setTipAlerts]  = useState([]);
   const chatRef    = useRef();
-  const nextTipRef = useRef(null);
+  const nextTipRef     = useRef(null);
+  const agoraClientRef  = useRef(null);
+  const [liveVideoActive, setLiveVideoActive] = useState(false);
+  const [liveVideoError,  setLiveVideoError]  = useState(false);
 
   const addTipAlert = (user, amount, type="incoming") => {
     const id = Date.now() + Math.random();
@@ -1655,6 +1691,64 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
   }, [selectedStreamerId]);
 
+  // ── Agora: join channel as audience when streamer profile loads ─────────────
+  useEffect(() => {
+    if (!streamerProfile?.email) return;
+    const channelName = streamerProfile.email;
+    let client = null;
+    let cancelled = false;
+
+    const joinChannel = async () => {
+      try {
+        const AgoraRTC = await loadAgora();
+        client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        agoraClientRef.current = client;
+        await client.setClientRole("audience");
+
+        const { token, appId } = await getAgoraToken(channelName, "subscriber");
+        await client.join(appId, channelName, token, 0);
+
+        client.on("user-published", async (user, mediaType) => {
+          if (cancelled) return;
+          await client.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            // Small delay to ensure DOM element is mounted
+            setTimeout(() => {
+              if (!cancelled && user.videoTrack) {
+                user.videoTrack.play("agora-remote-vid");
+                setLiveVideoActive(true);
+              }
+            }, 100);
+          }
+          if (mediaType === "audio" && user.audioTrack) {
+            user.audioTrack.play();
+          }
+        });
+
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "video" && !cancelled) setLiveVideoActive(false);
+        });
+
+        client.on("user-left", () => {
+          if (!cancelled) setLiveVideoActive(false);
+        });
+
+      } catch (err) {
+        if (!cancelled) setLiveVideoError(true);
+      }
+    };
+
+    joinChannel();
+
+    return () => {
+      cancelled = true;
+      setLiveVideoActive(false);
+      setLiveVideoError(false);
+      if (client) client.leave().catch(() => {});
+      agoraClientRef.current = null;
+    };
+  }, [streamerProfile?.email]);
+
   const sendTip = () => {
     if (tokens < effectiveTip || effectiveTip < 1) return;
 
@@ -1755,11 +1849,31 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       <div>
         <button onClick={() => onNavigate("viewer-browse")} style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:12,fontSize:13 }}>← Browse</button>
 
-        {/* Video */}
-        <div style={{ background:"linear-gradient(135deg,#1a0a2e,#0a1a2e)", borderRadius:16, height:400, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", border:`1px solid ${COLORS.border}`, position:"relative", marginBottom:14 }}>
-          <span style={{ fontSize:72, marginBottom:8 }}>🎵</span>
-          <div style={{ color:COLORS.muted, fontSize:14 }}>{spyMode ? "👁 Watching private show…" : "Camera Feed Active"}</div>
-          <div style={{ position:"absolute", top:14, left:14 }}>
+        {/* Video — Agora remote stream */}
+        <div style={{ background:"linear-gradient(135deg,#1a0a2e,#0a1a2e)", borderRadius:16, height:isMobile?260:400, border:`1px solid ${COLORS.border}`, position:"relative", marginBottom:14, overflow:"hidden" }}>
+
+          {/* Agora fills this div with the live video */}
+          <div id="agora-remote-vid" style={{ position:"absolute", inset:0, borderRadius:16 }} />
+
+          {/* Overlay when no live video yet */}
+          {!liveVideoActive && (
+            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
+              {liveVideoError ? (
+                <>
+                  <div style={{ fontSize:40, marginBottom:12 }}>⚠️</div>
+                  <div style={{ color:COLORS.muted, fontSize:13 }}>Video unavailable — audio only</div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize:40, marginBottom:12, animation:"pulse 1.4s ease-in-out infinite" }}>📡</div>
+                  <div style={{ color:COLORS.muted, fontSize:13 }}>Connecting to live feed…</div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Badges */}
+          <div style={{ position:"absolute", top:14, left:14, zIndex:10 }}>
             {spyMode ? <Pill color={COLORS.gold}>🔍 SPY MODE</Pill> : <Pill color={COLORS.accent}>🔴 LIVE</Pill>}
           </div>
 
@@ -3246,8 +3360,8 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
 // ── GO LIVE ───────────────────────────────────────────────────────────────────
 function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const videoRef    = useRef(null);
-  const streamRef   = useRef(null);
+  const agoraClientRef = useRef(null);
+  const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
 
   // Check verification before allowing stream
   const [verified,    setVerified]    = useState(null); // null=loading
@@ -3285,11 +3399,14 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   }, []);
 
   const stopStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+    if (localTracksRef.current) {
+      localTracksRef.current.forEach(t => { try { t.stop(); t.close(); } catch {} });
+      localTracksRef.current = null;
     }
-    if (videoRef.current) videoRef.current.srcObject = null;
+    if (agoraClientRef.current) {
+      agoraClientRef.current.leave().catch(() => {});
+      agoraClientRef.current = null;
+    }
   };
 
   // ── Enumerate real devices (after permission granted) ──────────────────────
@@ -3301,35 +3418,30 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     } catch (_) {}
   };
 
-  // ── Attach stream to video element only when permission is granted ──────────
-  useEffect(() => {
-    if (permStatus === "granted" && videoRef.current && streamRef.current) {
-      if (videoRef.current.srcObject !== streamRef.current) {
-        videoRef.current.srcObject = streamRef.current;
-        videoRef.current.play().catch(() => {});
-      }
-    }
-  }, [permStatus]);
-
-  // ── Request camera + mic access ───────────────────────────────────────────
+  // ── Request camera + mic access (Agora tracks) ────────────────────────────
   const requestCamera = async (facingOverride) => {
     setPermStatus("requesting");
     const facing = facingOverride || cameraFacing;
     try {
-      const videoConstraint = isMobile
-        ? { facingMode: facing }
-        : selectedCam ? { deviceId: { exact: selectedCam } } : true;
-      const audioConstraint = selectedMic ? { deviceId: { exact: selectedMic } } : true;
+      const AgoraRTC = await loadAgora();
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraint,
-        audio: audioConstraint,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
+      // Stop any existing tracks first
+      if (localTracksRef.current) {
+        localTracksRef.current.forEach(t => { try { t.stop(); t.close(); } catch {} });
+        localTracksRef.current = null;
       }
+
+      const videoConfig = isMobile
+        ? { facingMode: facing, ...agoraQualityConfig(quality) }
+        : { ...(selectedCam ? { cameraId: selectedCam } : {}), ...agoraQualityConfig(quality) };
+      const audioConfig = selectedMic ? { microphoneId: selectedMic } : {};
+
+      const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(audioConfig, videoConfig);
+      localTracksRef.current = [audioTrack, videoTrack];
+
+      // Play local preview — mirror front camera
+      videoTrack.play("agora-local-vid", { mirror: facing !== "environment" });
+
       setPermStatus("granted");
       await enumerateDevices();
     } catch (err) {
@@ -3337,21 +3449,41 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     }
   };
 
-  // ── Switch front/back camera on mobile ────────────────────────────────────
+  // ── Switch front/back camera on mobile (Agora) ────────────────────────────
   const flipCamera = async () => {
     const next = cameraFacing === "user" ? "environment" : "user";
     setCameraFacing(next);
-    stopStream();
-    await requestCamera(next);
+    if (localTracksRef.current) {
+      const [, videoTrack] = localTracksRef.current;
+      try {
+        await videoTrack.setDevice({ facingMode: next });
+        videoTrack.play("agora-local-vid", { mirror: next !== "environment" });
+      } catch {
+        // Fallback: recreate track
+        await requestCamera(next);
+      }
+    } else {
+      await requestCamera(next);
+    }
   };
 
-  // ── Switch device (desktop) ───────────────────────────────────────────────
+  // ── Switch device (desktop, Agora hot-swap) ──────────────────────────────
   const switchDevice = async (type, deviceId) => {
     if (type === "cam") setSelectedCam(deviceId);
     else                setSelectedMic(deviceId);
-    if (permStatus === "granted") {
-      stopStream();
-      await requestCamera();
+    if (permStatus === "granted" && localTracksRef.current) {
+      const [audioTrack, videoTrack] = localTracksRef.current;
+      try {
+        if (type === "cam") {
+          await videoTrack.setDevice(deviceId);
+          videoTrack.play("agora-local-vid", { mirror: true });
+        } else {
+          await audioTrack.setDevice(deviceId);
+        }
+      } catch {
+        // Fallback: recreate all tracks
+        await requestCamera();
+      }
     }
   };
 
@@ -3392,7 +3524,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     };
   }, [streaming]);
 
-  const startStream = () => {
+  const startStream = async () => {
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
     onStreamingChange && onStreamingChange(true);
@@ -3428,9 +3560,31 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       })
       .catch(() => {});
     } catch {}
+
+    // ── Publish to Agora channel ──────────────────────────────────────────────
+    try {
+      const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
+      const channelName = session?.email || "";
+      if (channelName && localTracksRef.current) {
+        const AgoraRTC = await loadAgora();
+        const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        agoraClientRef.current = client;
+        const { token, appId } = await getAgoraToken(channelName, "publisher");
+        await client.setClientRole("host");
+        await client.join(appId, channelName, token, 0);
+        await client.publish(localTracksRef.current);
+      }
+    } catch (agoraErr) {
+      addToast("warning", "⚠️ Live video connection issue — retrying…");
+    }
   };
 
-  const endStream = () => {
+  const endStream = async () => {
+    // Unpublish from Agora channel
+    if (agoraClientRef.current && localTracksRef.current) {
+      try { await agoraClientRef.current.unpublish(localTracksRef.current); } catch {}
+    }
+
     // Save session stats to Upstash
     const token = localStorage.getItem("steamr_token");
     if (token && seconds > 0) {
@@ -3505,11 +3659,9 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       border:`2px solid ${streaming ? COLORS.accent : permStatus==="granted" ? COLORS.green : COLORS.border}`,
       marginBottom:16, transition:"all 0.4s", position:"relative", overflow:"hidden" }}>
 
-      {/* Actual camera video element */}
-      <video ref={videoRef} autoPlay muted playsInline
-        style={{ position:"absolute", inset:0, width:"100%", height:"100%",
-          objectFit:"cover", borderRadius:14,
-          transform:"scaleX(-1)",
+      {/* Agora local video container — SDK inserts <video> here */}
+      <div id="agora-local-vid"
+        style={{ position:"absolute", inset:0, borderRadius:14, overflow:"hidden",
           display: permStatus === "granted" ? "block" : "none" }}
       />
 
