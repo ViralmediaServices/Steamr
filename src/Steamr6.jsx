@@ -1540,6 +1540,10 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   };
   const removeTipAlert = (id) => setTipAlerts(a => a.filter(x => x.id !== id));
 
+  // ── Streamer profile state — must be declared before any hook that references it
+  const [streamerProfile, setStreamerProfile] = useState(null);
+  const [streamerName,    setStreamerName]    = useState("Streamer");
+
   // ── Real viewer count — polled from sorted-set heartbeats ─────────────────
   const [viewerCount, setViewerCount] = useState(0);
   useEffect(() => {
@@ -1558,10 +1562,6 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   }, [streamerProfile?.email]);
   const currentSub  = subscriptions[selectedStreamerId] || subscriptions[1] || null;
   const isFollowing = following?.has(selectedStreamerId) || following?.has(1);
-
-  // ── Load real streamer profile ─────────────────────────────────────────────
-  const [streamerProfile, setStreamerProfile] = useState(null);
-  const [streamerName, setStreamerName] = useState("Streamer");
 
   useEffect(() => {
     const token = localStorage.getItem("steamr_token");
@@ -1697,7 +1697,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   // ── Agora: join channel as audience when streamer profile loads ─────────────
   useEffect(() => {
     if (!streamerProfile?.email) return;
-    const channelName = streamerProfile.email;
+    const channelName = (streamerProfile.email || "").toLowerCase().trim();
     let client = null;
     let cancelled = false;
 
@@ -3365,6 +3365,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const w = useWindowWidth(); const isMobile = w < 640;
   const agoraClientRef = useRef(null);
   const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
+  const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
 
   // Check verification before allowing stream
   const [verified,    setVerified]    = useState(null); // null=loading
@@ -3567,18 +3568,22 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     // ── Publish to Agora channel ──────────────────────────────────────────────
     try {
       const session = JSON.parse(localStorage.getItem("steamr_session") || "null");
-      const channelName = session?.email || "";
-      if (channelName && localTracksRef.current) {
-        const AgoraRTC = await loadAgora();
-        const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-        agoraClientRef.current = client;
-        const { token, appId } = await getAgoraToken(channelName, "publisher");
-        await client.setClientRole("host");
-        await client.join(appId, channelName, token, 0);
-        await client.publish(localTracksRef.current);
+      const channelName = (session?.email || "").toLowerCase().trim();
+      if (!channelName || !localTracksRef.current) {
+        setAgoraStatus("failed"); return;
       }
+      setAgoraStatus("connecting");
+      const AgoraRTC = await loadAgora();
+      const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+      agoraClientRef.current = client;
+      const { token, appId } = await getAgoraToken(channelName, "publisher");
+      await client.setClientRole("host");
+      await client.join(appId, channelName, token, 0);
+      await client.publish(localTracksRef.current);
+      setAgoraStatus("connected");
     } catch (agoraErr) {
-      addToast("warning", "⚠️ Live video connection issue — retrying…");
+      setAgoraStatus("failed");
+      console.error("Agora publish error:", agoraErr?.message || agoraErr);
     }
   };
 
@@ -3606,6 +3611,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     }
     stopStream();
     setStreaming(false);
+    setAgoraStatus("idle");
     onStreamingChange && onStreamingChange(false);
     setSeconds(0);
     setSessionTokens(0);
@@ -3943,6 +3949,25 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
           ))}
         </div>
       )}
+
+      {/* Agora video relay status — visible feedback for streamer */}
+      {streaming && (
+        <div style={{ marginTop:12, padding:"10px 14px", borderRadius:10, display:"flex", alignItems:"center", gap:10,
+          background: agoraStatus==="connected" ? COLORS.green+"18" : agoraStatus==="failed" ? "#ff444418" : COLORS.surface,
+          border: `1px solid ${agoraStatus==="connected" ? COLORS.green+"55" : agoraStatus==="failed" ? "#ff444455" : COLORS.border}`,
+        }}>
+          <div style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
+            background: agoraStatus==="connected" ? COLORS.green : agoraStatus==="failed" ? "#ff4444" : COLORS.gold,
+            animation: agoraStatus==="connecting" ? "pulse 1s ease-in-out infinite" : "none",
+          }}/>
+          <div style={{ fontSize:12, flex:1 }}>
+            {agoraStatus==="connected"  && <><span style={{ fontWeight:700, color:COLORS.green }}>📡 Live feed active</span><span style={{ color:COLORS.muted }}> — viewers can see your stream</span></>}
+            {agoraStatus==="connecting" && <><span style={{ fontWeight:700, color:COLORS.gold }}>📡 Connecting viewers…</span></>}
+            {agoraStatus==="failed"     && <><span style={{ fontWeight:700, color:"#ff4444" }}>📡 Video relay failed</span><span style={{ color:COLORS.muted }}> — check Vercel env vars (AGORA_APP_ID / AGORA_APP_CERT)</span></>}
+            {agoraStatus==="idle"       && <span style={{ color:COLORS.muted }}>📡 Video relay not started</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4192,8 +4217,9 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
         agoraClientRef.current = client;
         await client.setClientRole("audience");
-        const { token, appId } = await getAgoraToken(profile.email, "subscriber");
-        await client.join(appId, profile.email, token, 0);
+        const profileChannel = (profile.email || "").toLowerCase().trim();
+        const { token, appId } = await getAgoraToken(profileChannel, "subscriber");
+        await client.join(appId, profileChannel, token, 0);
 
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
