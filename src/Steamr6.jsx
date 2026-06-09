@@ -1756,6 +1756,31 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
   }, [streamerProfile?.email]);
 
+  // ── Real-time chat — poll API every 4 s, shared with streamer ─────────────
+  useEffect(() => {
+    const channel = (streamerProfile?.email || "").toLowerCase().trim();
+    if (!channel) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(channel)}`);
+        const data = await r.json();
+        if (data.ok && active) {
+          setMsgs(data.messages || []);
+          // keep scroll at bottom if already near bottom
+          if (chatRef.current) {
+            const el = chatRef.current;
+            if (el.scrollHeight - el.scrollTop < el.clientHeight + 80)
+              setTimeout(() => { el.scrollTop = el.scrollHeight; }, 30);
+          }
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { active = false; clearInterval(iv); };
+  }, [streamerProfile?.email]);
+
   const sendTip = () => {
     if (tokens < effectiveTip || effectiveTip < 1) return;
 
@@ -1789,13 +1814,35 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         }),
       }).catch(() => {});
     }
+    // Post tip notification to shared chat
+    const _chan = (streamerProfile?.email || "").toLowerCase().trim();
+    if (_chan) {
+      const _sess = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+      fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(_chan)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: _sess?.name || "Viewer", msg: `sent ${effectiveTip} tokens! 🎉`, tokens: effectiveTip, type: "tip" }),
+      }).catch(() => {});
+    }
   };
 
   const sendChat = () => {
     if (!chatInput.trim()) return;
-    setMsgs(m => [...m, { user: "You", msg: chatInput, tokens: null }]);
+    const channel = (streamerProfile?.email || "").toLowerCase().trim();
+    const sess = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const userName = sess?.name || sess?.displayName || "Viewer";
+    const msg = chatInput.trim();
     setChatInput("");
-    if (chatRef.current) setTimeout(() => chatRef.current.scrollTop = chatRef.current.scrollHeight, 50);
+    // Optimistic
+    setMsgs(m => [...m, { type:"chat", user:userName, msg, time:new Date().toISOString() }]);
+    setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 30);
+    if (channel) {
+      fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(channel)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: userName, msg, type: "chat" }),
+      }).catch(() => {});
+    }
   };
 
   // ── Geo-blocking gates ────────────────────────────────────────────────────
@@ -3437,6 +3484,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const agoraClientRef = useRef(null);
   const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
+  const liveChatRef = useRef(null);
+  const [liveMsgs, setLiveMsgs]   = useState([]);
 
   // Check verification before allowing stream
   const [verified,    setVerified]    = useState(null); // null=loading
@@ -3561,6 +3610,30 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       }
     }
   };
+
+  // ── Live chat polling — fetch from shared Redis chat key every 4 s ──────────
+  useEffect(() => {
+    if (!streaming) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const channel = (session?.email || "").toLowerCase().trim();
+    if (!channel) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(channel)}`);
+        const data = await r.json();
+        if (data.ok && active) {
+          setLiveMsgs(data.messages || []);
+          setTimeout(() => {
+            if (liveChatRef.current) liveChatRef.current.scrollTop = liveChatRef.current.scrollHeight;
+          }, 30);
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { active = false; clearInterval(iv); setLiveMsgs([]); };
+  }, [streaming]);
 
   // ── Live timer + simulated tokens ─────────────────────────────────────────
   useEffect(() => {
@@ -4038,6 +4111,38 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
             {agoraStatus==="idle"       && <span style={{ color:COLORS.muted }}>📡 Video relay not started</span>}
           </div>
         </div>
+      )}
+
+      {/* ── Live Chat + Tips ── */}
+      {streaming && (
+        <Card style={{ marginTop:16, padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8 }}>💬 Live Chat</div>
+            <div style={{ fontSize:11, color:COLORS.muted }}>{liveMsgs.length > 0 ? `${liveMsgs.length} messages` : "Waiting for viewers…"}</div>
+          </div>
+          <div ref={liveChatRef} style={{ height:220, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
+            {liveMsgs.length === 0 ? (
+              <div style={{ textAlign:"center", color:COLORS.muted, fontSize:12, padding:"48px 0" }}>
+                No messages yet — viewers will appear here
+              </div>
+            ) : (
+              liveMsgs.map((m, i) => (
+                <div key={i} style={{ fontSize:13, lineHeight:1.4 }}>
+                  <span style={{ fontWeight:700, color: m.type==="tip" ? COLORS.gold : COLORS.accentC }}>
+                    {m.user}
+                  </span>
+                  {" "}
+                  <span style={{ color: m.type==="tip" ? COLORS.gold : COLORS.text }}>{m.msg}</span>
+                  {m.tokens && (
+                    <span style={{ marginLeft:6, fontSize:11, background:COLORS.gold+"22", color:COLORS.gold, borderRadius:4, padding:"1px 6px", fontWeight:700 }}>
+                      +{m.tokens} 🪙
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
       )}
     </div>
   );
