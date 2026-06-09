@@ -6830,7 +6830,7 @@ function SearchResultsScreen({ onNavigate, initialQuery = "" }) {
     return ok && lf;
   });
 
-  const TRENDING = TRENDING_TAGS?.slice(0,14) || ["music","asmr","gaming","chill","requests"];
+  const TRENDING = TRENDING_TAGS?.slice(0,14).map(t => t.tag) || ["music","asmr","gaming","chill","requests"];
 
   return (
     <div style={{maxWidth:960, margin:"0 auto", padding:"32px 24px 60px"}}>
