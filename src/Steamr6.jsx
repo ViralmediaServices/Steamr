@@ -1530,9 +1530,11 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const [tipAlerts,  setTipAlerts]  = useState([]);
   const chatRef    = useRef();
   const nextTipRef     = useRef(null);
-  const agoraClientRef  = useRef(null);
-  const [liveVideoActive, setLiveVideoActive] = useState(false);
-  const [liveVideoError,  setLiveVideoError]  = useState(false);
+  const agoraClientRef       = useRef(null);
+  const pendingVideoTrackRef = useRef(null);
+  const [liveVideoActive,  setLiveVideoActive]  = useState(false);
+  const [liveVideoError,   setLiveVideoError]   = useState(false);
+  const [needsUserAction,  setNeedsUserAction]  = useState(false);
 
   const addTipAlert = (user, amount, type="incoming") => {
     const id = Date.now() + Math.random();
@@ -1708,7 +1710,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     const joinChannel = async () => {
       try {
         const AgoraRTC = await loadAgora();
-        client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        client = AgoraRTC.createClient({ mode: "live", codec: "h264" });
         agoraClientRef.current = client;
         await client.setClientRole("audience");
 
@@ -1723,8 +1725,16 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
               setTimeout(() => {
                 if (cancelled || !user.videoTrack) return;
                 const el = document.getElementById("agora-remote-vid");
-                if (el) { user.videoTrack.play("agora-remote-vid"); setLiveVideoActive(true); }
-              }, 150);
+                if (!el) return;
+                try {
+                  user.videoTrack.play("agora-remote-vid");
+                  setLiveVideoActive(true);
+                  setNeedsUserAction(false);
+                } catch {
+                  pendingVideoTrackRef.current = user.videoTrack;
+                  setNeedsUserAction(true);
+                }
+              }, 300);
             }
             if (mediaType === "audio" && user.audioTrack) {
               try { user.audioTrack.play(); } catch {}
@@ -1751,6 +1761,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       cancelled = true;
       setLiveVideoActive(false);
       setLiveVideoError(false);
+      setNeedsUserAction(false);
+      pendingVideoTrackRef.current = null;
       if (client) client.leave().catch(() => {});
       agoraClientRef.current = null;
     };
@@ -1912,7 +1924,24 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           {/* Overlay when no live video yet */}
           {!liveVideoActive && (
             <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
-              {liveVideoError ? (
+              {needsUserAction ? (
+                <button
+                  onClick={() => {
+                    const track = pendingVideoTrackRef.current;
+                    if (!track) return;
+                    try {
+                      track.play("agora-remote-vid");
+                      setLiveVideoActive(true);
+                      setNeedsUserAction(false);
+                    } catch {}
+                  }}
+                  style={{ background:COLORS.accent, border:"none", borderRadius:14, color:"#fff",
+                    fontSize:16, fontWeight:800, padding:"16px 32px", cursor:"pointer",
+                    boxShadow:`0 4px 20px ${COLORS.accent}66` }}
+                >
+                  ▶ Tap to Watch
+                </button>
+              ) : liveVideoError ? (
                 <>
                   <div style={{ fontSize:40, marginBottom:12 }}>⚠️</div>
                   <div style={{ color:COLORS.muted, fontSize:13 }}>Video unavailable — audio only</div>
@@ -3754,7 +3783,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       }
       setAgoraStatus("connecting");
       const AgoraRTC = await loadAgora();
-      const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+      const client = AgoraRTC.createClient({ mode: "live", codec: "h264" });
       agoraClientRef.current = client;
       const { token, appId } = await getAgoraToken(channelName, "publisher");
       await client.setClientRole("host");
@@ -4450,7 +4479,7 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     const joinChannel = async () => {
       try {
         const AgoraRTC = await loadAgora();
-        client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+        client = AgoraRTC.createClient({ mode: "live", codec: "h264" });
         agoraClientRef.current = client;
         await client.setClientRole("audience");
         const profileChannel = (profile.email || "").toLowerCase().trim();
