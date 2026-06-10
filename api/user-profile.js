@@ -370,33 +370,31 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Private show earnings — viewer/spy credit the streamer in real time ────
-  // POST ?action=private-pay&channel=email  → INCRBY earnings counter
-  // GET  ?action=private-pay&channel=email  → read accumulated earnings
-  // DELETE ?action=private-pay&channel=email → clear counter (on show end)
+  // ── Private show earnings — each tick writes directly to streamer's balance ──
+  // POST ?action=private-pay&channel=streamerEmail  → adds amount to their tokenBalance
   if (req.query?.action === "private-pay") {
     const channel = String(req.query.channel || "").toLowerCase().trim();
     if (!channel) return res.status(400).json({ error: "channel required" });
-    const key = `private:earnings:${channel}`;
     try {
       if (req.method === "POST") {
         const amount = parseInt(req.body?.amount || 0, 10);
         if (amount > 0) {
-          const { result: cur } = await kvCommand("GET", key);
-          const next = (parseInt(cur || "0", 10) + amount);
-          await kvCommand("SET", key, String(next));
-          await kvCommand("EXPIRE", key, 86400);
+          const actKey = `activity:${channel}`;
+          const { result } = await kvCommand("GET", actKey);
+          const activity = parse(result) || {};
+          activity.tokenBalance = (activity.tokenBalance || 0) + amount;
+          await kvCommand("SET", actKey, JSON.stringify(activity));
         }
         return res.status(200).json({ ok: true });
       }
+      // GET — return current tokenBalance so GoLiveScreen can compute delta
       if (req.method === "GET") {
-        const { result } = await kvCommand("GET", key);
-        return res.status(200).json({ ok: true, earnings: parseInt(result || "0", 10) });
+        const actKey = `activity:${channel}`;
+        const { result } = await kvCommand("GET", actKey);
+        const activity = parse(result) || {};
+        return res.status(200).json({ ok: true, balance: activity.tokenBalance || 0 });
       }
-      if (req.method === "DELETE") {
-        await kvCommand("DEL", key);
-        return res.status(200).json({ ok: true });
-      }
+      return res.status(200).json({ ok: true });
     } catch (err) { return res.status(500).json({ error: err.message }); }
   }
 
