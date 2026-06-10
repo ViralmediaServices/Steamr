@@ -382,7 +382,13 @@ export default async function handler(req, res) {
           const actKey = `activity:${channel}`;
           const { result } = await kvCommand("GET", actKey);
           const activity = parse(result) || {};
-          activity.tokenBalance = (activity.tokenBalance || 0) + amount;
+          // Credit all earnings fields the StreamerDashboard reads
+          activity.todayTokens    = (activity.todayTokens    || 0) + amount;
+          activity.weekTokens     = (activity.weekTokens     || 0) + amount;
+          activity.monthTokens    = (activity.monthTokens    || 0) + amount;
+          activity.allTimeTokens  = (activity.allTimeTokens  || 0) + amount;
+          activity.availableTokens = (activity.availableTokens || 0) + amount;
+          activity.tokenBalance   = (activity.tokenBalance   || 0) + amount; // used by GoLiveScreen balance poll
           await kvCommand("SET", actKey, JSON.stringify(activity));
         }
         return res.status(200).json({ ok: true });
