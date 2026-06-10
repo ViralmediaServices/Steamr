@@ -859,8 +859,9 @@ export default async function handler(req, res) {
         }
 
         // Save geo-blocking to a public key so StreamRoomScreen can check it without auth
-        if (req.body.profileId && req.body.streamerProfile.geoBlocking) {
-          await kvCommand("SET", `geo:block:${req.body.profileId}`,
+        // Key uses email (same as what StreamRoomScreen fetches via geoBlockId=streamerEmail)
+        if (req.body.streamerProfile.geoBlocking) {
+          await kvCommand("SET", `geo:block:${email}`,
             JSON.stringify(req.body.streamerProfile.geoBlocking));
         }
       }
