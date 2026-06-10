@@ -1532,8 +1532,10 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const nextTipRef     = useRef(null);
   const agoraClientRef       = useRef(null);
   const pendingVideoTrackRef = useRef(null);
-  const privateAgoraClientRef = useRef(null);
-  const spyIntervalRef        = useRef(null);
+  const privateAgoraClientRef  = useRef(null);
+  const spyIntervalRef         = useRef(null);
+  const isPrivateViewerRef     = useRef(false);
+  const isSpyingRef            = useRef(false);
   const myEmailRef = useRef((() => { try { return (JSON.parse(localStorage.getItem("steamr_session")||"null")?.email||"").toLowerCase().trim(); } catch { return ""; } })());
   const [liveVideoActive,  setLiveVideoActive]  = useState(false);
   const [liveVideoError,   setLiveVideoError]   = useState(false);
@@ -1600,6 +1602,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           email:       p.email        || "",
           spyRate:     sp.spyRate     || 30,
           privateRate: sp.privateRate || 50,
+          bannerImg:   sp.bannerImg   || null,
+          bannerColor: sp.bannerColor || "#1a0a2e",
         });
         setStreamerName(p.displayName || p.name || "Streamer");
         if (sp.goalLabel && sp.goalTarget) {
@@ -1727,9 +1731,6 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         const { token, appId } = await getAgoraToken(channelName, "subscriber");
         await client.join(appId, channelName, token, 0);
 
-        client.on("user-unpublished", (user, mediaType) => {
-          if (mediaType === "video" && !isPrivateViewer && !isSpying) setLiveVideoActive(false);
-        });
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
           try {
@@ -1756,11 +1757,14 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         });
 
         client.on("user-unpublished", (user, mediaType) => {
-          if (mediaType === "video" && !cancelled) setLiveVideoActive(false);
+          // Don't kill the video if the viewer is watching a private/spy feed
+          if (mediaType === "video" && !cancelled && !isPrivateViewerRef.current && !isSpyingRef.current)
+            setLiveVideoActive(false);
         });
 
         client.on("user-left", () => {
-          if (!cancelled) setLiveVideoActive(false);
+          if (!cancelled && !isPrivateViewerRef.current && !isSpyingRef.current)
+            setLiveVideoActive(false);
         });
 
       } catch (err) {
@@ -1797,6 +1801,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
         if (next?.status === "accepted") {
           if (next.viewerEmail?.toLowerCase() === myEmail && !isPrivateViewer && requestStatus === "pending") {
+            isPrivateViewerRef.current = true;
             setIsPrivateViewer(true);
             setRequestStatus("accepted");
             joinPrivateChannel(next.privateChannel);
@@ -1874,6 +1879,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const leavePrivateChannel = () => {
     if (spyIntervalRef.current) { clearInterval(spyIntervalRef.current); spyIntervalRef.current = null; }
     if (privateAgoraClientRef.current) { privateAgoraClientRef.current.leave().catch(()=>{}); privateAgoraClientRef.current = null; }
+    isSpyingRef.current = false;
+    isPrivateViewerRef.current = false;
     setIsSpying(false);
     setIsPrivateViewer(false);
     setLiveVideoActive(false);
@@ -2009,15 +2016,24 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
           {/* In Private Be Right Back — shown to public viewers not in private/spy */}
           {privateStatus?.status === "accepted" && !isPrivateViewer && !isSpying && (
-            <div style={{ position:"absolute", inset:0, zIndex:4, background:"#000000dd",
-              display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10 }}>
-              {streamerProfile?.avatarImg
-                ? <img src={streamerProfile.avatarImg} style={{ width:80, height:80, borderRadius:"50%", objectFit:"cover", border:"3px solid #ffffff22" }} />
-                : <div style={{ fontSize:56 }}>{streamerProfile?.avatar || "🎭"}</div>}
-              <div style={{ color:"#fff", fontWeight:800, fontSize:20, letterSpacing:0.5 }}>In Private</div>
-              <div style={{ color:"#ffffffaa", fontSize:14 }}>Be Right Back</div>
-              <div style={{ marginTop:8, fontSize:12, color:COLORS.gold, fontWeight:700, background:COLORS.gold+"22", borderRadius:8, padding:"6px 14px" }}>
-                👁 Spy · 🪙{streamerProfile?.spyRate||30}/min
+            <div style={{ position:"absolute", inset:0, zIndex:4, overflow:"hidden",
+              background: streamerProfile?.bannerImg
+                ? `url(${streamerProfile.bannerImg}) center/cover no-repeat`
+                : (streamerProfile?.bannerColor || "#1a0a2e"),
+              display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+              {/* Dark scrim for text readability */}
+              <div style={{ position:"absolute", inset:0, background:"#00000077" }} />
+              <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+                {streamerProfile?.avatarImg
+                  ? <img src={streamerProfile.avatarImg} style={{ width:84, height:84, borderRadius:"50%", objectFit:"cover", border:"3px solid #ffffff44", boxShadow:"0 4px 20px #00000088" }} />
+                  : <div style={{ fontSize:60, filter:"drop-shadow(0 2px 8px #000)" }}>{streamerProfile?.avatar || "🎭"}</div>}
+                <div style={{ color:"#fff", fontWeight:900, fontSize:22, letterSpacing:0.5, textShadow:"0 2px 8px #000" }}>In Private</div>
+                <div style={{ color:"#ffffffcc", fontSize:14, textShadow:"0 1px 4px #000" }}>Be Right Back</div>
+                <div style={{ marginTop:10, fontSize:12, color:COLORS.gold, fontWeight:700,
+                  background:"#00000077", borderRadius:8, padding:"7px 16px",
+                  border:`1px solid ${COLORS.gold}44` }}>
+                  👁 Spy · 🪙{streamerProfile?.spyRate||30}/min
+                </div>
               </div>
             </div>
           )}
@@ -2092,6 +2108,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
                 if ((viewerTokens || 0) < rate) { addToast("warning","Not enough tokens to spy."); return; }
                 onSpendTokens && onSpendTokens(rate);
                 await joinPrivateChannel(privateStatus.privateChannel);
+                isSpyingRef.current = true;
                 setIsSpying(true);
                 spyIntervalRef.current = setInterval(() => {
                   if ((viewerTokens || 0) < rate) {
@@ -4106,16 +4123,15 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
           display: permStatus === "granted" ? "block" : "none" }}
       />
 
-      {/* In Private overlay on camera preview */}
+      {/* In Private badge — small corner indicator so streamer can still see their camera */}
       {privateMode && (
-        <div style={{ position:"absolute", inset:0, zIndex:6, background:"#000000cc",
-          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, borderRadius:14 }}>
-          {profileData?.avatarImg
-            ? <img src={profileData.avatarImg} style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover", border:"3px solid #ffffff33" }} />
-            : <div style={{ fontSize:48 }}>{profileData?.avatar || "🎭"}</div>}
-          <div style={{ color:"#fff", fontWeight:800, fontSize:17 }}>In Private</div>
-          <div style={{ color:"#ffffffaa", fontSize:12 }}>Be Right Back</div>
-          <div style={{ fontSize:11, color:COLORS.accent, fontWeight:700 }}>🔒 {privateViewerEmail || "viewer"}</div>
+        <div style={{ position:"absolute", top:10, right:10, zIndex:6,
+          background:"#000000cc", borderRadius:20, padding:"5px 12px",
+          display:"flex", alignItems:"center", gap:6, fontSize:11, fontWeight:800 }}>
+          <span style={{ width:6, height:6, borderRadius:"50%", background:COLORS.accent,
+            display:"inline-block", boxShadow:`0 0 6px ${COLORS.accent}` }}/>
+          <span style={{ color:"#fff" }}>In Private</span>
+          <span style={{ color:COLORS.accent }}>· {privateViewerEmail?.split("@")[0] || "viewer"}</span>
         </div>
       )}
 
