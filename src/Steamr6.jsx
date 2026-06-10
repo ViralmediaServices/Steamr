@@ -1545,6 +1545,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const [requestStatus,    setRequestStatus]    = useState(null);
   const [isSpying,         setIsSpying]         = useState(false);
   const [isPrivateViewer,  setIsPrivateViewer]  = useState(false);
+  const [showPrivateModal, setShowPrivateModal] = useState(false);
+  const [privateNavChannel,setPrivateNavChannel]= useState("");
 
   const addTipAlert = (user, amount, type="incoming") => {
     const id = Date.now() + Math.random();
@@ -1810,7 +1812,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             isPrivateViewerRef.current = true;
             setIsPrivateViewer(true);
             setRequestStatus("accepted");
-            joinPrivateChannel(next.privateChannel);
+            setPrivateNavChannel(next.privateChannel);
+            setShowPrivateModal(true);
           }
         } else if (next?.status === "rejected" && requestStatus === "pending") {
           setRequestStatus("rejected");
@@ -2404,6 +2407,36 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         </div>
       </Card>
       {/* Subscribe modal */}
+      {/* Private Accepted popup */}
+      {showPrivateModal && (
+        <div style={{ position:"fixed", inset:0, background:"#000000cc", zIndex:9000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:COLORS.card, border:`1px solid ${COLORS.accent}55`,
+            borderRadius:20, padding:32, maxWidth:320, width:"100%", textAlign:"center",
+            boxShadow:`0 20px 60px #00000099` }}>
+            <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
+            <div style={{ fontWeight:900, fontSize:20, marginBottom:8, color:COLORS.text }}>
+              Private Accepted
+            </div>
+            <div style={{ color:COLORS.muted, fontSize:13, marginBottom:24, lineHeight:1.5 }}>
+              The streamer has accepted your request. Enter to start your private show.
+            </div>
+            <Btn onClick={() => {
+              setShowPrivateModal(false);
+              try { localStorage.setItem("steamr_private_channel", privateNavChannel); } catch {}
+              onNavigate("private-show");
+            }} variant="green" style={{ width:"100%", fontSize:16, padding:"14px", fontWeight:900 }}>
+              Enter Private
+            </Btn>
+            <button onClick={() => setShowPrivateModal(false)}
+              style={{ marginTop:12, background:"none", border:"none", color:COLORS.muted,
+                fontSize:13, cursor:"pointer" }}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {showSubModal && streamerProfile && (
         <SubscribeModal
           profile={streamerProfile}
@@ -6371,7 +6404,7 @@ function FanClubFeed({ subscriptions = {}, onNavigate, addToast }) {
 }
 
 // ── PRIVATE SHOW SCREEN ────────────────────────────────────────────────────────
-function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens = 0 }) {
+function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens = 0, onSpendTokens, selectedStreamerId }) {
   const [phase,     setPhase]     = useState("request");
   const [duration,  setDuration]  = useState(10);
   const [elapsed,   setElapsed]   = useState(0);
@@ -6379,11 +6412,80 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const [spent,     setSpent]     = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [chatMsgs,  setChatMsgs]  = useState([]);
+  const [liveVideoActive, setLiveVideoActive] = useState(false);
+  const [needsTap,        setNeedsTap]        = useState(false);
+  const pendingTrackRef  = useRef(null);
+  const agoraClientRef   = useRef(null);
   const timerRef = useRef(null);
   const chatRef  = useRef(null);
-  const RATE = 30; // default rate; real rate would come from streamer's profile
+  const RATE = 30;
   const totalCost = RATE * duration;
   const w = useWindowWidth(); const isMobile = w < 640;
+
+  // ── On mount: if arriving from stream room (private accepted), join channel ──
+  useEffect(() => {
+    const channelName = (() => { try { return localStorage.getItem("steamr_private_channel") || ""; } catch { return ""; } })();
+    if (!channelName) return;
+    // Clear so it's not reused on next visit
+    try { localStorage.removeItem("steamr_private_channel"); } catch {}
+
+    setPhase("active");
+    addToast("success", "🔒 Joining your private show…");
+
+    let cancelled = false;
+    const joinPrivate = async () => {
+      try {
+        const AgoraRTC = await loadAgora();
+        const client = AgoraRTC.createClient({ mode:"live", codec:"h264" });
+        agoraClientRef.current = client;
+
+        const playVideo = (user) => {
+          setTimeout(() => {
+            if (cancelled || !user.videoTrack) return;
+            const el = document.getElementById("agora-private-vid");
+            if (!el) return;
+            try { user.videoTrack.play("agora-private-vid"); setLiveVideoActive(true); setNeedsTap(false); }
+            catch { pendingTrackRef.current = user.videoTrack; setNeedsTap(true); }
+          }, 400);
+        };
+
+        client.on("user-published", async (user, mediaType) => {
+          if (cancelled) return;
+          try {
+            await client.subscribe(user, mediaType);
+            if (mediaType === "video") playVideo(user);
+            if (mediaType === "audio" && user.audioTrack) { try { user.audioTrack.play(); } catch {} }
+          } catch {}
+        });
+
+        await client.setClientRole("audience");
+        const { token, appId } = await getAgoraToken(channelName, "subscriber");
+        await client.join(appId, channelName, token, 0);
+
+        // Subscribe to any host already in the channel
+        for (const user of client.remoteUsers) {
+          if (user.hasVideo) { try { await client.subscribe(user, "video"); playVideo(user); } catch {} }
+          if (user.hasAudio) { try { await client.subscribe(user, "audio"); user.audioTrack?.play(); } catch {} }
+        }
+
+        // Start per-minute token billing
+        if (onSpendTokens) {
+          timerRef.current = setInterval(() => {
+            onSpendTokens(RATE);
+            setSpent(s => s + RATE);
+          }, 60000);
+        }
+      } catch (err) {
+        if (!cancelled) addToast("error", `Private channel: ${err?.message || "connection failed"}`);
+      }
+    };
+
+    joinPrivate();
+    return () => {
+      cancelled = true;
+      if (agoraClientRef.current) { agoraClientRef.current.leave().catch(()=>{}); agoraClientRef.current = null; }
+    };
+  }, []);
 
   const startShow = () => {
     setPhase("waiting");
@@ -6414,7 +6516,35 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
         ← Back to Stream
       </button>
 
-      {phase==="request" && (
+      {/* Live video feed when entered from stream room */}
+      {phase === "active" && (
+        <div style={{ background:"#0a0a14", borderRadius:16, overflow:"hidden",
+          height:isMobile?260:380, position:"relative", marginBottom:16,
+          border:`1px solid ${COLORS.border}` }}>
+          <div id="agora-private-vid" style={{ position:"absolute", inset:0 }} />
+          {!liveVideoActive && (
+            <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column",
+              alignItems:"center", justifyContent:"center", gap:10 }}>
+              {needsTap ? (
+                <button onClick={() => {
+                  if (!pendingTrackRef.current) return;
+                  try { pendingTrackRef.current.play("agora-private-vid"); setLiveVideoActive(true); setNeedsTap(false); } catch {}
+                }} style={{ background:COLORS.accent, border:"none", borderRadius:12, color:"#fff",
+                  fontSize:16, fontWeight:800, padding:"14px 28px", cursor:"pointer" }}>
+                  ▶ Tap to Watch
+                </button>
+              ) : (
+                <>
+                  <div style={{ fontSize:36, animation:"pulse 1.4s ease-in-out infinite" }}>🔒</div>
+                  <div style={{ color:COLORS.muted, fontSize:13 }}>Connecting to private show…</div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {phase === "request" && (
         <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:28 }}>
           <div style={{ textAlign:"center", marginBottom:24 }}>
             <div style={{ fontSize:48, marginBottom:12 }}>🔒</div>
@@ -9481,7 +9611,7 @@ export default function App() {
       case "edit-profile":       return <EditProfileScreen profileData={profileData} onSave={setProfileData} onNavigate={navigate} />;
       case "settings":           return <SettingsScreen onNavigate={navigate} addToast={addToast} isStreamer={true} isDark={isDark} onToggleTheme={toggleTheme} />;
       case "fan-club":           return <FanClubFeed subscriptions={subscriptions} onNavigate={navigate} addToast={addToast} />;
-      case "private-show":       return <PrivateShowScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} viewerTokens={viewerTokens} />;
+      case "private-show":       return <PrivateShowScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} viewerTokens={viewerTokens} onSpendTokens={onSpendTokens} selectedStreamerId={selectedStreamerId} />;
       case "schedule":           return <ScheduleScreen onNavigate={navigate} />;
       case "discovery":          return <DiscoveryScreen onNavigate={navigate} />;
       case "analytics":          return <AnalyticsScreen onNavigate={navigate} />;
