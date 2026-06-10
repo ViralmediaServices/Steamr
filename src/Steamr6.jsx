@@ -2043,12 +2043,12 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   );
 
   return (
-    <div style={{ maxWidth: 1150, margin: "0 auto", padding: isMobile?"12px":"24px", display: "grid", gridTemplateColumns: isMobile?"1fr":"1fr 320px", gap: 20 }}>
+    <div style={{ maxWidth: isMobile ? "100%" : "1920px", margin: "0 auto", padding: isMobile?"12px":"16px 24px", display: "grid", gridTemplateColumns: isMobile?"1fr":"minmax(0,1fr) 400px", alignItems: "start", gap: isMobile ? 0 : 24 }}>
       <div>
         <button onClick={() => onNavigate("viewer-browse")} style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:12,fontSize:13 }}>← Browse</button>
 
         {/* Video — Agora remote stream */}
-        <div style={{ background:"linear-gradient(135deg,#1a0a2e,#0a1a2e)", borderRadius:16, height:isMobile?260:400, border:`1px solid ${COLORS.border}`, position:"relative", marginBottom:14, overflow:"hidden" }}>
+        <div style={{ background:"linear-gradient(135deg,#1a0a2e,#0a1a2e)", borderRadius:isMobile?12:0, ...(isMobile ? { height:260 } : { aspectRatio:"16/9" }), border:`1px solid ${COLORS.border}`, position:"relative", marginBottom:isMobile?14:0, overflow:"hidden" }}>
 
           {/* Agora fills this div with the live video */}
           <div id="agora-remote-vid" style={{ position:"absolute", inset:0, borderRadius:16 }} />
@@ -2389,7 +2389,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       </div>
 
       {/* Chat */}
-      <Card style={{ display:"flex", flexDirection:"column", height:isMobile?400:620, padding:isMobile?10:16 }}>
+      <Card style={{ display:"flex", flexDirection:"column", height:isMobile?400:"calc(100vh - 32px)", padding:isMobile?10:16, ...(isMobile ? {} : { position:"sticky", top:16 }) }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div style={{ fontWeight:700, fontSize:15 }}>💬 Live Chat</div>
           <div style={{ display:"flex", alignItems:"center", gap:6, background:COLORS.surface,
