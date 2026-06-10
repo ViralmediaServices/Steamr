@@ -2145,18 +2145,21 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
                 if (!privateStatus?.privateChannel) { addToast("warning","No active private show to spy on."); return; }
                 const rate = streamerProfile?.spyRate || 30;
                 if ((viewerTokens || 0) < rate) { addToast("warning","Not enough tokens to spy."); return; }
+                // Charge first minute immediately
                 onSpendTokens && onSpendTokens(rate);
                 await joinPrivateChannel(privateStatus.privateChannel);
                 isSpyingRef.current = true;
                 setIsSpying(true);
+                // Then charge every 2 seconds (rate ÷ 30 ticks per minute)
+                const spyTick = Math.max(1, Math.ceil(rate / 30));
                 spyIntervalRef.current = setInterval(() => {
-                  if ((viewerTokens || 0) < rate) {
+                  if ((viewerTokens || 0) < spyTick) {
                     leavePrivateChannel();
-                    addToast("warning","Out of tokens — spy mode ended.");
+                    addToast("warning", "Out of tokens — spy mode ended.");
                     return;
                   }
-                  onSpendTokens && onSpendTokens(rate);
-                }, 60000);
+                  onSpendTokens && onSpendTokens(spyTick);
+                }, 2000);
               }} style={{
                 flex:1, background:"transparent", border:`1px solid ${COLORS.gold}44`,
                 borderRadius:10, padding:"9px 10px", color:COLORS.gold,
@@ -2193,7 +2196,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
                 fontSize:12, fontWeight:700, cursor: requestSent ? "default" : "pointer", transition:"all 0.2s",
                 opacity: requestSent ? 0.8 : 1,
               }}>
-              {requestStatus==="pending" ? "⏳ Waiting…" : requestStatus==="accepted" ? "🔒 In Private" : "🔒 Private"}
+              {requestStatus==="pending" ? "⏳ Waiting…" : requestStatus==="accepted" ? "🔒 In Private" : `🔒 Private · 🪙${streamerProfile?.privateRate||50}/min`}
             </button>
 
             {/* Subscribe */}
@@ -2428,7 +2431,10 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             </div>
             <Btn onClick={() => {
               setShowPrivateModal(false);
-              try { localStorage.setItem("steamr_private_channel", privateNavChannel); } catch {}
+              try {
+                localStorage.setItem("steamr_private_channel", privateNavChannel);
+                localStorage.setItem("steamr_private_rate", String(streamerProfile?.privateRate || 50));
+              } catch {}
               onNavigate("private-show");
             }} variant="green" style={{ width:"100%", fontSize:16, padding:"14px", fontWeight:900 }}>
               Enter Private
@@ -6423,7 +6429,7 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const agoraClientRef   = useRef(null);
   const timerRef = useRef(null);
   const chatRef  = useRef(null);
-  const RATE = 30;
+  const RATE = (() => { try { return parseInt(localStorage.getItem("steamr_private_rate")||"50",10)||50; } catch { return 50; } })();
   const totalCost = RATE * duration;
   const w = useWindowWidth(); const isMobile = w < 640;
 
@@ -6476,13 +6482,24 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
         // 1-second elapsed counter — drives the session timer display
         const elapsedIv = setInterval(() => setElapsed(e => e + 1), 1000);
 
-        // Per-minute token billing
+        // Charge first full minute immediately
         if (onSpendTokens) {
-          timerRef.current = setInterval(() => {
-            onSpendTokens(RATE);
-            setSpent(s => s + RATE);
-          }, 60000);
+          onSpendTokens(RATE);
+          setSpent(s => s + RATE);
+          setBalance(b => Math.max(0, b - RATE));
         }
+
+        // Then charge every 2 seconds (rate ÷ 30 two-second ticks per minute)
+        const perTick = Math.max(1, Math.ceil(RATE / 30));
+        timerRef.current = setInterval(() => {
+          setBalance(b => {
+            const next = Math.max(0, b - perTick);
+            if (next <= 0) endShow();
+            return next;
+          });
+          setSpent(s => s + perTick);
+          if (onSpendTokens) onSpendTokens(perTick);
+        }, 2000);
 
         // Store elapsed interval so cleanup can clear it
         agoraClientRef._elapsedIv = elapsedIv;
