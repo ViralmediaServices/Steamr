@@ -4238,7 +4238,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
 
 
   return (
-    <div style={{ maxWidth:700, margin:"0 auto", padding:isMobile?"24px 16px 60px":"48px 24px" }}>
+    <div style={{ maxWidth:(streaming&&!isMobile)?"1920px":700, margin:"0 auto",
+      padding:isMobile?"24px 16px 60px":(streaming?"16px 24px":"48px 24px"),
+      ...(streaming&&!isMobile ? { display:"grid", gridTemplateColumns:"minmax(0,1fr) 400px", alignItems:"start", gap:24 } : {}) }}>
+      <div> {/* left column */}
       <button onClick={() => { stopStream(); onNavigate("streamer-dashboard"); }}
         style={{ background:"none",border:"none",color:COLORS.muted,cursor:"pointer",marginBottom:20,fontSize:13 }}>
         ← Dashboard
@@ -4248,7 +4251,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       </h2>
 
     <div style={{ background: streaming ? "linear-gradient(135deg,#1a0a2e,#0a1a2e)" : COLORS.surface,
-      borderRadius:16, height:isMobile?220:300, display:"flex", flexDirection:"column",
+      borderRadius:16, ...(streaming&&!isMobile ? { aspectRatio:"16/9" } : { height:isMobile?220:300 }),
+      display:"flex", flexDirection:"column",
       alignItems:"center", justifyContent:"center",
       border:`2px solid ${streaming ? COLORS.accent : permStatus==="granted" ? COLORS.green : COLORS.border}`,
       marginBottom:16, transition:"all 0.4s", position:"relative", overflow:"hidden" }}>
@@ -4601,14 +4605,16 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
         </div>
       )}
 
-      {/* ── Live Chat + Tips ── */}
+      </div> {/* end left column */}
+
+      {/* ── Live Chat + Tips — right column on desktop, stacked on mobile ── */}
       {streaming && (
-        <Card style={{ marginTop:16, padding:0, overflow:"hidden" }}>
+        <Card style={{ padding:0, overflow:"hidden", ...(isMobile ? { marginTop:16 } : { display:"flex", flexDirection:"column", height:"calc(100vh - 32px)", position:"sticky", top:16 }) }}>
           <div style={{ padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8 }}>💬 Live Chat</div>
             <div style={{ fontSize:11, color:COLORS.muted }}>{liveMsgs.length > 0 ? `${liveMsgs.length} messages` : "Waiting for viewers…"}</div>
           </div>
-          <div ref={liveChatRef} style={{ height:220, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
+          <div ref={liveChatRef} style={{ flex:1, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
             {liveMsgs.length === 0 ? (
               <div style={{ textAlign:"center", color:COLORS.muted, fontSize:12, padding:"48px 0" }}>
                 No messages yet — viewers will appear here
