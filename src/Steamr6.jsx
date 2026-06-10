@@ -1557,7 +1557,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       } catch {}
     };
     poll();
-    const iv = setInterval(poll, 15_000);
+    const iv = setInterval(poll, 5_000);
     return () => clearInterval(iv);
   }, [streamerProfile?.email]);
   const currentSub  = subscriptions[selectedStreamerId] || subscriptions[1] || null;
@@ -1685,7 +1685,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
 
     heartbeat(); // register immediately on mount
-    const iv = setInterval(heartbeat, 30_000); // refresh every 30 s
+    const iv = setInterval(heartbeat, 20_000); // refresh every 20 s
 
     return () => {
       clearInterval(iv);
@@ -3666,7 +3666,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       } catch {}
     };
     poll();
-    const iv = setInterval(poll, 15000);
+    const iv = setInterval(poll, 5000);
     return () => {
       clearInterval(iv);
       setViewerCount(0);
