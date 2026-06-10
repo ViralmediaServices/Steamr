@@ -3905,7 +3905,11 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
         const ed = await er.json();
         if (ed.ok && active) {
           const delta = (ed.earnings || 0) - lastEarnings;
-          if (delta > 0) { setSessionTokens(t => t + delta); lastEarnings = ed.earnings; }
+          if (delta > 0) {
+            privateEarningsRef.current += delta;
+            lastEarnings = ed.earnings;
+            setSessionTokens(tipTokensRef.current + privateEarningsRef.current);
+          }
         }
       } catch {}
     };
