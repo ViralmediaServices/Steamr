@@ -1532,9 +1532,17 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const nextTipRef     = useRef(null);
   const agoraClientRef       = useRef(null);
   const pendingVideoTrackRef = useRef(null);
+  const privateAgoraClientRef = useRef(null);
+  const spyIntervalRef        = useRef(null);
+  const myEmailRef = useRef((() => { try { return (JSON.parse(localStorage.getItem("steamr_session")||"null")?.email||"").toLowerCase().trim(); } catch { return ""; } })());
   const [liveVideoActive,  setLiveVideoActive]  = useState(false);
   const [liveVideoError,   setLiveVideoError]   = useState(false);
   const [needsUserAction,  setNeedsUserAction]  = useState(false);
+  const [privateStatus,    setPrivateStatus]    = useState(null);
+  const [requestSent,      setRequestSent]      = useState(false);
+  const [requestStatus,    setRequestStatus]    = useState(null);
+  const [isSpying,         setIsSpying]         = useState(false);
+  const [isPrivateViewer,  setIsPrivateViewer]  = useState(false);
 
   const addTipAlert = (user, amount, type="incoming") => {
     const id = Date.now() + Math.random();
@@ -1590,6 +1598,8 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           tipMenu:     sp.tipMenu     || [],
           followers:   data.activity?.followers || 0,
           email:       p.email        || "",
+          spyRate:     sp.spyRate     || 30,
+          privateRate: sp.privateRate || 50,
         });
         setStreamerName(p.displayName || p.name || "Streamer");
         if (sp.goalLabel && sp.goalTarget) {
@@ -1717,6 +1727,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         const { token, appId } = await getAgoraToken(channelName, "subscriber");
         await client.join(appId, channelName, token, 0);
 
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "video" && !isPrivateViewer && !isSpying) setLiveVideoActive(false);
+        });
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
           try {
@@ -1768,6 +1781,43 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
   }, [streamerProfile?.email]);
 
+  // ── Poll private show status — know when streamer goes private ──────────────
+  useEffect(() => {
+    const channel = (streamerProfile?.email || "").toLowerCase().trim();
+    if (!channel) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(channel)}`);
+        const data = await r.json();
+        if (!data.ok || !active) return;
+        const next = data.status;
+        setPrivateStatus(next);
+        const myEmail = myEmailRef.current;
+
+        if (next?.status === "accepted") {
+          if (next.viewerEmail?.toLowerCase() === myEmail && !isPrivateViewer && requestStatus === "pending") {
+            setIsPrivateViewer(true);
+            setRequestStatus("accepted");
+            joinPrivateChannel(next.privateChannel);
+          }
+        } else if (next?.status === "rejected" && requestStatus === "pending") {
+          setRequestStatus("rejected");
+          setRequestSent(false);
+          addToast("info", "Private show request was declined.");
+          setTimeout(() => setRequestStatus(null), 3000);
+        } else if (!next || next?.status === "ended") {
+          if (isPrivateViewer || isSpying) leavePrivateChannel();
+          setRequestSent(false);
+          setRequestStatus(null);
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 5000);
+    return () => { active = false; clearInterval(iv); };
+  }, [streamerProfile?.email, requestStatus, isPrivateViewer, isSpying]);
+
   // ── Real-time chat — poll API every 4 s, shared with streamer ─────────────
   useEffect(() => {
     const channel = (streamerProfile?.email || "").toLowerCase().trim();
@@ -1792,6 +1842,42 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     const iv = setInterval(poll, 4000);
     return () => { active = false; clearInterval(iv); };
   }, [streamerProfile?.email]);
+
+  // ── Private channel helpers ─────────────────────────────────────────────
+  const joinPrivateChannel = async (channelName) => {
+    if (!channelName || privateAgoraClientRef.current) return;
+    try {
+      const AgoraRTC = await loadAgora();
+      const prvClient = AgoraRTC.createClient({ mode:"live", codec:"h264" });
+      privateAgoraClientRef.current = prvClient;
+      await prvClient.setClientRole("audience");
+      const { token, appId } = await getAgoraToken(channelName, "subscriber");
+      await prvClient.join(appId, channelName, token, 0);
+      prvClient.on("user-published", async (user, mediaType) => {
+        try {
+          await prvClient.subscribe(user, mediaType);
+          if (mediaType === "video") {
+            setTimeout(() => {
+              if (!user.videoTrack) return;
+              const el = document.getElementById("agora-remote-vid");
+              if (!el) return;
+              try { user.videoTrack.play("agora-remote-vid"); setLiveVideoActive(true); setNeedsUserAction(false); }
+              catch { pendingVideoTrackRef.current = user.videoTrack; setNeedsUserAction(true); }
+            }, 300);
+          }
+          if (mediaType === "audio" && user.audioTrack) { try { user.audioTrack.play(); } catch {} }
+        } catch {}
+      });
+    } catch (err) { console.error("Private join error:", err?.message); }
+  };
+
+  const leavePrivateChannel = () => {
+    if (spyIntervalRef.current) { clearInterval(spyIntervalRef.current); spyIntervalRef.current = null; }
+    if (privateAgoraClientRef.current) { privateAgoraClientRef.current.leave().catch(()=>{}); privateAgoraClientRef.current = null; }
+    setIsSpying(false);
+    setIsPrivateViewer(false);
+    setLiveVideoActive(false);
+  };
 
   const sendTip = () => {
     if (tokens < effectiveTip || effectiveTip < 1) return;
@@ -1921,6 +2007,21 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           {/* Agora fills this div with the live video */}
           <div id="agora-remote-vid" style={{ position:"absolute", inset:0, borderRadius:16 }} />
 
+          {/* In Private Be Right Back — shown to public viewers not in private/spy */}
+          {privateStatus?.status === "accepted" && !isPrivateViewer && !isSpying && (
+            <div style={{ position:"absolute", inset:0, zIndex:4, background:"#000000dd",
+              display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:10 }}>
+              {streamerProfile?.avatarImg
+                ? <img src={streamerProfile.avatarImg} style={{ width:80, height:80, borderRadius:"50%", objectFit:"cover", border:"3px solid #ffffff22" }} />
+                : <div style={{ fontSize:56 }}>{streamerProfile?.avatar || "🎭"}</div>}
+              <div style={{ color:"#fff", fontWeight:800, fontSize:20, letterSpacing:0.5 }}>In Private</div>
+              <div style={{ color:"#ffffffaa", fontSize:14 }}>Be Right Back</div>
+              <div style={{ marginTop:8, fontSize:12, color:COLORS.gold, fontWeight:700, background:COLORS.gold+"22", borderRadius:8, padding:"6px 14px" }}>
+                👁 Spy · 🪙{streamerProfile?.spyRate||30}/min
+              </div>
+            </div>
+          )}
+
           {/* Overlay when no live video yet */}
           {!liveVideoActive && (
             <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
@@ -1984,26 +2085,60 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
             </button>
 
             {/* Spy */}
-            {!spyMode ? (
-              <button onClick={() => setSpyMode(true)} style={{
+            {!isSpying ? (
+              <button onClick={async () => {
+                if (!privateStatus?.privateChannel) { addToast("warning","No active private show to spy on."); return; }
+                const rate = streamerProfile?.spyRate || 30;
+                if ((viewerTokens || 0) < rate) { addToast("warning","Not enough tokens to spy."); return; }
+                onSpendTokens && onSpendTokens(rate);
+                await joinPrivateChannel(privateStatus.privateChannel);
+                setIsSpying(true);
+                spyIntervalRef.current = setInterval(() => {
+                  if ((viewerTokens || 0) < rate) {
+                    leavePrivateChannel();
+                    addToast("warning","Out of tokens — spy mode ended.");
+                    return;
+                  }
+                  onSpendTokens && onSpendTokens(rate);
+                }, 60000);
+              }} style={{
                 flex:1, background:"transparent", border:`1px solid ${COLORS.gold}44`,
                 borderRadius:10, padding:"9px 10px", color:COLORS.gold,
                 fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
-              }}>👁 Spy · 🪙 30/min</button>
+              }}>👁 Spy · 🪙{streamerProfile?.spyRate||30}/min</button>
             ) : (
-              <button onClick={() => setSpyMode(false)} style={{
+              <button onClick={leavePrivateChannel} style={{
                 flex:1, background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}`,
                 borderRadius:10, padding:"9px 10px", color:COLORS.gold,
                 fontSize:12, fontWeight:700, cursor:"pointer",
-              }}>✕ Leave Spy Mode</button>
+              }}>✕ Leave Spy</button>
             )}
 
             {/* Private */}
-            <button onClick={() => onNavigate("private-show")} style={{
-              flex:1, background:"transparent", border:`1px solid ${COLORS.accent}55`,
-              borderRadius:10, padding:"9px 10px", color:COLORS.accent,
-              fontSize:12, fontWeight:700, cursor:"pointer", transition:"all 0.2s",
-            }}>🔒 Private</button>
+            <button
+              disabled={requestSent}
+              onClick={async () => {
+                if (requestSent) return;
+                const sess = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+                const channel = (streamerProfile?.email || "").toLowerCase().trim();
+                if (!channel) return;
+                setRequestSent(true);
+                setRequestStatus("pending");
+                await fetch(`/api/user-profile?action=private-req&channel=${encodeURIComponent(channel)}`, {
+                  method:"POST", headers:{"Content-Type":"application/json"},
+                  body: JSON.stringify({ viewerName: sess?.name || sess?.displayName || "Viewer", viewerEmail: sess?.email || "", sessionId: `v_${Date.now()}` }),
+                }).catch(()=>{});
+              }}
+              style={{
+                flex:1, background: requestStatus==="pending" ? COLORS.accent+"18" : requestStatus==="accepted" ? COLORS.green+"18" : "transparent",
+                border:`1px solid ${requestStatus==="accepted" ? COLORS.green : COLORS.accent}55`,
+                borderRadius:10, padding:"9px 10px",
+                color: requestStatus==="accepted" ? COLORS.green : COLORS.accent,
+                fontSize:12, fontWeight:700, cursor: requestSent ? "default" : "pointer", transition:"all 0.2s",
+                opacity: requestSent ? 0.8 : 1,
+              }}>
+              {requestStatus==="pending" ? "⏳ Waiting…" : requestStatus==="accepted" ? "🔒 In Private" : "🔒 Private"}
+            </button>
 
             {/* Subscribe */}
             {currentSub ? (
@@ -3508,10 +3643,14 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
 }
 
 // ── GO LIVE ───────────────────────────────────────────────────────────────────
-function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange }) {
+function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange, profileData }) {
   const w = useWindowWidth(); const isMobile = w < 640;
-  const agoraClientRef = useRef(null);
-  const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
+  const agoraClientRef      = useRef(null);
+  const localTracksRef       = useRef(null); // [audioTrack, videoTrack]
+  const privateAgoraClientRef = useRef(null);
+  const [privateRequest,      setPrivateRequest]      = useState(null);  // {viewerName,viewerEmail}
+  const [privateMode,         setPrivateMode]         = useState(false);
+  const [privateViewerEmail,  setPrivateViewerEmail]  = useState("");
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
   const [agoraError,  setAgoraError]  = useState("");
   const liveChatRef       = useRef(null);
@@ -3643,6 +3782,24 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     }
   };
 
+  // ── Poll for incoming private show requests from viewers ──────────────────
+  useEffect(() => {
+    if (!streaming || privateMode) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const channel = (session?.email || "").toLowerCase().trim();
+    if (!channel) return;
+    const check = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=private-req&channel=${encodeURIComponent(channel)}`);
+        const data = await r.json();
+        if (data.ok && data.request) setPrivateRequest(data.request);
+      } catch {}
+    };
+    check();
+    const iv = setInterval(check, 5000);
+    return () => clearInterval(iv);
+  }, [streaming, privateMode]);
+
   // ── Live chat polling — fetch from shared Redis chat key every 4 s ──────────
   useEffect(() => {
     if (!streaming) return;
@@ -3666,6 +3823,69 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     const iv = setInterval(poll, 4000);
     return () => { active = false; clearInterval(iv); setLiveMsgs([]); };
   }, [streaming]);
+
+  // ── Private show — accept / reject / end ─────────────────────────────────
+  const acceptPrivate = async () => {
+    if (!privateRequest) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const se = (session?.email || "").toLowerCase().trim();
+    const ve = (privateRequest.viewerEmail || "").toLowerCase().trim();
+    const prvCh = `prv_${se.replace(/[^a-z0-9]/g,"_")}_${ve.replace(/[^a-z0-9]/g,"_")}`.slice(0, 64);
+    await fetch(`/api/user-profile?action=private-req&channel=${encodeURIComponent(se)}`, { method:"DELETE" }).catch(()=>{});
+    await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ status:"accepted", privateChannel:prvCh, viewerEmail:privateRequest.viewerEmail }),
+    }).catch(()=>{});
+    if (agoraClientRef.current && localTracksRef.current) {
+      try { await agoraClientRef.current.unpublish(localTracksRef.current); } catch {}
+    }
+    try {
+      const AgoraRTC = await loadAgora();
+      const prvClient = AgoraRTC.createClient({ mode:"live", codec:"h264" });
+      privateAgoraClientRef.current = prvClient;
+      const { token, appId } = await getAgoraToken(prvCh, "publisher");
+      await prvClient.setClientRole("host");
+      await prvClient.join(appId, prvCh, token, 0);
+      await prvClient.publish(localTracksRef.current);
+    } catch (err) { console.error("Private channel error:", err?.message); }
+    setPrivateViewerEmail(privateRequest.viewerEmail);
+    setPrivateRequest(null);
+    setPrivateMode(true);
+  };
+
+  const rejectPrivate = async () => {
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const se = (session?.email || "").toLowerCase().trim();
+    await fetch(`/api/user-profile?action=private-req&channel=${encodeURIComponent(se)}`, { method:"DELETE" }).catch(()=>{});
+    await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ status:"rejected" }),
+    }).catch(()=>{});
+    setPrivateRequest(null);
+    addToast("info", "Private show request declined.");
+  };
+
+  const endPrivate = async () => {
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const se = (session?.email || "").toLowerCase().trim();
+    if (privateAgoraClientRef.current) {
+      try {
+        if (localTracksRef.current) await privateAgoraClientRef.current.unpublish(localTracksRef.current).catch(()=>{});
+        await privateAgoraClientRef.current.leave();
+      } catch {}
+      privateAgoraClientRef.current = null;
+    }
+    if (agoraClientRef.current && localTracksRef.current) {
+      try { await agoraClientRef.current.publish(localTracksRef.current); } catch {}
+    }
+    await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ status:"ended" }),
+    }).catch(()=>{});
+    setPrivateMode(false);
+    setPrivateViewerEmail("");
+    addToast("info", "Private show ended — back on public stream.");
+  };
 
   // ── Streamer sends a chat message visible to all viewers ─────────────────
   const sendStreamerChat = () => {
@@ -3885,6 +4105,19 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
         style={{ position:"absolute", inset:0, borderRadius:14, overflow:"hidden",
           display: permStatus === "granted" ? "block" : "none" }}
       />
+
+      {/* In Private overlay on camera preview */}
+      {privateMode && (
+        <div style={{ position:"absolute", inset:0, zIndex:6, background:"#000000cc",
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, borderRadius:14 }}>
+          {profileData?.avatarImg
+            ? <img src={profileData.avatarImg} style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover", border:"3px solid #ffffff33" }} />
+            : <div style={{ fontSize:48 }}>{profileData?.avatar || "🎭"}</div>}
+          <div style={{ color:"#fff", fontWeight:800, fontSize:17 }}>In Private</div>
+          <div style={{ color:"#ffffffaa", fontSize:12 }}>Be Right Back</div>
+          <div style={{ fontSize:11, color:COLORS.accent, fontWeight:700 }}>🔒 {privateViewerEmail || "viewer"}</div>
+        </div>
+      )}
 
       {/* Overlay content on top of video */}
       {permStatus === "granted" && streaming && (
@@ -4162,6 +4395,13 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
         </div>
       )}
 
+      {streaming && privateMode && (
+        <Btn onClick={endPrivate} style={{ marginTop:12, width:"100%", background:"#ff444418",
+          border:"1px solid #ff444455", color:"#ff6666", fontWeight:800 }}>
+          ⏹ End Private Show
+        </Btn>
+      )}
+
       {/* Agora video relay status — visible feedback for streamer */}
       {streaming && (
         <div style={{ marginTop:12, padding:"10px 14px", borderRadius:10, display:"flex", alignItems:"center", gap:10,
@@ -4187,6 +4427,25 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
             )}
             {agoraStatus==="idle"       && <span style={{ color:COLORS.muted }}>📡 Video relay not started</span>}
           </div>
+        </div>
+      )}
+
+      {/* ── Private show request popup ── */}
+      {privateRequest && (
+        <div style={{ position:"fixed", inset:0, background:"#000000bb", zIndex:9000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <Card style={{ maxWidth:320, width:"100%", padding:28, textAlign:"center" }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>🔒</div>
+            <div style={{ fontWeight:800, fontSize:17, marginBottom:6 }}>Private Show Request</div>
+            <div style={{ color:COLORS.muted, fontSize:13, marginBottom:6 }}>
+              <strong style={{ color:COLORS.text }}>{privateRequest.viewerName}</strong> wants a private show
+            </div>
+            <div style={{ color:COLORS.muted, fontSize:11, marginBottom:20 }}>Going private will pause your public stream</div>
+            <div style={{ display:"flex", gap:12 }}>
+              <Btn onClick={rejectPrivate} style={{ flex:1 }}>✕ Decline</Btn>
+              <Btn onClick={acceptPrivate} variant="green" style={{ flex:1 }}>✓ Accept</Btn>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -4891,7 +5150,9 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     socialTwitter:   profileData.socialLinks.twitter   || "",
     socialInstagram: profileData.socialLinks.instagram || "",
     socialTikTok:    profileData.socialLinks.tiktok    || "",
-    newTag: "",
+    newTag:       "",
+    privateRate:  profileData.streamerProfile?.privateRate || 50,
+    spyRate:      profileData.streamerProfile?.spyRate      || 30,
   });
   const [nameError, setNameError] = useState("");
 
@@ -4921,6 +5182,8 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
           socialTwitter:   sp.socialLinks?.twitter   || f.socialTwitter,
           socialInstagram: sp.socialLinks?.instagram || f.socialInstagram,
           socialTikTok:    sp.socialLinks?.tiktok    || f.socialTikTok,
+          privateRate:     sp.privateRate ?? f.privateRate,
+          spyRate:         sp.spyRate     ?? f.spyRate,
         }));
         // Load wishlist separately (stored in streamerProfile)
         if (Array.isArray(sp.wishlist)) {
@@ -5045,6 +5308,8 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             socialLinks: updated.socialLinks,
             wishlist:    wishlist,
             geoBlocking: geoBlocking,
+            privateRate: Number(form.privateRate) || 50,
+            spyRate:     Number(form.spyRate)     || 30,
           },
         }),
       }).catch(() => {});
@@ -5542,6 +5807,31 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             ⚠️ Geo-blocking uses IP detection and is a strong deterrent — it cannot block determined VPN users.
           </div>
         </>)}
+      </Card>
+
+      {/* Private Shows */}
+      <Card style={{ marginBottom:28 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted, marginBottom:16 }}>🔒 PRIVATE SHOWS</div>
+        <div style={{ color:COLORS.muted, fontSize:12, marginBottom:16, lineHeight:1.5 }}>
+          Set how much viewers pay per minute for private shows and spy access.
+        </div>
+        {[
+          { key:"privateRate", label:"Private Show Rate", icon:"🔒", desc:"Tokens per minute charged to the private viewer" },
+          { key:"spyRate",     label:"Spy Rate",          icon:"👁", desc:"Tokens per minute charged to viewers who spy on a private show" },
+        ].map(({ key, label, icon, desc }) => (
+          <div key={key} style={{ marginBottom:18 }}>
+            <label style={{ display:"block", marginBottom:4, fontSize:13, color:COLORS.text, fontWeight:600 }}>{icon} {label}</label>
+            <div style={{ fontSize:11, color:COLORS.muted, marginBottom:8 }}>{desc}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <input type="number" min="1" max="9999" value={form[key]}
+                onChange={e => update(key, Math.max(1, parseInt(e.target.value)||1))}
+                style={{ width:110, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                  borderRadius:10, padding:"11px 14px", color:COLORS.text, fontSize:15, fontWeight:700, outline:"none", textAlign:"center" }}
+              />
+              <span style={{ color:COLORS.muted, fontSize:13 }}>🪙 / min</span>
+            </div>
+          </div>
+        ))}
       </Card>
 
       {/* Social links */}
@@ -9139,7 +9429,7 @@ export default function App() {
       case "kyc-status":         return <KYCStatusScreen onNavigate={navigate} />;
       case "kyc-viewer":         return <KYCScreen role="viewer"   onNavigate={navigate} />;
       case "streamer-dashboard": return <StreamerDashboard onNavigate={navigate} addToast={addToast} addNotification={addNotification} />;
-      case "go-live":            return <GoLiveScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} onStreamingChange={setIsStreamerLive} />;
+      case "go-live":            return <GoLiveScreen onNavigate={navigate} addToast={addToast} addNotification={addNotification} onStreamingChange={setIsStreamerLive} profileData={profileData} />;
       case "profile":            return <ProfileScreen streamerId={selectedStreamerId} profileData={profileData} isOwnProfile={selectedStreamerId === 1} onNavigate={navigate} following={following} onFollow={onFollow} subscriptions={subscriptions} onSubscribe={onSubscribe} onCancelSub={onCancelSub} isStreamerLive={isStreamerLive} />;
       case "edit-profile":       return <EditProfileScreen profileData={profileData} onSave={setProfileData} onNavigate={navigate} />;
       case "settings":           return <SettingsScreen onNavigate={navigate} addToast={addToast} isStreamer={true} isDark={isDark} onToggleTheme={toggleTheme} />;
