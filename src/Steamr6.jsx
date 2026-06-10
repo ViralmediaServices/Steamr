@@ -4881,10 +4881,56 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     tipMenu: [], wishlist: [], streamHistory: [], subscriptionTiers: SUBSCRIPTION_TIERS,
   });
 
-  const isLiveNow = isOwnProfile ? isStreamerLive : (fetchedProfile?.isLive || false);
+  const isLiveNow   = isOwnProfile ? isStreamerLive : (fetchedProfile?.isLive || false);
   const isFollowing = following.has(profile.id);
   const currentSub  = subscriptions[profile.id] || null;
-  const [showModal, setShowModal] = useState(false);
+  const [showModal,       setShowModal]       = useState(false);
+  const [tipAmount,       setTipAmount]       = useState("");
+  const [tipSending,      setTipSending]      = useState(false);
+  const [tipSent,         setTipSent]         = useState(false);
+  const [tipError,        setTipError]        = useState("");
+  const [viewerBalance,   setViewerBalance]   = useState(null);
+
+  // Fetch viewer's own token balance for the tip section
+  useEffect(() => {
+    if (isOwnProfile) return;
+    const token = localStorage.getItem("steamr_token");
+    if (!token) return;
+    fetch("/api/user-profile", { headers: { "x-auth-token": token } })
+      .then(r => r.json())
+      .then(d => { if (d.ok) setViewerBalance(d.activity?.tokenBalance ?? 0); })
+      .catch(() => {});
+  }, [isOwnProfile]);
+
+  const sendOfflineTip = async (rawAmt) => {
+    const amt = Number(rawAmt);
+    if (!amt || amt <= 0) return;
+    const token = localStorage.getItem("steamr_token");
+    if (!token) { setTipError("Log in to send a tip."); return; }
+    if (viewerBalance !== null && amt > viewerBalance) {
+      setTipError("Not enough tokens."); return;
+    }
+    setTipSending(true); setTipError("");
+    try {
+      const streamerEmail = (profile.email || fetchedProfile?.email || "").toLowerCase().trim();
+      if (!streamerEmail) { setTipError("Cannot identify streamer."); setTipSending(false); return; }
+      const res = await fetch("/api/user-profile?action=offline-tip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-auth-token": token },
+        body: JSON.stringify({ streamerEmail, amount: amt }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setTipSent(true);
+        setTipAmount("");
+        if (data.newBalance !== undefined) setViewerBalance(data.newBalance);
+        setTimeout(() => setTipSent(false), 3000);
+      } else {
+        setTipError(data.error || "Tip failed.");
+      }
+    } catch { setTipError("Network error — try again."); }
+    setTipSending(false);
+  };
 
   // ── Agora: embed live feed on profile when streamer is live ────────────────
   const agoraClientRef     = useRef(null);
@@ -5269,6 +5315,66 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
               ))}
             </div>
           </Card>
+
+          {/* ── Offline tip card — viewers only ── */}
+          {!isOwnProfile && (
+            <Card style={{ marginBottom:14, padding:0, overflow:"hidden" }}>
+              <div style={{ padding:"12px 14px", borderBottom:`1px solid ${COLORS.border}`,
+                display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ fontSize:11, fontWeight:700, color:COLORS.gold,
+                  textTransform:"uppercase", letterSpacing:1 }}>💝 Send a Tip</div>
+                {viewerBalance !== null && (
+                  <div style={{ fontSize:11, color:COLORS.muted }}>
+                    Balance: <span style={{ fontWeight:700, color:COLORS.text }}>🪙 {viewerBalance.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+              <div style={{ padding:"12px 14px" }}>
+                {tipSent ? (
+                  <div style={{ textAlign:"center", padding:"16px 0" }}>
+                    <div style={{ fontSize:28, marginBottom:6 }}>💝</div>
+                    <div style={{ fontWeight:800, color:COLORS.gold, fontSize:14 }}>Tip sent!</div>
+                    <div style={{ fontSize:12, color:COLORS.muted, marginTop:4 }}>Thank you for your support</div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Preset amounts */}
+                    <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+                      {[50, 100, 200, 500].map(amt => (
+                        <button key={amt} onClick={() => sendOfflineTip(amt)}
+                          disabled={tipSending || (viewerBalance !== null && viewerBalance < amt)}
+                          style={{ flex:1, padding:"9px 4px", fontWeight:800, fontSize:13,
+                            cursor: (tipSending || (viewerBalance !== null && viewerBalance < amt)) ? "not-allowed" : "pointer",
+                            background: (viewerBalance !== null && viewerBalance < amt) ? COLORS.surface : COLORS.gold+"18",
+                            border:`1px solid ${(viewerBalance !== null && viewerBalance < amt) ? COLORS.border : COLORS.gold+"88"}`,
+                            borderRadius:9, color:(viewerBalance !== null && viewerBalance < amt) ? COLORS.muted : COLORS.gold,
+                            transition:"all 0.15s" }}>
+                          🪙{amt}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Custom amount */}
+                    <div style={{ display:"flex", gap:8 }}>
+                      <input type="number" min="1" value={tipAmount}
+                        onChange={e => { setTipAmount(e.target.value); setTipError(""); }}
+                        onKeyDown={e => e.key === "Enter" && sendOfflineTip(tipAmount)}
+                        placeholder="Custom amount…"
+                        style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                          borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }} />
+                      <Btn onClick={() => sendOfflineTip(tipAmount)} disabled={tipSending || !tipAmount}
+                        style={{ padding:"9px 16px", flexShrink:0, background:COLORS.gold,
+                          border:"none", color:"#000", fontWeight:800, opacity:tipSending?0.6:1 }}>
+                        {tipSending ? "…" : "Tip"}
+                      </Btn>
+                    </div>
+                    {tipError && (
+                      <div style={{ marginTop:8, fontSize:12, color:"#ff6666", textAlign:"center" }}>{tipError}</div>
+                    )}
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
 
           {isOwnProfile && (
             <Btn onClick={() => onNavigate("edit-profile")} variant="ghost" style={{ width:"100%", fontSize:13 }}>
