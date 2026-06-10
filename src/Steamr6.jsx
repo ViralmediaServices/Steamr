@@ -3761,8 +3761,12 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const tipTokensRef           = useRef(0);     // chat tip total (liveMsgs effect)
   const privateEarningsRef     = useRef(0);     // private-show earnings (balance poll)
   const streamStartBalanceRef  = useRef(0);     // streamer tokenBalance at stream start
-  const [liveMsgs,          setLiveMsgs]         = useState([]);
-  const [streamerChatInput, setStreamerChatInput] = useState("");
+  const [liveMsgs,            setLiveMsgs]           = useState([]);
+  const [streamerChatInput,   setStreamerChatInput]   = useState("");
+  const [privateChannelName,  setPrivateChannelName]  = useState("");
+  const [privateMsgs,         setPrivateMsgs]         = useState([]);
+  const [privateChatInput,    setPrivateChatInput]    = useState("");
+  const privateChatRef = useRef(null);
 
   // Check verification before allowing stream
   const [verified,    setVerified]    = useState(null); // null=loading
@@ -3951,6 +3955,39 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     return () => clearInterval(iv);
   }, [streaming, privateMode]);
 
+  // ── Private chat polling — isolated to the private channel ──────────────────
+  useEffect(() => {
+    if (!privateMode || !privateChannelName) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(privateChannelName)}`);
+        const data = await r.json();
+        if (data.ok && active) {
+          setPrivateMsgs(data.messages || []);
+          setTimeout(() => { if (privateChatRef.current) privateChatRef.current.scrollTop = privateChatRef.current.scrollHeight; }, 30);
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { active = false; clearInterval(iv); };
+  }, [privateMode, privateChannelName]);
+
+  const sendPrivateStreamerMsg = () => {
+    if (!privateChatInput.trim() || !privateChannelName) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const userName = session?.name || session?.displayName || "Streamer";
+    const msg = privateChatInput.trim();
+    setPrivateChatInput("");
+    setPrivateMsgs(m => [...m, { type:"streamer", user:userName, msg, time:new Date().toISOString() }]);
+    setTimeout(() => { if (privateChatRef.current) privateChatRef.current.scrollTop = privateChatRef.current.scrollHeight; }, 30);
+    fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(privateChannelName)}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ user:userName, msg, type:"streamer" }),
+    }).catch(()=>{});
+  };
+
   // ── Live chat polling — fetch from shared Redis chat key every 4 s ──────────
   useEffect(() => {
     if (!streaming) return;
@@ -4001,6 +4038,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       await prvClient.join(appId, prvCh, token, 0);
       await prvClient.publish(localTracksRef.current);
     } catch (err) { console.error("Private channel error:", err?.message); }
+    setPrivateChannelName(prvCh);
     setPrivateViewerEmail(privateRequest.viewerEmail);
     setPrivateRequest(null);
     setPrivateMode(true);
@@ -4048,6 +4086,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ status:"ended" }),
     }).catch(()=>{});
+    setPrivateMsgs([]);
+    setPrivateChannelName("");
     setPrivateMode(false);
     setPrivateViewerEmail("");
     addToast("info", "Private show ended — back on public stream.");
@@ -4631,20 +4671,29 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
 
       </div> {/* end left column */}
 
-      {/* ── Live Chat + Tips — right column on desktop, stacked on mobile ── */}
+      {/* ── Chat panel — private chat during private show, public chat otherwise ── */}
       {streaming && (
         <Card style={{ padding:0, overflow:"hidden", ...(isMobile ? { marginTop:16 } : { display:"flex", flexDirection:"column", height:"calc(100vh - 32px)", position:"sticky", top:16 }) }}>
           <div style={{ padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8 }}>💬 Live Chat</div>
-            <div style={{ fontSize:11, color:COLORS.muted }}>{liveMsgs.length > 0 ? `${liveMsgs.length} messages` : "Waiting for viewers…"}</div>
-          </div>
-          <div ref={liveChatRef} style={{ flex:1, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
-            {liveMsgs.length === 0 ? (
-              <div style={{ textAlign:"center", color:COLORS.muted, fontSize:12, padding:"48px 0" }}>
-                No messages yet — viewers will appear here
+            {privateMode ? (
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span style={{ width:7, height:7, borderRadius:"50%", background:COLORS.accent, display:"inline-block" }} />
+                <div style={{ fontSize:12, fontWeight:700, color:COLORS.accent, textTransform:"uppercase", letterSpacing:0.8 }}>🔒 Private Chat</div>
               </div>
             ) : (
-              liveMsgs.map((m, i) => (
+              <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.8 }}>💬 Live Chat</div>
+            )}
+            <div style={{ fontSize:11, color:COLORS.muted }}>
+              {privateMode ? (privateMsgs.length > 0 ? `${privateMsgs.length} messages` : "Start chatting…") : (liveMsgs.length > 0 ? `${liveMsgs.length} messages` : "Waiting for viewers…")}
+            </div>
+          </div>
+          <div ref={privateMode ? privateChatRef : liveChatRef} style={{ flex:1, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
+            {(privateMode ? privateMsgs : liveMsgs).length === 0 ? (
+              <div style={{ textAlign:"center", color:COLORS.muted, fontSize:12, padding:"48px 0" }}>
+                {privateMode ? "No messages yet — say hello 👋" : "No messages yet — viewers will appear here"}
+              </div>
+            ) : (
+              (privateMode ? privateMsgs : liveMsgs).map((m, i) => (
                 <div key={i} style={{ fontSize:13, lineHeight:1.4 }}>
                   <span style={{ fontWeight:700, color: m.type==="tip" ? COLORS.gold : m.type==="streamer" ? COLORS.accent : COLORS.accentC }}>
                     {m.user}{m.type==="streamer" && <span style={{ fontSize:9, fontWeight:800, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:3, padding:"1px 4px", marginLeft:4, verticalAlign:"middle" }}>HOST</span>}
@@ -4660,17 +4709,27 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
               ))
             )}
           </div>
-          {/* Streamer chat input */}
+          {/* Input — private or public */}
           <div style={{ padding:"10px 14px", borderTop:`1px solid ${COLORS.border}`, display:"flex", gap:8 }}>
-            <input
-              value={streamerChatInput}
-              onChange={e => setStreamerChatInput(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && sendStreamerChat()}
-              placeholder="Say something…"
-              style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
-                borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
-            />
-            <Btn onClick={sendStreamerChat} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
+            {privateMode ? (
+              <>
+                <input value={privateChatInput} onChange={e => setPrivateChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && sendPrivateStreamerMsg()}
+                  placeholder="Private message…"
+                  style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.accent}44`,
+                    borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }} />
+                <Btn onClick={sendPrivateStreamerMsg} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
+              </>
+            ) : (
+              <>
+                <input value={streamerChatInput} onChange={e => setStreamerChatInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && sendStreamerChat()}
+                  placeholder="Say something…"
+                  style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                    borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }} />
+                <Btn onClick={sendStreamerChat} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
+              </>
+            )}
           </div>
         </Card>
       )}
@@ -6516,18 +6575,54 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const [chatMsgs,  setChatMsgs]  = useState([]);
   const [liveVideoActive, setLiveVideoActive] = useState(false);
   const [needsTap,        setNeedsTap]        = useState(false);
-  const pendingTrackRef  = useRef(null);
-  const agoraClientRef   = useRef(null);
-  const timerRef = useRef(null);
-  const chatRef  = useRef(null);
+  const pendingTrackRef    = useRef(null);
+  const agoraClientRef     = useRef(null);
+  const timerRef           = useRef(null);
+  const chatRef            = useRef(null);
+  const privateChannelRef  = useRef("");   // persists after localStorage is cleared
   const RATE = (() => { try { return parseInt(localStorage.getItem("steamr_private_rate")||"50",10)||50; } catch { return 50; } })();
   const totalCost = RATE * duration;
   const w = useWindowWidth(); const isMobile = w < 640;
+
+  // ── Private chat — polls same Redis key as the streamer ──────────────────
+  useEffect(() => {
+    if (phase !== "active" || !privateChannelRef.current) return;
+    const channel = privateChannelRef.current;
+    let active = true;
+    const poll = async () => {
+      try {
+        const r = await fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(channel)}`);
+        const data = await r.json();
+        if (data.ok && active) {
+          setChatMsgs(data.messages || []);
+          setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 30);
+        }
+      } catch {}
+    };
+    poll();
+    const iv = setInterval(poll, 4000);
+    return () => { active = false; clearInterval(iv); };
+  }, [phase]);
+
+  const sendViewerMsg = () => {
+    if (!chatInput.trim() || !privateChannelRef.current) return;
+    const sess = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const userName = sess?.name || sess?.displayName || "Viewer";
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatMsgs(m => [...m, { type:"chat", user:userName, msg, time:new Date().toISOString() }]);
+    setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 30);
+    fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(privateChannelRef.current)}`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ user:userName, msg, type:"chat" }),
+    }).catch(()=>{});
+  };
 
   // ── On mount: if arriving from stream room (private accepted), join channel ──
   useEffect(() => {
     const channelName = (() => { try { return localStorage.getItem("steamr_private_channel") || ""; } catch { return ""; } })();
     if (!channelName) return;
+    privateChannelRef.current = channelName; // persist for chat use
     // Clear so it's not reused on next visit
     try { localStorage.removeItem("steamr_private_channel"); } catch {}
 
@@ -6696,6 +6791,42 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
             </div>
           )}
         </div>
+      )}
+
+      {/* Private chat — visible when in active private show */}
+      {phase === "active" && privateChannelRef.current && (
+        <Card style={{ marginBottom:16, padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}`, display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ width:7, height:7, borderRadius:"50%", background:COLORS.accent, display:"inline-block" }} />
+            <div style={{ fontSize:12, fontWeight:700, color:COLORS.accent, textTransform:"uppercase", letterSpacing:0.8 }}>🔒 Private Chat</div>
+          </div>
+          <div ref={chatRef} style={{ height:200, overflowY:"auto", padding:"10px 14px", display:"flex", flexDirection:"column", gap:7 }}>
+            {chatMsgs.length === 0 ? (
+              <div style={{ textAlign:"center", color:COLORS.muted, fontSize:12, padding:"36px 0" }}>Say hello to your streamer 👋</div>
+            ) : (
+              chatMsgs.map((m, i) => (
+                <div key={i} style={{ fontSize:13, lineHeight:1.4 }}>
+                  <span style={{ fontWeight:700, color: m.type==="streamer" ? COLORS.accent : COLORS.accentC }}>
+                    {m.user}
+                    {m.type==="streamer" && <span style={{ fontSize:9, fontWeight:800, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:3, padding:"1px 4px", marginLeft:4, verticalAlign:"middle" }}>HOST</span>}
+                  </span>
+                  {" "}<span style={{ color:COLORS.text }}>{m.msg}</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ padding:"10px 14px", borderTop:`1px solid ${COLORS.border}`, display:"flex", gap:8 }}>
+            <input
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && sendViewerMsg()}
+              placeholder="Private message…"
+              style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.accent}44`,
+                borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
+            />
+            <Btn onClick={sendViewerMsg} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
+          </div>
+        </Card>
       )}
 
       {phase === "request" && (
