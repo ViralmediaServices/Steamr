@@ -827,6 +827,49 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      // ── Offline tip — deduct from viewer balance, credit streamer ─────────
+      if (action === "offline-tip") {
+        const { streamerEmail, amount } = req.body;
+        const amt = Number(amount);
+        if (!streamerEmail || !amt || amt <= 0) {
+          return res.status(400).json({ error: "Invalid tip amount" });
+        }
+
+        // Check & deduct viewer balance
+        const viewerActKey    = `activity:${email}`;
+        const viewerActResult = (await kvCommand("GET", viewerActKey)).result;
+        const viewerAct       = parse(viewerActResult) || {};
+
+        const currentBal = viewerAct.tokenBalance || 0;
+        if (currentBal < amt) {
+          return res.status(400).json({ error: "Insufficient tokens" });
+        }
+
+        viewerAct.tokenBalance = currentBal - amt;
+        viewerAct.totalSpent   = (viewerAct.totalSpent || 0) + amt;
+        viewerAct.tipHistory   = [
+          { streamer: streamerEmail, tokens: amt, date: new Date().toISOString(), type: "offline" },
+          ...(viewerAct.tipHistory || []),
+        ].slice(0, 100);
+        await kvCommand("SET", viewerActKey, JSON.stringify(viewerAct));
+
+        // Credit streamer — update all token counters
+        const se           = streamerEmail.toLowerCase().trim();
+        const strActKey    = `activity:${se}`;
+        const strActResult = (await kvCommand("GET", strActKey)).result;
+        const strAct       = parse(strActResult) || {};
+
+        strAct.tokenBalance    = (strAct.tokenBalance    || 0) + amt;
+        strAct.availableTokens = (strAct.availableTokens || 0) + amt;
+        strAct.allTimeTokens   = (strAct.allTimeTokens   || 0) + amt;
+        strAct.todayTokens     = (strAct.todayTokens     || 0) + amt;
+        strAct.weekTokens      = (strAct.weekTokens      || 0) + amt;
+        strAct.monthTokens     = (strAct.monthTokens     || 0) + amt;
+        await kvCommand("SET", strActKey, JSON.stringify(strAct));
+
+        return res.status(200).json({ ok: true, newBalance: viewerAct.tokenBalance });
+      }
+
       // ── Schedule update ─────────────────────────────────────────────────
       if (action === "schedule-update") {
         account.streamerSchedule = (req.body.schedule || []).map((slot, i) => ({
