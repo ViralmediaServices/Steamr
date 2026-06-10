@@ -440,7 +440,10 @@ export default async function handler(req, res) {
       if (req.method === "POST") {
         const { status, privateChannel, viewerEmail } = req.body || {};
         if (status === "ended") {
-          await kvCommand("DEL", key);
+          // Keep "ended" visible for 30 s so both streamer and viewer can detect it,
+          // then it expires automatically — don't delete immediately.
+          await kvCommand("SET", key, JSON.stringify({ status: "ended", time: new Date().toISOString() }));
+          await kvCommand("EXPIRE", key, 30);
         } else {
           await kvCommand("SET", key, JSON.stringify({ status, privateChannel, viewerEmail, time: new Date().toISOString() }));
           await kvCommand("EXPIRE", key, 7200); // 2 h TTL
