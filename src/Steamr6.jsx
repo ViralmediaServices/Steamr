@@ -1668,13 +1668,14 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   }, [selectedStreamerId]);
 
   // ── Viewer presence heartbeat ─────────────────────────────────────────────
+  // Only starts once streamerProfile.email is loaded — ensures the streamId key
+  // matches what the viewer count poll and GoLiveScreen poll use.
   useEffect(() => {
-    // Generate a stable session ID for this viewing session
+    const email = streamerProfile?.email;
+    if (!email) return; // wait for profile to load before registering
+
+    const streamId  = encodeURIComponent(email);
     const sessionId = `viewer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    // Use the streamer's email if available in their profile, otherwise fall back to id
-    const streamId  = streamerProfile?.email
-      ? encodeURIComponent(streamerProfile.email)
-      : `id_${selectedStreamerId}`;
 
     const heartbeat = () => {
       fetch(`/api/user-profile?streamId=${streamId}`, {
@@ -1684,19 +1685,18 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       }).catch(() => {});
     };
 
-    heartbeat(); // register immediately on mount
+    heartbeat(); // register immediately
     const iv = setInterval(heartbeat, 20_000); // refresh every 20 s
 
     return () => {
       clearInterval(iv);
-      // Remove viewer on unmount (best-effort — sorted set TTL handles failures)
       fetch(`/api/user-profile?streamId=${streamId}`, {
         method:  "DELETE",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ sessionId }),
       }).catch(() => {});
     };
-  }, [selectedStreamerId]);
+  }, [streamerProfile?.email]); // re-runs when email becomes available
 
   // ── Agora: join channel as audience when streamer profile loads ─────────────
   useEffect(() => {
@@ -3485,7 +3485,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const localTracksRef  = useRef(null); // [audioTrack, videoTrack]
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
   const [agoraError,  setAgoraError]  = useState("");
-  const liveChatRef = useRef(null);
+  const liveChatRef       = useRef(null);
+  const streamStartTimeRef = useRef(null); // ISO timestamp set when Go Live is clicked
   const [liveMsgs, setLiveMsgs]   = useState([]);
 
   // Check verification before allowing stream
@@ -3636,6 +3637,17 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     return () => { active = false; clearInterval(iv); setLiveMsgs([]); };
   }, [streaming]);
 
+  // ── Sync sessionTokens + goal from incoming tip messages in liveMsgs ────────
+  useEffect(() => {
+    if (!liveMsgs.length || !streamStartTimeRef.current) return;
+    const startTime = streamStartTimeRef.current;
+    const totalTips = liveMsgs
+      .filter(m => m.type === "tip" && m.tokens && m.time >= startTime)
+      .reduce((sum, m) => sum + Number(m.tokens || 0), 0);
+    setSessionTokens(totalTips);
+    setGoal(g => g ? { ...g, current: Math.min(g.target, totalTips) } : g);
+  }, [liveMsgs]);
+
   // ── Live timer + simulated tokens ─────────────────────────────────────────
   useEffect(() => {
     if (!streaming) return;
@@ -3674,6 +3686,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   }, [streaming]);
 
   const startStream = async () => {
+    streamStartTimeRef.current = new Date().toISOString();
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
     onStreamingChange && onStreamingChange(true);
