@@ -3487,7 +3487,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const [agoraError,  setAgoraError]  = useState("");
   const liveChatRef       = useRef(null);
   const streamStartTimeRef = useRef(null); // ISO timestamp set when Go Live is clicked
-  const [liveMsgs, setLiveMsgs]   = useState([]);
+  const [liveMsgs,          setLiveMsgs]         = useState([]);
+  const [streamerChatInput, setStreamerChatInput] = useState("");
 
   // Check verification before allowing stream
   const [verified,    setVerified]    = useState(null); // null=loading
@@ -3636,6 +3637,27 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     const iv = setInterval(poll, 4000);
     return () => { active = false; clearInterval(iv); setLiveMsgs([]); };
   }, [streaming]);
+
+  // ── Streamer sends a chat message visible to all viewers ─────────────────
+  const sendStreamerChat = () => {
+    if (!streamerChatInput.trim()) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const userName = session?.name || session?.displayName || "Streamer";
+    const msg = streamerChatInput.trim();
+    setStreamerChatInput("");
+    // Optimistic — add to liveMsgs immediately
+    setLiveMsgs(m => [...m, { type:"streamer", user:userName, msg, time:new Date().toISOString() }]);
+    setTimeout(() => { if (liveChatRef.current) liveChatRef.current.scrollTop = liveChatRef.current.scrollHeight; }, 30);
+    // Persist to shared Redis chat key
+    const channel = (session?.email || "").toLowerCase().trim();
+    if (channel) {
+      fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(channel)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user: userName, msg, type: "streamer" }),
+      }).catch(() => {});
+    }
+  };
 
   // ── Sync sessionTokens + goal from incoming tip messages in liveMsgs ────────
   useEffect(() => {
@@ -4154,8 +4176,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
             ) : (
               liveMsgs.map((m, i) => (
                 <div key={i} style={{ fontSize:13, lineHeight:1.4 }}>
-                  <span style={{ fontWeight:700, color: m.type==="tip" ? COLORS.gold : COLORS.accentC }}>
-                    {m.user}
+                  <span style={{ fontWeight:700, color: m.type==="tip" ? COLORS.gold : m.type==="streamer" ? COLORS.accent : COLORS.accentC }}>
+                    {m.user}{m.type==="streamer" && <span style={{ fontSize:9, fontWeight:800, color:COLORS.accent, background:COLORS.accent+"22", borderRadius:3, padding:"1px 4px", marginLeft:4, verticalAlign:"middle" }}>HOST</span>}
                   </span>
                   {" "}
                   <span style={{ color: m.type==="tip" ? COLORS.gold : COLORS.text }}>{m.msg}</span>
@@ -4167,6 +4189,18 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
                 </div>
               ))
             )}
+          </div>
+          {/* Streamer chat input */}
+          <div style={{ padding:"10px 14px", borderTop:`1px solid ${COLORS.border}`, display:"flex", gap:8 }}>
+            <input
+              value={streamerChatInput}
+              onChange={e => setStreamerChatInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && sendStreamerChat()}
+              placeholder="Say something…"
+              style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
+            />
+            <Btn onClick={sendStreamerChat} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
           </div>
         </Card>
       )}
