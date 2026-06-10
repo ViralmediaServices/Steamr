@@ -370,7 +370,35 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Private show request (viewer → streamer, no auth) ────────────────────────
+  // ── Private show earnings — viewer/spy credit the streamer in real time ────
+  // POST ?action=private-pay&channel=email  → INCRBY earnings counter
+  // GET  ?action=private-pay&channel=email  → read accumulated earnings
+  // DELETE ?action=private-pay&channel=email → clear counter (on show end)
+  if (req.query?.action === "private-pay") {
+    const channel = String(req.query.channel || "").toLowerCase().trim();
+    if (!channel) return res.status(400).json({ error: "channel required" });
+    const key = `private:earnings:${channel}`;
+    try {
+      if (req.method === "POST") {
+        const amount = parseInt(req.body?.amount || 0, 10);
+        if (amount > 0) {
+          await kvCommand("INCRBY", key, amount);
+          await kvCommand("EXPIRE", key, 86400);
+        }
+        return res.status(200).json({ ok: true });
+      }
+      if (req.method === "GET") {
+        const { result } = await kvCommand("GET", key);
+        return res.status(200).json({ ok: true, earnings: parseInt(result || "0", 10) });
+      }
+      if (req.method === "DELETE") {
+        await kvCommand("DEL", key);
+        return res.status(200).json({ ok: true });
+      }
+    } catch (err) { return res.status(500).json({ error: err.message }); }
+  }
+
+
   if (req.query?.action === "private-req") {
     const channel = String(req.query.channel || "").toLowerCase().trim();
     if (!channel) return res.status(400).json({ error: "channel required" });
