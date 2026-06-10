@@ -1642,8 +1642,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
 
   useEffect(() => {
     let cancelled = false;
+    let cachedLoc = null; // ipapi.co called once, location reused for periodic checks
 
-    const runGeoCheck = async () => {
+    const runGeoCheck = async (loc = null) => {
       try {
         // Fetch this streamer's geo-blocking settings (public, no auth needed)
         const blockRes = await fetch(`/api/user-profile?geoBlockId=${selectedStreamerId}`);
@@ -1651,13 +1652,17 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         const gb = blockData.geoBlocking;
 
         if (!gb?.enabled || !gb.blocked?.length) {
-          if (!cancelled) setGeoChecking(false);
-          return; // No blocking configured — allow access
+          if (!cancelled) { setGeoBlocked(false); setGeoChecking(false); }
+          return;
         }
 
-        // Fetch viewer's location via IP geolocation
-        const locRes  = await fetch("https://ipapi.co/json/");
-        const loc     = await locRes.json();
+        // Only call ipapi.co on first check — reuse cached location for subsequent polls
+        if (!loc) {
+          const locRes = await fetch("https://ipapi.co/json/");
+          loc = await locRes.json();
+          cachedLoc = loc;
+          if (!cancelled) setGeoInfo({ country: loc.country_name, state: loc.region, city: loc.city });
+        }
         if (cancelled) return;
 
         const country = (loc.country_name || "").toLowerCase();
@@ -1668,12 +1673,11 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           const val = b.value.toLowerCase().trim();
           if (b.type === "country") return country.includes(val) || val.includes(country);
           if (b.type === "state")   return state.includes(val)   || val.includes(state);
-          if (b.type === "city")    return city.includes(val)     || val.includes(city);
+          if (b.type === "city")    return city.includes(val)    || val.includes(city);
           return false;
         });
 
         if (!cancelled) {
-          setGeoInfo({ country: loc.country_name, state: loc.region, city: loc.city });
           setGeoBlocked(blocked);
           setGeoChecking(false);
         }
@@ -1683,7 +1687,14 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
 
     runGeoCheck();
-    return () => { cancelled = true; };
+
+    // Re-check block list every 10 s — catches streamer enabling/changing blocks
+    // while the viewer is already watching. Reuses cached IP location.
+    const iv = setInterval(() => {
+      if (!cancelled && cachedLoc) runGeoCheck(cachedLoc);
+    }, 10000);
+
+    return () => { cancelled = true; clearInterval(iv); };
   }, [selectedStreamerId]);
 
   // ── Viewer presence heartbeat ─────────────────────────────────────────────
