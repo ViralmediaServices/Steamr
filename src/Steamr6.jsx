@@ -3751,8 +3751,11 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const [privateViewerEmail,  setPrivateViewerEmail]  = useState("");
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
   const [agoraError,  setAgoraError]  = useState("");
-  const liveChatRef       = useRef(null);
-  const streamStartTimeRef = useRef(null); // ISO timestamp set when Go Live is clicked
+  const liveChatRef            = useRef(null);
+  const streamStartTimeRef     = useRef(null);  // ISO timestamp when Go Live clicked
+  const tipTokensRef           = useRef(0);     // chat tip total (liveMsgs effect)
+  const privateEarningsRef     = useRef(0);     // private-show earnings (balance poll)
+  const streamStartBalanceRef  = useRef(0);     // streamer tokenBalance at stream start
   const [liveMsgs,          setLiveMsgs]         = useState([]);
   const [streamerChatInput, setStreamerChatInput] = useState("");
 
@@ -3887,7 +3890,6 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     const se = (session?.email || "").toLowerCase().trim();
     if (!se) return;
     let active = true;
-    let lastEarnings = 0;
 
     const check = async () => {
       if (!active) return;
@@ -3900,15 +3902,18 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
           endPrivate();
           return;
         }
-        // Poll private-pay earnings and add delta to sessionTokens
-        const er = await fetch(`/api/user-profile?action=private-pay&channel=${encodeURIComponent(se)}`);
-        const ed = await er.json();
-        if (ed.ok && active) {
-          const delta = (ed.earnings || 0) - lastEarnings;
-          if (delta > 0) {
-            privateEarningsRef.current += delta;
-            lastEarnings = ed.earnings;
-            setSessionTokens(tipTokensRef.current + privateEarningsRef.current);
+        // Poll own balance — private earnings = current tokenBalance minus stream-start baseline
+        const authTok = localStorage.getItem("steamr_token");
+        if (authTok) {
+          const er = await fetch("/api/user-profile", { headers: { "x-auth-token": authTok } });
+          const ed = await er.json();
+          if (ed.ok && active) {
+            const currentBal = ed.activity?.tokenBalance || 0;
+            const earned = Math.max(0, currentBal - streamStartBalanceRef.current);
+            if (earned !== privateEarningsRef.current) {
+              privateEarningsRef.current = earned;
+              setSessionTokens(tipTokensRef.current + earned);
+            }
           }
         }
       } catch {}
@@ -4019,6 +4024,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ status:"ended" }),
     }).catch(()=>{});
+    privateEarningsRef.current = 0;
     setPrivateMode(false);
     setPrivateViewerEmail("");
     addToast("info", "Private show ended — back on public stream.");
@@ -4045,15 +4051,17 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     }
   };
 
-  // ── Sync sessionTokens + goal from incoming tip messages in liveMsgs ────────
+  // ── Sync sessionTokens + goal — combine chat tips + private-show earnings ────
   useEffect(() => {
     if (!liveMsgs.length || !streamStartTimeRef.current) return;
     const startTime = streamStartTimeRef.current;
     const totalTips = liveMsgs
       .filter(m => m.type === "tip" && m.tokens && m.time >= startTime)
       .reduce((sum, m) => sum + Number(m.tokens || 0), 0);
-    setSessionTokens(totalTips);
-    setGoal(g => g ? { ...g, current: Math.min(g.target, totalTips) } : g);
+    tipTokensRef.current = totalTips;                      // keep ref so balance poll can combine
+    const combined = totalTips + privateEarningsRef.current;
+    setSessionTokens(combined);
+    setGoal(g => g ? { ...g, current: Math.min(g.target, combined) } : g);
   }, [liveMsgs]);
 
   // ── Live timer + simulated tokens ─────────────────────────────────────────
@@ -4097,6 +4105,15 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     streamStartTimeRef.current = new Date().toISOString();
     setGoal({ current: 0, target: goalTarget, label: goalLabel });
     setStreaming(true);
+    // Record tokenBalance baseline — private earnings = (live balance − this)
+    try {
+      const _tok = localStorage.getItem("steamr_token");
+      if (_tok) {
+        const _r = await fetch("/api/user-profile", { headers: { "x-auth-token": _tok } });
+        const _d = await _r.json();
+        if (_d.ok) streamStartBalanceRef.current = _d.activity?.tokenBalance || 0;
+      }
+    } catch {}
     onStreamingChange && onStreamingChange(true);
     addToast("live", "You're live! 🔴 Notifying your followers and subscribers…");
     addNotification("live", `Your stream "${title}" started — goal: ${goalLabel}`);
