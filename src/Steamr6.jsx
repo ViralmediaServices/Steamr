@@ -6481,6 +6481,7 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
   const [spent,     setSpent]     = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [chatMsgs,  setChatMsgs]  = useState([]);
+  const [tipAmount, setTipAmount] = useState("");
   const [liveVideoActive, setLiveVideoActive] = useState(false);
   const [needsTap,        setNeedsTap]        = useState(false);
   const pendingTrackRef    = useRef(null);
@@ -6524,6 +6525,36 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ user:userName, msg, type:"chat" }),
     }).catch(()=>{});
+  };
+
+  const sendPrivateTip = (rawAmt) => {
+    const amt = Number(rawAmt);
+    if (!amt || amt <= 0) return;
+    if (amt > balance) { addToast("warning", "Not enough tokens."); return; }
+    setTipAmount("");
+    setBalance(b => Math.max(0, b - amt));
+    setSpent(s => s + amt);
+    if (onSpendTokens) onSpendTokens(amt);
+    // Credit streamer
+    const streamerCh = String(selectedStreamerId || "").toLowerCase().trim();
+    if (streamerCh) {
+      fetch(`/api/user-profile?action=private-pay&channel=${encodeURIComponent(streamerCh)}`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ amount: amt }),
+      }).catch(()=>{});
+    }
+    // Post tip message to private chat
+    const sess = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const userName = sess?.name || sess?.displayName || "Viewer";
+    if (privateChannelRef.current) {
+      setChatMsgs(m => [...m, { type:"tip", user:userName, msg:`tipped ${amt} tokens!`, tokens:amt, time:new Date().toISOString() }]);
+      setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 30);
+      fetch(`/api/user-profile?action=chat&channel=${encodeURIComponent(privateChannelRef.current)}`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ user:userName, msg:`tipped ${amt} tokens!`, type:"tip", tokens:amt }),
+      }).catch(()=>{});
+    }
+    addToast("success", `🪙 Tipped ${amt} tokens!`);
   };
 
   // ── On mount: if arriving from stream room (private accepted), join channel ──
@@ -6673,6 +6704,22 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
         ← Back to Stream
       </button>
 
+      {/* ── Live stats bar — balance + spent, always visible during active show ── */}
+      {phase === "active" && (
+        <div style={{ display:"flex", gap:10, marginBottom:14 }}>
+          <div style={{ flex:1, background:COLORS.surface, border:`1px solid ${balance < 30 ? "#ff444455" : COLORS.border}`,
+            borderRadius:12, padding:"10px 14px", textAlign:"center" }}>
+            <div style={{ fontSize:10, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>Balance</div>
+            <div style={{ fontSize:20, fontWeight:800, color:balance < 30 ? "#ff6666" : COLORS.text }}>🪙 {balance.toLocaleString()}</div>
+          </div>
+          <div style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+            borderRadius:12, padding:"10px 14px", textAlign:"center" }}>
+            <div style={{ fontSize:10, fontWeight:700, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>Spent</div>
+            <div style={{ fontSize:20, fontWeight:800, color:COLORS.gold }}>🪙 {spent.toLocaleString()}</div>
+          </div>
+        </div>
+      )}
+
       {/* Live video feed when entered from stream room */}
       {phase === "active" && (
         <div style={{ background:"#0a0a14", borderRadius:16, overflow:"hidden",
@@ -6733,6 +6780,49 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
                 borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
             />
             <Btn onClick={sendViewerMsg} style={{ padding:"9px 14px", flexShrink:0 }}>→</Btn>
+          </div>
+        </Card>
+      )}
+
+      {/* ── Tip section — visible during active private show ── */}
+      {phase === "active" && privateChannelRef.current && (
+        <Card style={{ marginBottom:16, padding:0, overflow:"hidden" }}>
+          <div style={{ padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}`,
+            display:"flex", alignItems:"center", gap:6 }}>
+            <span style={{ fontSize:14 }}>🎁</span>
+            <div style={{ fontSize:12, fontWeight:700, color:COLORS.gold, textTransform:"uppercase", letterSpacing:0.8 }}>Send a Tip</div>
+          </div>
+          <div style={{ padding:"12px 14px" }}>
+            {/* Preset amounts */}
+            <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+              {[10, 25, 50, 100].map(amt => (
+                <button key={amt} onClick={() => sendPrivateTip(amt)}
+                  disabled={balance < amt}
+                  style={{ flex:1, padding:"9px 4px", cursor:balance >= amt ? "pointer" : "not-allowed",
+                    background: balance >= amt ? COLORS.gold+"18" : COLORS.surface,
+                    border:`1px solid ${balance >= amt ? COLORS.gold+"88" : COLORS.border}`,
+                    borderRadius:9, color:balance >= amt ? COLORS.gold : COLORS.muted,
+                    fontWeight:800, fontSize:13, transition:"all 0.15s" }}>
+                  🪙{amt}
+                </button>
+              ))}
+            </div>
+            {/* Custom amount */}
+            <div style={{ display:"flex", gap:8 }}>
+              <input
+                type="number" min="1" value={tipAmount}
+                onChange={e => setTipAmount(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && sendPrivateTip(tipAmount)}
+                placeholder="Custom amount…"
+                style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`,
+                  borderRadius:8, padding:"9px 12px", color:COLORS.text, fontSize:13, outline:"none" }}
+              />
+              <Btn onClick={() => sendPrivateTip(tipAmount)}
+                style={{ padding:"9px 16px", flexShrink:0, background:COLORS.gold,
+                  border:"none", color:"#000", fontWeight:800 }}>
+                Tip
+              </Btn>
+            </div>
           </div>
         </Card>
       )}
