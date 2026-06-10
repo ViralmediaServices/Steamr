@@ -487,7 +487,24 @@ export default async function handler(req, res) {
   const accountKey  = `user:${email}`;
   const activityKey = `activity:${email}`;
 
-  // ── GET — load full profile ───────────────────────────────────────────────
+  // ── Credit private-show earnings to streamer's token balance ─────────────────
+  if (req.query?.action === "credit-tokens" && req.method === "POST") {
+    try {
+      const earningsKey = `private:earnings:${email}`;
+      const { result: rawEarnings } = await kvCommand("GET", earningsKey);
+      const earned = parseInt(rawEarnings || "0", 10);
+      if (earned > 0) {
+        const { result: rawActivity } = await kvCommand("GET", activityKey);
+        const activity = parse(rawActivity) || {};
+        activity.tokenBalance = (activity.tokenBalance || 0) + earned;
+        await kvCommand("SET", activityKey, JSON.stringify(activity));
+        await kvCommand("DEL", earningsKey);
+      }
+      return res.status(200).json({ ok: true, credited: earned });
+    } catch (err) { return res.status(500).json({ error: err.message }); }
+  }
+
+
   if (req.method === "GET") {
     try {
       const [{ result: accResult }, { result: actResult }, { result: bannerResult }] = await Promise.all([
