@@ -6793,69 +6793,6 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
         </div>
       )}
 
-      {phase==="active" && (
-        <>
-          <div style={{ background:`linear-gradient(135deg,#1a0a2e,#0a0a1a)`, borderRadius:16, height:240,
-            display:"flex", alignItems:"center", justifyContent:"center", position:"relative",
-            marginBottom:16, border:`1px solid ${COLORS.border}` }}>
-            <div style={{ fontSize:60 }}>🔒</div>
-            <div style={{ position:"absolute", top:12, left:12, background:COLORS.accent, borderRadius:6,
-              padding:"3px 10px", fontSize:11, fontWeight:800, color:"#fff", display:"flex", alignItems:"center", gap:5 }}>
-              <div style={{ width:7, height:7, borderRadius:"50%", background:"#fff", animation:"blink 1s infinite" }} />PRIVATE
-            </div>
-            <div style={{ position:"absolute", top:12, right:12, background:"rgba(0,0,0,0.7)",
-              borderRadius:8, padding:"5px 12px", fontFamily:"monospace", fontWeight:800, fontSize:20, color:"#fff" }}>
-              {fmtTime(elapsed)}
-            </div>
-            <div style={{ position:"absolute", bottom:12, left:12, background:"rgba(0,0,0,0.7)",
-              borderRadius:8, padding:"4px 12px", fontSize:12, color:COLORS.gold, fontWeight:700 }}>
-              🪙 {balance} left · -{spent} spent
-            </div>
-          </div>
-          <div style={{ background:COLORS.surface, borderRadius:6, height:4, marginBottom:16, overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${Math.min(100,(elapsed/(duration*60))*100)}%`,
-              background:`linear-gradient(90deg,${COLORS.accent},${COLORS.accentC})`, transition:"width 1s linear" }} />
-          </div>
-          <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:14, marginBottom:12 }}>
-            <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, padding:"10px 14px", borderBottom:`1px solid ${COLORS.border}` }}>🔒 Private Chat</div>
-            <div ref={chatRef} style={{ height:130, overflowY:"auto", padding:12, display:"flex", flexDirection:"column", gap:8 }}>
-              {chatMsgs.map((m,i) => (
-                <div key={i} style={{ display:"flex", flexDirection:"column", alignItems:m.me?"flex-end":"flex-start" }}>
-                  <div style={{ background:m.me?COLORS.accent:COLORS.surface, color:m.me?"#fff":COLORS.text,
-                    borderRadius:10, padding:"7px 12px", maxWidth:"80%", fontSize:13 }}>{m.msg}</div>
-                  <span style={{ fontSize:10, color:COLORS.muted, marginTop:2 }}>{m.from}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display:"flex", gap:8, padding:"10px 12px", borderTop:`1px solid ${COLORS.border}` }}>
-              <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendChat()} placeholder="Message…"
-                style={{ flex:1, background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8, padding:"8px 12px", color:COLORS.text, fontSize:13, outline:"none" }} />
-              <Btn onClick={sendChat} variant="secondary" style={{ fontSize:12, padding:"8px 14px" }}>Send</Btn>
-            </div>
-          </div>
-          <Btn onClick={endShow} variant="secondary" style={{ width:"100%", padding:"12px", color:COLORS.accent, borderColor:COLORS.accent }}>⏹ End Show</Btn>
-        </>
-      )}
-
-      {phase==="summary" && (
-        <div style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:18, padding:32, textAlign:"center" }}>
-          <div style={{ fontSize:52, marginBottom:16 }}>🎭</div>
-          <h2 style={{ margin:"0 0 6px", fontWeight:900 }}>Show Complete!</h2>
-          <p style={{ color:COLORS.muted, fontSize:14, marginBottom:28 }}>Great private session!</p>
-          <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr", gap:12, marginBottom:28 }}>
-            {[{label:"Duration",value:fmtTime(elapsed)},{label:"Tokens Spent",value:`🪙 ${spent}`},{label:"USD Value",value:`$${(spent*0.10).toFixed(2)}`}].map(s => (
-              <div key={s.label} style={{ background:COLORS.surface, borderRadius:12, padding:14 }}>
-                <div style={{ fontSize:11, color:COLORS.muted, marginBottom:4 }}>{s.label}</div>
-                <div style={{ fontSize:16, fontWeight:800 }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display:"flex", gap:10 }}>
-            <Btn onClick={() => onNavigate("stream-room")} variant="ghost" style={{ flex:1 }}>← Stream Room</Btn>
-            <Btn onClick={() => { setPhase("request"); setElapsed(0); setSpent(0); setBalance(viewerTokens); }} style={{ flex:1 }}>Book Another</Btn>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
