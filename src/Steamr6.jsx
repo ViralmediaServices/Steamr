@@ -4024,7 +4024,6 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ status:"ended" }),
     }).catch(()=>{});
-    privateEarningsRef.current = 0;
     setPrivateMode(false);
     setPrivateViewerEmail("");
     addToast("info", "Private show ended — back on public stream.");
