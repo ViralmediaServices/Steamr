@@ -2145,13 +2145,12 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
                 if (!privateStatus?.privateChannel) { addToast("warning","No active private show to spy on."); return; }
                 const rate = streamerProfile?.spyRate || 30;
                 if ((viewerTokens || 0) < rate) { addToast("warning","Not enough tokens to spy."); return; }
-                // Charge first minute immediately
-                onSpendTokens && onSpendTokens(rate);
                 await joinPrivateChannel(privateStatus.privateChannel);
                 isSpyingRef.current = true;
                 setIsSpying(true);
-                // Then charge every 2 seconds (rate ÷ 30 ticks per minute)
+                // Charge every 2 seconds — no upfront charge
                 const spyTick = Math.max(1, Math.ceil(rate / 30));
+                const spyCh = (streamerProfile?.email || "").toLowerCase().trim();
                 spyIntervalRef.current = setInterval(() => {
                   if ((viewerTokens || 0) < spyTick) {
                     leavePrivateChannel();
@@ -2159,6 +2158,13 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
                     return;
                   }
                   onSpendTokens && onSpendTokens(spyTick);
+                  // Credit streamer's private-pay counter
+                  if (spyCh) {
+                    fetch(`/api/user-profile?action=private-pay&channel=${encodeURIComponent(spyCh)}`, {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ amount: spyTick }),
+                    }).catch(() => {});
+                  }
                 }, 2000);
               }} style={{
                 flex:1, background:"transparent", border:`1px solid ${COLORS.gold}44`,
@@ -3873,6 +3879,41 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       }
     }
   };
+
+  // ── While in private mode: detect viewer-ended + accumulate earnings ───────
+  useEffect(() => {
+    if (!privateMode) return;
+    const session = (() => { try { return JSON.parse(localStorage.getItem("steamr_session")||"null"); } catch { return null; } })();
+    const se = (session?.email || "").toLowerCase().trim();
+    if (!se) return;
+    let active = true;
+    let lastEarnings = 0;
+
+    const check = async () => {
+      if (!active) return;
+      try {
+        // Detect if viewer ended the show
+        const sr = await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`);
+        const sd = await sr.json();
+        if (sd.ok && sd.status?.status === "ended" && active) {
+          active = false;
+          endPrivate();
+          return;
+        }
+        // Poll private-pay earnings and add delta to sessionTokens
+        const er = await fetch(`/api/user-profile?action=private-pay&channel=${encodeURIComponent(se)}`);
+        const ed = await er.json();
+        if (ed.ok && active) {
+          const delta = (ed.earnings || 0) - lastEarnings;
+          if (delta > 0) { setSessionTokens(t => t + delta); lastEarnings = ed.earnings; }
+        }
+      } catch {}
+    };
+
+    check();
+    const iv = setInterval(check, 5000);
+    return () => { active = false; clearInterval(iv); };
+  }, [privateMode]);
 
   // ── Poll for incoming private show requests from viewers ──────────────────
   useEffect(() => {
@@ -6482,15 +6523,9 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
         // 1-second elapsed counter — drives the session timer display
         const elapsedIv = setInterval(() => setElapsed(e => e + 1), 1000);
 
-        // Charge first full minute immediately
-        if (onSpendTokens) {
-          onSpendTokens(RATE);
-          setSpent(s => s + RATE);
-          setBalance(b => Math.max(0, b - RATE));
-        }
-
-        // Then charge every 2 seconds (rate ÷ 30 two-second ticks per minute)
+        // Charge every 2 seconds (rate ÷ 30 two-second ticks per minute) — no upfront charge
         const perTick = Math.max(1, Math.ceil(RATE / 30));
+        const streamerCh = String(selectedStreamerId || "").toLowerCase().trim();
         timerRef.current = setInterval(() => {
           setBalance(b => {
             const next = Math.max(0, b - perTick);
@@ -6499,6 +6534,13 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
           });
           setSpent(s => s + perTick);
           if (onSpendTokens) onSpendTokens(perTick);
+          // Credit the streamer's private-pay counter
+          if (streamerCh) {
+            fetch(`/api/user-profile?action=private-pay&channel=${encodeURIComponent(streamerCh)}`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ amount: perTick }),
+            }).catch(() => {});
+          }
         }, 2000);
 
         // Store elapsed interval so cleanup can clear it
@@ -6509,8 +6551,29 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
     };
 
     joinPrivate();
+
+    // Poll every 5s: if streamer ends the show, navigate back automatically
+    let statusPollActive = true;
+    const streamerChForPoll = String(selectedStreamerId || "").toLowerCase().trim();
+    const statusPoll = setInterval(async () => {
+      if (!statusPollActive || !streamerChForPoll) return;
+      try {
+        const r = await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(streamerChForPoll)}`);
+        const data = await r.json();
+        if (data.ok && (!data.status || data.status?.status === "ended")) {
+          statusPollActive = false;
+          clearInterval(statusPoll);
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+          addToast("info", "Private show ended.");
+          onNavigate("stream-room");
+        }
+      } catch {}
+    }, 5000);
+
     return () => {
       cancelled = true;
+      statusPollActive = false;
+      clearInterval(statusPoll);
       if (agoraClientRef.current?._elapsedIv) clearInterval(agoraClientRef.current._elapsedIv);
       if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       if (agoraClientRef.current) { agoraClientRef.current.leave().catch(()=>{}); agoraClientRef.current = null; }
@@ -6541,7 +6604,18 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
 
   return (
     <div style={{ maxWidth:520, margin:"0 auto", padding:isMobile?"16px 12px 48px":"24px 20px 48px" }}>
-      <button onClick={() => { if(timerRef.current)clearInterval(timerRef.current); onNavigate("stream-room"); }}
+      <button onClick={async () => {
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        // Signal streamer that viewer is leaving
+        const ch = String(selectedStreamerId || "").toLowerCase().trim();
+        if (ch) {
+          await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(ch)}`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "ended" }),
+          }).catch(() => {});
+        }
+        onNavigate("stream-room");
+      }}
         style={{ background:"none", border:"none", color:COLORS.muted, cursor:"pointer", marginBottom:24, fontSize:13 }}>
         ← Back to Stream
       </button>
