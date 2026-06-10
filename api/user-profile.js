@@ -370,7 +370,53 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── Live chat — no auth needed (shared between streamers and viewers) ────────
+  // ── Private show request (viewer → streamer, no auth) ────────────────────────
+  if (req.query?.action === "private-req") {
+    const channel = String(req.query.channel || "").toLowerCase().trim();
+    if (!channel) return res.status(400).json({ error: "channel required" });
+    const key = `private:req:${channel}`;
+    try {
+      if (req.method === "GET") {
+        const { result } = await kvCommand("GET", key);
+        return res.status(200).json({ ok: true, request: parse(result) || null });
+      }
+      if (req.method === "POST") {
+        const { viewerName, viewerEmail, sessionId } = req.body || {};
+        await kvCommand("SET", key, JSON.stringify({ viewerName: String(viewerName||"Viewer").slice(0,40), viewerEmail: String(viewerEmail||""), sessionId, time: new Date().toISOString() }));
+        await kvCommand("EXPIRE", key, 300); // 5 min TTL
+        return res.status(200).json({ ok: true });
+      }
+      if (req.method === "DELETE") {
+        await kvCommand("DEL", key);
+        return res.status(200).json({ ok: true });
+      }
+    } catch (err) { return res.status(500).json({ error: err.message }); }
+  }
+
+  // ── Private show status (streamer → all viewers, no auth) ────────────────────
+  if (req.query?.action === "private-status") {
+    const channel = String(req.query.channel || "").toLowerCase().trim();
+    if (!channel) return res.status(400).json({ error: "channel required" });
+    const key = `private:status:${channel}`;
+    try {
+      if (req.method === "GET") {
+        const { result } = await kvCommand("GET", key);
+        return res.status(200).json({ ok: true, status: parse(result) || null });
+      }
+      if (req.method === "POST") {
+        const { status, privateChannel, viewerEmail } = req.body || {};
+        if (status === "ended") {
+          await kvCommand("DEL", key);
+        } else {
+          await kvCommand("SET", key, JSON.stringify({ status, privateChannel, viewerEmail, time: new Date().toISOString() }));
+          await kvCommand("EXPIRE", key, 7200); // 2 h TTL
+        }
+        return res.status(200).json({ ok: true });
+      }
+    } catch (err) { return res.status(500).json({ error: err.message }); }
+  }
+
+
   // GET  ?action=chat&channel=email   → last 50 messages, oldest first
   // POST ?action=chat&channel=email   → push a new message
   if (req.query?.action === "chat") {
