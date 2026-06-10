@@ -1791,7 +1791,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       if (client) client.leave().catch(() => {});
       agoraClientRef.current = null;
     };
-  }, [streamerProfile?.email]);
+  }, [streamerProfile?.email, rejoinPublicTrigger]);
 
   // ── Poll private show status — know when streamer goes private ──────────────
   useEffect(() => {
