@@ -1729,35 +1729,29 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
         await client.setClientRole("audience");
 
         const { token, appId } = await getAgoraToken(channelName, "subscriber");
-        await client.join(appId, channelName, token, 0);
+
+        // ── Attach ALL listeners BEFORE joining so no events are missed ─────
+        // Helper shared by listener and remoteUsers fallback
+        const playRemote = (user) => {
+          setTimeout(() => {
+            if (cancelled || !user.videoTrack) return;
+            const el = document.getElementById("agora-remote-vid");
+            if (!el) return;
+            try { user.videoTrack.play("agora-remote-vid"); setLiveVideoActive(true); setNeedsUserAction(false); }
+            catch { pendingVideoTrackRef.current = user.videoTrack; setNeedsUserAction(true); }
+          }, 300);
+        };
 
         client.on("user-published", async (user, mediaType) => {
           if (cancelled) return;
           try {
             await client.subscribe(user, mediaType);
-            if (mediaType === "video") {
-              setTimeout(() => {
-                if (cancelled || !user.videoTrack) return;
-                const el = document.getElementById("agora-remote-vid");
-                if (!el) return;
-                try {
-                  user.videoTrack.play("agora-remote-vid");
-                  setLiveVideoActive(true);
-                  setNeedsUserAction(false);
-                } catch {
-                  pendingVideoTrackRef.current = user.videoTrack;
-                  setNeedsUserAction(true);
-                }
-              }, 300);
-            }
-            if (mediaType === "audio" && user.audioTrack) {
-              try { user.audioTrack.play(); } catch {}
-            }
-          } catch { /* subscribe failed — video stays in connecting state */ }
+            if (mediaType === "video") playRemote(user);
+            if (mediaType === "audio" && user.audioTrack) { try { user.audioTrack.play(); } catch {} }
+          } catch {}
         });
 
         client.on("user-unpublished", (user, mediaType) => {
-          // Don't kill the video if the viewer is watching a private/spy feed
           if (mediaType === "video" && !cancelled && !isPrivateViewerRef.current && !isSpyingRef.current)
             setLiveVideoActive(false);
         });
@@ -1766,6 +1760,18 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           if (!cancelled && !isPrivateViewerRef.current && !isSpyingRef.current)
             setLiveVideoActive(false);
         });
+
+        await client.join(appId, channelName, token, 0);
+
+        // ── Subscribe to any host already in the channel when we arrive ─────
+        for (const user of client.remoteUsers) {
+          if (user.hasVideo) {
+            try { await client.subscribe(user, "video"); playRemote(user); } catch {}
+          }
+          if (user.hasAudio) {
+            try { await client.subscribe(user, "audio"); user.audioTrack?.play(); } catch {}
+          }
+        }
 
       } catch (err) {
         if (!cancelled) setLiveVideoError(true);
@@ -1855,10 +1861,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       const AgoraRTC = await loadAgora();
       const prvClient = AgoraRTC.createClient({ mode:"live", codec:"h264" });
       privateAgoraClientRef.current = prvClient;
-      await prvClient.setClientRole("audience");
-      const { token, appId } = await getAgoraToken(channelName, "subscriber");
-      await prvClient.join(appId, channelName, token, 0);
-      prvClient.on("user-published", async (user, mediaType) => {
+
+      // ── Helper: subscribe + play a remote user's tracks ─────────────────
+      const subscribeAndPlay = async (user, mediaType) => {
         try {
           await prvClient.subscribe(user, mediaType);
           if (mediaType === "video") {
@@ -1866,14 +1871,40 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
               if (!user.videoTrack) return;
               const el = document.getElementById("agora-remote-vid");
               if (!el) return;
-              try { user.videoTrack.play("agora-remote-vid"); setLiveVideoActive(true); setNeedsUserAction(false); }
-              catch { pendingVideoTrackRef.current = user.videoTrack; setNeedsUserAction(true); }
+              try {
+                user.videoTrack.play("agora-remote-vid");
+                setLiveVideoActive(true);
+                setNeedsUserAction(false);
+              } catch {
+                pendingVideoTrackRef.current = user.videoTrack;
+                setNeedsUserAction(true);
+              }
             }, 300);
           }
-          if (mediaType === "audio" && user.audioTrack) { try { user.audioTrack.play(); } catch {} }
+          if (mediaType === "audio" && user.audioTrack) {
+            try { user.audioTrack.play(); } catch {}
+          }
         } catch {}
-      });
-    } catch (err) { console.error("Private join error:", err?.message); }
+      };
+
+      // ── Attach listener BEFORE joining so no events are missed ───────────
+      prvClient.on("user-published", (user, mediaType) => subscribeAndPlay(user, mediaType));
+
+      await prvClient.setClientRole("audience");
+      const { token, appId } = await getAgoraToken(channelName, "subscriber");
+      await prvClient.join(appId, channelName, token, 0);
+
+      // ── Subscribe to any hosts already publishing in the channel ─────────
+      for (const user of prvClient.remoteUsers) {
+        if (user.hasVideo)  subscribeAndPlay(user, "video");
+        if (user.hasAudio)  subscribeAndPlay(user, "audio");
+      }
+
+      addToast("success", "🔒 You're now in the private show.");
+    } catch (err) {
+      addToast("error", `Private channel: ${err?.message || "connection failed"}`);
+      privateAgoraClientRef.current = null;
+    }
   };
 
   const leavePrivateChannel = () => {
