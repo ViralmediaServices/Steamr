@@ -382,7 +382,9 @@ export default async function handler(req, res) {
       if (req.method === "POST") {
         const amount = parseInt(req.body?.amount || 0, 10);
         if (amount > 0) {
-          await kvCommand("INCRBY", key, amount);
+          const { result: cur } = await kvCommand("GET", key);
+          const next = (parseInt(cur || "0", 10) + amount);
+          await kvCommand("SET", key, String(next));
           await kvCommand("EXPIRE", key, 86400);
         }
         return res.status(200).json({ ok: true });
