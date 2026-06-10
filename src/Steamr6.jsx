@@ -1609,6 +1609,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           bannerColor: sp.bannerColor || "#1a0a2e",
         });
         setStreamerName(p.displayName || p.name || "Streamer");
+        setIsStreamerLive(data.activity?.isLive === true);
         if (sp.goalLabel && sp.goalTarget) {
           setGoal({ current: 0, target: sp.goalTarget, label: sp.goalLabel });
         }
@@ -1617,20 +1618,23 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     .catch(() => {});
   }, [selectedStreamerId]);
 
-  // ── Poll streamer live status every 30s — detect when stream ends ────────────
-  const [streamEnded, setStreamEnded] = useState(false);
+  // ── Poll streamer live status every 30s — detect when stream ends/starts ──────
+  const [streamEnded,    setStreamEnded]    = useState(false);
+  const [isStreamerLive, setIsStreamerLive] = useState(false); // gates Agora join
   useEffect(() => {
     if (!selectedStreamerId) return;
     const poll = () => {
       fetch(`/api/user-profile?publicId=${encodeURIComponent(selectedStreamerId)}`)
         .then(r => r.json())
         .then(data => {
-          if (data.ok && data.activity?.isLive === false) setStreamEnded(true);
-          else if (data.ok && data.activity?.isLive === true) setStreamEnded(false);
+          if (!data.ok) return;
+          const live = data.activity?.isLive === true;
+          setIsStreamerLive(live);
+          setStreamEnded(!live);
         })
         .catch(() => {});
     };
-    // Wait 30s before first poll — give time for stream to fully start
+    poll(); // run immediately so live status is accurate before the 30s tick
     const iv = setInterval(poll, 30_000);
     return () => clearInterval(iv);
   }, [selectedStreamerId]);
@@ -1728,9 +1732,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
   }, [streamerProfile?.email]); // re-runs when email becomes available
 
-  // ── Agora: join channel as audience when streamer profile loads ─────────────
+  // ── Agora: join ONLY when streamer is live — avoids audio-only billing in empty channels ──
   useEffect(() => {
-    if (!streamerProfile?.email) return;
+    if (!streamerProfile?.email || !isStreamerLive) return;
     const channelName = (streamerProfile.email || "").toLowerCase().trim();
     let client = null;
     let cancelled = false;
@@ -1803,7 +1807,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       if (client) client.leave().catch(() => {});
       agoraClientRef.current = null;
     };
-  }, [streamerProfile?.email, rejoinPublicTrigger]);
+  }, [streamerProfile?.email, isStreamerLive, rejoinPublicTrigger]);
 
   // ── Poll private show status — know when streamer goes private ──────────────
   useEffect(() => {
