@@ -3754,6 +3754,7 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
   const [privateRequest,      setPrivateRequest]      = useState(null);  // {viewerName,viewerEmail}
   const [privateMode,         setPrivateMode]         = useState(false);
   const [privateViewerEmail,  setPrivateViewerEmail]  = useState("");
+  const [viewerEndedPrivate,  setViewerEndedPrivate]  = useState(false);
   const [agoraStatus, setAgoraStatus] = useState("idle"); // idle | connecting | connected | failed
   const [agoraError,  setAgoraError]  = useState("");
   const liveChatRef            = useRef(null);
@@ -3911,8 +3912,8 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
         const sr = await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`);
         const sd = await sr.json();
         if (sd.ok && sd.status?.status === "ended" && active) {
-          active = false;
-          endPrivate();
+          active = false;          // stops balance polling (timer)
+          setViewerEndedPrivate(true); // show "Viewer ended chat" popup
           return;
         }
         // Poll own balance — private earnings = current tokenBalance minus stream-start baseline
@@ -4088,9 +4089,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
     }).catch(()=>{});
     setPrivateMsgs([]);
     setPrivateChannelName("");
+    setViewerEndedPrivate(false);
     setPrivateMode(false);
     setPrivateViewerEmail("");
-    addToast("info", "Private show ended — back on public stream.");
+    addToast("info", "Back on public stream.");
   };
 
   // ── Streamer sends a chat message visible to all viewers ─────────────────
@@ -4554,6 +4556,23 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
               <Btn onClick={rejectPrivate} style={{ flex:1 }}>✕ Decline</Btn>
               <Btn onClick={acceptPrivate} variant="green" style={{ flex:1 }}>✓ Accept</Btn>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Viewer ended private show popup ── */}
+      {viewerEndedPrivate && (
+        <div style={{ position:"fixed", inset:0, background:"#000000cc", zIndex:9000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <Card style={{ maxWidth:320, width:"100%", padding:32, textAlign:"center" }}>
+            <div style={{ fontSize:42, marginBottom:12 }}>👋</div>
+            <div style={{ fontWeight:800, fontSize:18, marginBottom:8 }}>Viewer Ended Chat</div>
+            <div style={{ color:COLORS.muted, fontSize:13, marginBottom:24 }}>
+              Your viewer has left the private show.
+            </div>
+            <Btn onClick={endPrivate} variant="primary" style={{ width:"100%", fontSize:15, padding:"14px" }}>
+              📡 Back to Live
+            </Btn>
           </Card>
         </div>
       )}
