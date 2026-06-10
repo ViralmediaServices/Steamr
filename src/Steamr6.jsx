@@ -1822,10 +1822,14 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           addToast("info", "Private show request was declined.");
           setTimeout(() => setRequestStatus(null), 3000);
         } else if (next?.status === "ended") {
-          // Private show explicitly ended — clean everything up
-          if (isPrivateViewer || isSpying) leavePrivateChannel();
-          setRequestSent(false);
-          setRequestStatus(null);
+          // Private show ended — only clean up state for viewers who were in it.
+          // Viewers with a pending request (not yet accepted) must NOT be reset,
+          // otherwise the modal can never fire when the streamer accepts.
+          if (isPrivateViewer || isSpying) {
+            leavePrivateChannel();
+            setRequestSent(false);
+            setRequestStatus(null);
+          }
         } else if (!next) {
           // Status is null (no active private show) — clean up if we were in one,
           // but DO NOT wipe a pending request so the modal can still fire.
