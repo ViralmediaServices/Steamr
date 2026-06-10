@@ -1547,6 +1547,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
   const [isPrivateViewer,  setIsPrivateViewer]  = useState(false);
   const [showPrivateModal, setShowPrivateModal] = useState(false);
   const [privateNavChannel,setPrivateNavChannel]= useState("");
+  const [rejoinPublicTrigger,setRejoinPublicTrigger] = useState(0);
 
   const addTipAlert = (user, amount, type="incoming") => {
     const id = Date.now() + Math.random();
@@ -3799,6 +3800,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       localTracksRef.current.forEach(t => { try { t.stop(); t.close(); } catch {} });
       localTracksRef.current = null;
     }
+    if (privateAgoraClientRef.current) {
+      privateAgoraClientRef.current.leave().catch(() => {});
+      privateAgoraClientRef.current = null;
+    }
     if (agoraClientRef.current) {
       agoraClientRef.current.leave().catch(() => {});
       agoraClientRef.current = null;
@@ -3978,8 +3983,10 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ status:"accepted", privateChannel:prvCh, viewerEmail:privateRequest.viewerEmail }),
     }).catch(()=>{});
-    if (agoraClientRef.current && localTracksRef.current) {
-      try { await agoraClientRef.current.unpublish(localTracksRef.current); } catch {}
+    // Leave public channel entirely — staying joined without publishing still bills audio minutes
+    if (agoraClientRef.current) {
+      try { await agoraClientRef.current.leave(); } catch {}
+      agoraClientRef.current = null;
     }
     try {
       const AgoraRTC = await loadAgora();
@@ -4017,8 +4024,21 @@ function GoLiveScreen({ onNavigate, addToast, addNotification, onStreamingChange
       } catch {}
       privateAgoraClientRef.current = null;
     }
-    if (agoraClientRef.current && localTracksRef.current) {
-      try { await agoraClientRef.current.publish(localTracksRef.current); } catch {}
+    // Create a fresh public client and rejoin — the old one left the channel
+    if (localTracksRef.current) {
+      try {
+        const AgoraRTCr = await loadAgora();
+        const pubClient = AgoraRTCr.createClient({ mode:"live", codec:"h264" });
+        agoraClientRef.current = pubClient;
+        const { token: pt, appId: pa } = await getAgoraToken(se, "publisher");
+        await pubClient.setClientRole("host");
+        await pubClient.join(pa, se, pt, 0);
+        await pubClient.publish(localTracksRef.current);
+        setAgoraStatus("connected");
+      } catch (err) {
+        setAgoraStatus("failed");
+        setAgoraError(err?.message || "Rejoin failed");
+      }
     }
     await fetch(`/api/user-profile?action=private-status&channel=${encodeURIComponent(se)}`, {
       method:"POST", headers:{"Content-Type":"application/json"},
