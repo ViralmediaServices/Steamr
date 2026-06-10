@@ -1820,10 +1820,15 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           setRequestSent(false);
           addToast("info", "Private show request was declined.");
           setTimeout(() => setRequestStatus(null), 3000);
-        } else if (!next || next?.status === "ended") {
+        } else if (next?.status === "ended") {
+          // Private show explicitly ended — clean everything up
           if (isPrivateViewer || isSpying) leavePrivateChannel();
           setRequestSent(false);
           setRequestStatus(null);
+        } else if (!next) {
+          // Status is null (no active private show) — clean up if we were in one,
+          // but DO NOT wipe a pending request so the modal can still fire.
+          if (isPrivateViewer || isSpying) leavePrivateChannel();
         }
       } catch {}
     };
@@ -6468,13 +6473,19 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
           if (user.hasAudio) { try { await client.subscribe(user, "audio"); user.audioTrack?.play(); } catch {} }
         }
 
-        // Start per-minute token billing
+        // 1-second elapsed counter — drives the session timer display
+        const elapsedIv = setInterval(() => setElapsed(e => e + 1), 1000);
+
+        // Per-minute token billing
         if (onSpendTokens) {
           timerRef.current = setInterval(() => {
             onSpendTokens(RATE);
             setSpent(s => s + RATE);
           }, 60000);
         }
+
+        // Store elapsed interval so cleanup can clear it
+        agoraClientRef._elapsedIv = elapsedIv;
       } catch (err) {
         if (!cancelled) addToast("error", `Private channel: ${err?.message || "connection failed"}`);
       }
@@ -6483,6 +6494,8 @@ function PrivateShowScreen({ onNavigate, addToast, addNotification, viewerTokens
     joinPrivate();
     return () => {
       cancelled = true;
+      if (agoraClientRef.current?._elapsedIv) clearInterval(agoraClientRef.current._elapsedIv);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
       if (agoraClientRef.current) { agoraClientRef.current.leave().catch(()=>{}); agoraClientRef.current = null; }
     };
   }, []);
