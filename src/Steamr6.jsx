@@ -4914,10 +4914,10 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     try {
       const streamerEmail = (profile.email || fetchedProfile?.email || "").toLowerCase().trim();
       if (!streamerEmail) { setTipError("Cannot identify streamer."); setTipSending(false); return; }
-      const res = await fetch("/api/user-profile?action=offline-tip", {
+      const res = await fetch("/api/user-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-auth-token": token },
-        body: JSON.stringify({ streamerEmail, amount: amt }),
+        body: JSON.stringify({ action: "offline-tip", streamerEmail, amount: amt }),
       });
       const data = await res.json();
       if (data.ok) {
