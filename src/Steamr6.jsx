@@ -4895,6 +4895,11 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
   const [purchasedContent, setPurchasedContent] = useState([]);
   const [purchaseLoading,  setPurchaseLoading]  = useState(null);
   const [purchaseError,    setPurchaseError]    = useState("");
+  // ── Content viewer modal state ────────────────────────────────────────────
+  const [viewingItem,   setViewingItem]   = useState(null);
+  const [contentMedia,  setContentMedia]  = useState(null);
+  const [mediaLoading,  setMediaLoading]  = useState(false);
+  const [photoIndex,    setPhotoIndex]    = useState(0);
 
   // Fetch viewer's own token balance for the tip section
   useEffect(() => {
@@ -4977,6 +4982,28 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       }
     } catch { setPurchaseError("Network error — try again."); }
     setPurchaseLoading(null);
+  };
+
+  // ── Open content viewer (fetches media from API, checks access server-side) ──
+  const viewContent = async (item) => {
+    setViewingItem(item);
+    setContentMedia(null);
+    setPhotoIndex(0);
+    setMediaLoading(true);
+    const tok = localStorage.getItem("steamr_token");
+    if (!tok) { setMediaLoading(false); return; }
+    try {
+      const streamerEmail = (profile.email || fetchedProfile?.email || "").toLowerCase().trim();
+      const res = await fetch(
+        `/api/user-profile?contentMedia=${encodeURIComponent(streamerEmail)}&itemId=${item.id}`,
+        { headers: { "x-auth-token": tok } }
+      );
+      const data = await res.json();
+      if (data.ok && data.media) {
+        try { setContentMedia(JSON.parse(data.media)); } catch { setContentMedia(null); }
+      }
+    } catch {}
+    setMediaLoading(false);
   };
 
   // ── Agora: embed live feed on profile when streamer is live ────────────────
@@ -5325,8 +5352,18 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
                         {item.desc && <div style={{ fontSize:11, color:COLORS.muted, marginBottom:6, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{item.desc}</div>}
 
                         {hasAccess ? (
-                          <div style={{ fontSize:10, color:COLORS.green, fontWeight:700 }}>
-                            {item.price === 0 ? "✓ Free" : isSubscribed && !hasPurchased ? "✓ Included in sub" : "✓ Owned"}
+                          <div>
+                            <div style={{ fontSize:10, color:COLORS.green, fontWeight:700, marginBottom:6 }}>
+                              {item.price === 0 ? "✓ Free" : isSubscribed && !hasPurchased ? "✓ Included in sub" : "✓ Owned"}
+                            </div>
+                            {!isOwnProfile && (
+                              <button onClick={() => viewContent(item)}
+                                style={{ width:"100%", padding:"7px", fontWeight:800, fontSize:12, cursor:"pointer",
+                                  background:`linear-gradient(135deg,${COLORS.green},#00b37e)`,
+                                  border:"none", borderRadius:8, color:"#000", transition:"all 0.15s" }}>
+                                {item.type==="video" ? "▶ Watch" : "🖼 View Photos"}
+                              </button>
+                            )}
                           </div>
                         ) : isOwnProfile ? null : (
                           <div>
@@ -5537,6 +5574,96 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
         </div>
       </div>
 
+      {/* ── Content viewer modal ── */}
+      {viewingItem && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:1000,
+          display:"flex", alignItems:"center", justifyContent:"center", padding:isMobile?"8px":"20px" }}
+          onClick={e => { if (e.target === e.currentTarget) { setViewingItem(null); setContentMedia(null); } }}>
+          <div style={{ background:COLORS.card, borderRadius:16, width:"100%", maxWidth:720,
+            maxHeight:"92vh", display:"flex", flexDirection:"column", overflow:"hidden",
+            border:`1px solid ${COLORS.border}` }}>
+
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"14px 18px", borderBottom:`1px solid ${COLORS.border}`, flexShrink:0 }}>
+              <div>
+                <div style={{ fontWeight:800, fontSize:15 }}>{viewingItem.title}</div>
+                {viewingItem.desc && <div style={{ fontSize:12, color:COLORS.muted, marginTop:2 }}>{viewingItem.desc}</div>}
+              </div>
+              <button onClick={() => { setViewingItem(null); setContentMedia(null); }}
+                style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8,
+                  color:COLORS.muted, cursor:"pointer", fontSize:18, lineHeight:1,
+                  width:34, height:34, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ overflowY:"auto", flex:1, padding:18 }}>
+              {mediaLoading ? (
+                <div style={{ textAlign:"center", padding:"50px 0" }}>
+                  <div style={{ fontSize:32, marginBottom:12, animation:"pulse 1.4s ease-in-out infinite" }}>
+                    {viewingItem.type==="video" ? "🎬" : "📸"}
+                  </div>
+                  <div style={{ color:COLORS.muted, fontSize:13 }}>Loading content…</div>
+                </div>
+              ) : !contentMedia ? (
+                <div style={{ textAlign:"center", padding:"50px 0" }}>
+                  <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
+                  <div style={{ color:COLORS.muted, fontSize:13 }}>No media uploaded for this item yet.</div>
+                </div>
+              ) : contentMedia.type === "video" ? (
+                <video
+                  src={contentMedia.src}
+                  controls
+                  style={{ width:"100%", borderRadius:10, background:"#000", maxHeight:"65vh" }}
+                />
+              ) : contentMedia.type === "photos" && contentMedia.files?.length > 0 ? (
+                <div>
+                  {/* Main photo */}
+                  <img
+                    src={contentMedia.files[photoIndex]}
+                    alt={`Photo ${photoIndex + 1} of ${contentMedia.files.length}`}
+                    style={{ width:"100%", borderRadius:10, display:"block", maxHeight:"60vh", objectFit:"contain", background:COLORS.surface }}
+                  />
+                  {/* Navigation */}
+                  {contentMedia.files.length > 1 && (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:16, marginTop:14 }}>
+                      <button onClick={() => setPhotoIndex(i => Math.max(0, i - 1))}
+                        disabled={photoIndex === 0}
+                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8,
+                          color: photoIndex === 0 ? COLORS.border : COLORS.text,
+                          cursor: photoIndex === 0 ? "default" : "pointer",
+                          padding:"8px 16px", fontSize:13, fontWeight:700 }}>← Prev</button>
+                      <span style={{ fontSize:13, color:COLORS.muted, fontWeight:600 }}>
+                        {photoIndex + 1} / {contentMedia.files.length}
+                      </span>
+                      <button onClick={() => setPhotoIndex(i => Math.min(contentMedia.files.length - 1, i + 1))}
+                        disabled={photoIndex === contentMedia.files.length - 1}
+                        style={{ background:COLORS.surface, border:`1px solid ${COLORS.border}`, borderRadius:8,
+                          color: photoIndex === contentMedia.files.length - 1 ? COLORS.border : COLORS.text,
+                          cursor: photoIndex === contentMedia.files.length - 1 ? "default" : "pointer",
+                          padding:"8px 16px", fontSize:13, fontWeight:700 }}>Next →</button>
+                    </div>
+                  )}
+                  {/* Thumbnail strip */}
+                  {contentMedia.files.length > 1 && (
+                    <div style={{ display:"flex", gap:6, marginTop:12, overflowX:"auto", paddingBottom:4 }}>
+                      {contentMedia.files.map((src, i) => (
+                        <img key={i} src={src} alt={`thumb ${i+1}`}
+                          onClick={() => setPhotoIndex(i)}
+                          style={{ width:56, height:56, objectFit:"cover", borderRadius:6, flexShrink:0,
+                            cursor:"pointer", opacity: photoIndex===i ? 1 : 0.5,
+                            border:`2px solid ${photoIndex===i ? COLORS.accent : "transparent"}`,
+                            transition:"all 0.15s" }}/>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Subscribe modal ── */}
       {showModal && !isOwnProfile && (
         <SubscribeModal
@@ -5633,7 +5760,7 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
   // ── Content library state ─────────────────────────────────────────────────
   const [content,         setContent]         = useState([]);
   const [showContentForm, setShowContentForm] = useState(false);
-  const [contentForm,     setContentForm]     = useState({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null });
+  const [contentForm,     setContentForm]     = useState({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null, mediaFiles:[], videoUrl:"" });
   const [contentError,    setContentError]    = useState("");
   const [contentUploading,setContentUploading]= useState(false);
 
@@ -5668,16 +5795,24 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
       thumbnail: contentForm.thumbnail,
       createdAt: new Date().toISOString(),
     };
+    // Build mediaData payload — stored separately from the content metadata list
+    const mediaData = contentForm.type === "video"
+      ? (contentForm.videoUrl || contentForm.mediaFiles[0])
+          ? { type:"video", src: contentForm.videoUrl || contentForm.mediaFiles[0] }
+          : null
+      : contentForm.mediaFiles.length > 0
+          ? { type:"photos", files: contentForm.mediaFiles }
+          : null;
     try {
       const res  = await fetch("/api/user-profile", {
         method:  "POST",
         headers: { "x-auth-token": tok, "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "content-upload", contentItem: item }),
+        body:    JSON.stringify({ action: "content-upload", contentItem: item, ...(mediaData ? { mediaData } : {}) }),
       });
       const data = await res.json();
       if (data.ok) {
         setContent(data.items || [item, ...content]);
-        setContentForm({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null });
+        setContentForm({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null, mediaFiles:[], videoUrl:"" });
         setShowContentForm(false);
       } else {
         setContentError(data.error || "Upload failed.");
@@ -6429,6 +6564,124 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
                     <div style={{ fontSize:12, color:COLORS.muted }}>Upload cover image</div>
                   </div>
                 </label>
+              )}
+            </div>
+
+            {/* ── Media upload — photos or video ── */}
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, marginBottom:8 }}>
+                {contentForm.type === "photo-set" ? "📸 Upload Photos" : "🎬 Upload Video"}
+              </div>
+
+              {contentForm.type === "photo-set" ? (
+                /* ── Multi-photo uploader ── */
+                <div>
+                  {contentForm.mediaFiles.length > 0 && (
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:10 }}>
+                      {contentForm.mediaFiles.map((photoSrc, i) => (
+                        <div key={i} style={{ position:"relative" }}>
+                          <img src={photoSrc} alt={`photo ${i+1}`}
+                            style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:6, display:"block" }}/>
+                          <button
+                            onClick={() => setContentForm(prev => ({ ...prev, mediaFiles: prev.mediaFiles.filter((_,idx) => idx !== i) }))}
+                            style={{ position:"absolute", top:-5, right:-5, background:COLORS.accent, border:"none",
+                              borderRadius:"50%", width:18, height:18, color:"#fff", cursor:"pointer",
+                              fontSize:11, lineHeight:"18px", textAlign:"center", fontWeight:800 }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {contentForm.mediaFiles.length < 20 && (
+                    <label style={{ display:"block", cursor:"pointer" }}>
+                      <input type="file" accept="image/*" multiple style={{ display:"none" }}
+                        onChange={e => {
+                          const files = Array.from(e.target.files || []);
+                          if (!files.length) return;
+                          Promise.all(files.map(file => new Promise(resolve => {
+                            const r = new FileReader();
+                            r.onload = ev => resolve(ev.target.result);
+                            r.readAsDataURL(file);
+                          }))).then(results => {
+                            setContentForm(prev => ({ ...prev, mediaFiles: [...prev.mediaFiles, ...results].slice(0, 20) }));
+                          });
+                          e.target.value = "";
+                        }}
+                      />
+                      <div style={{ border:`2px dashed ${COLORS.border}`, borderRadius:9, padding:"14px",
+                        textAlign:"center", cursor:"pointer", transition:"border-color 0.2s" }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accent}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}>
+                        <div style={{ fontSize:20, marginBottom:4 }}>📸</div>
+                        <div style={{ fontSize:12, color:COLORS.muted }}>
+                          {contentForm.mediaFiles.length === 0
+                            ? "Select photos (up to 20)"
+                            : `Add more (${contentForm.mediaFiles.length}/20 selected)`}
+                        </div>
+                        <div style={{ fontSize:10, color:COLORS.muted, marginTop:3 }}>JPG, PNG, WEBP, GIF</div>
+                      </div>
+                    </label>
+                  )}
+                  {contentForm.mediaFiles.length === 20 && (
+                    <div style={{ fontSize:11, color:COLORS.gold, textAlign:"center", marginTop:6 }}>Maximum 20 photos reached</div>
+                  )}
+                </div>
+              ) : (
+                /* ── Video: URL (recommended) or small clip upload ── */
+                <div>
+                  <div style={{ fontSize:11, color:COLORS.muted, marginBottom:6 }}>
+                    🔗 Video URL <span style={{ color:COLORS.green, fontWeight:700 }}>recommended for large files</span>
+                  </div>
+                  <input value={contentForm.videoUrl}
+                    onChange={e => setContentForm(f => ({ ...f, videoUrl: e.target.value, mediaFiles: [] }))}
+                    placeholder="https://… (Dropbox share link, Google Drive, etc.)"
+                    style={{ width:"100%", background:COLORS.card, border:`1px solid ${COLORS.border}`,
+                      borderRadius:9, padding:"10px 12px", color:COLORS.text, fontSize:12,
+                      outline:"none", boxSizing:"border-box", marginBottom:10 }}
+                  />
+
+                  {!contentForm.videoUrl && (<>
+                    <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                      <div style={{ flex:1, height:1, background:COLORS.border }}/>
+                      <div style={{ fontSize:11, color:COLORS.muted }}>or upload a short clip</div>
+                      <div style={{ flex:1, height:1, background:COLORS.border }}/>
+                    </div>
+
+                    {contentForm.mediaFiles[0] ? (
+                      <div style={{ display:"flex", alignItems:"center", gap:10, background:COLORS.card,
+                        border:`1px solid ${COLORS.green}44`, borderRadius:9, padding:"10px 14px" }}>
+                        <span style={{ fontSize:22 }}>🎬</span>
+                        <div style={{ flex:1, fontSize:12, color:COLORS.green, fontWeight:600 }}>Video clip ready</div>
+                        <button onClick={() => setContentForm(f => ({ ...f, mediaFiles: [] }))}
+                          style={{ background:"none", border:"none", color:"#ff6666", cursor:"pointer", fontSize:16 }}>✕</button>
+                      </div>
+                    ) : (
+                      <label style={{ display:"block", cursor:"pointer" }}>
+                        <input type="file" accept="video/*" style={{ display:"none" }}
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 4 * 1024 * 1024) {
+                              setContentError("Clip must be under 4 MB. Use a URL link for larger videos.");
+                              e.target.value = ""; return;
+                            }
+                            const r = new FileReader();
+                            r.onload = ev => setContentForm(f => ({ ...f, mediaFiles: [ev.target.result], videoUrl: "" }));
+                            r.readAsDataURL(file);
+                            e.target.value = "";
+                          }}
+                        />
+                        <div style={{ border:`2px dashed ${COLORS.border}`, borderRadius:9, padding:"14px",
+                          textAlign:"center", cursor:"pointer", transition:"border-color 0.2s" }}
+                          onMouseEnter={e => e.currentTarget.style.borderColor = COLORS.accentC}
+                          onMouseLeave={e => e.currentTarget.style.borderColor = COLORS.border}>
+                          <div style={{ fontSize:20, marginBottom:4 }}>🎬</div>
+                          <div style={{ fontSize:12, color:COLORS.muted }}>Upload clip (max 4 MB)</div>
+                          <div style={{ fontSize:10, color:COLORS.muted, marginTop:3 }}>MP4, MOV, WEBM</div>
+                        </div>
+                      </label>
+                    )}
+                  </>)}
+                </div>
               )}
             </div>
 
