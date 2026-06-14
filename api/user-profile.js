@@ -487,6 +487,58 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Public content list — no auth needed ─────────────────────────────────
+  // GET ?contentId={email} — returns content metadata + thumbnails for a streamer's public profile
+  const contentId = req.query?.contentId;
+  if (contentId) {
+    try {
+      const ce = decodeURIComponent(contentId).toLowerCase().trim();
+      const { result } = await kvCommand("GET", `content:${ce}`);
+      const items = parse(result) || [];
+      return res.status(200).json({ ok: true, items });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  // ── Fetch full content media — auth required, checks purchase or subscription ──
+  // GET ?contentMedia={streamerEmail}&itemId={id}
+  const contentMediaOwner = req.query?.contentMedia;
+  if (contentMediaOwner && req.query?.itemId && req.method === "GET") {
+    const authToken = req.headers["x-auth-token"] || req.query?.token;
+    if (!authToken) return res.status(401).json({ error: "Auth required" });
+    try {
+      const viewerEmail = await getEmailFromToken(authToken);
+      if (!viewerEmail) return res.status(401).json({ error: "Invalid session" });
+
+      const se     = decodeURIComponent(contentMediaOwner).toLowerCase().trim();
+      const itemId = String(req.query.itemId);
+
+      // Owner can always view their own content
+      if (viewerEmail === se) {
+        const { result: media } = await kvCommand("GET", `content-media:${se}:${itemId}`);
+        return res.status(200).json({ ok: true, media: media || "" });
+      }
+
+      // Viewer must have purchased OR have an active subscription
+      const viewerActKey = `activity:${viewerEmail}`;
+      const { result: vaResult } = await kvCommand("GET", viewerActKey);
+      const viewerAct = parse(vaResult) || {};
+
+      const purchased    = (viewerAct.purchasedContent || []).includes(itemId);
+      const isSubscriber = !!(viewerAct.subscriptions && viewerAct.subscriptions[se]);
+
+      if (!purchased && !isSubscriber) {
+        return res.status(403).json({ error: "Purchase required" });
+      }
+
+      const { result: media } = await kvCommand("GET", `content-media:${se}:${itemId}`);
+      return res.status(200).json({ ok: true, media: media || "" });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   const token = req.headers["x-auth-token"] || req.query?.token || req.body?.token;
   if (!token) return res.status(401).json({ error: "No token provided" });
 
@@ -582,7 +634,8 @@ export default async function handler(req, res) {
           giftsCount:     activity.giftsCount    || 0,
           achievements:   activity.achievements  || [],
           subscriptions:  activity.subscriptions || {},
-          ppvPurchased:   activity.ppvPurchased  || [],
+          ppvPurchased:      activity.ppvPurchased      || [],
+          purchasedContent:  activity.purchasedContent  || [],
           // Streamer earnings — calculated from real daily history
           todayTokens,
           weekTokens,
@@ -882,6 +935,78 @@ export default async function handler(req, res) {
         }));
         await kvCommand("SET", accountKey, JSON.stringify(account));
         return res.status(200).json({ ok: true });
+      }
+
+      // ── Content: upload ──────────────────────────────────────────────────
+      if (action === "content-upload") {
+        const { contentItem } = req.body;
+        if (!contentItem || !contentItem.id) {
+          return res.status(400).json({ error: "Invalid content item" });
+        }
+        const { result: existing } = await kvCommand("GET", `content:${email}`);
+        const items = parse(existing) || [];
+        // Replace if id already exists, else prepend
+        const filtered = items.filter(i => i.id !== contentItem.id);
+        filtered.unshift(contentItem);
+        await kvCommand("SET", `content:${email}`, JSON.stringify(filtered));
+        return res.status(200).json({ ok: true, items: filtered });
+      }
+
+      // ── Content: delete ──────────────────────────────────────────────────
+      if (action === "content-delete") {
+        const { itemId } = req.body;
+        if (!itemId) return res.status(400).json({ error: "itemId required" });
+        const { result: existing } = await kvCommand("GET", `content:${email}`);
+        const items = (parse(existing) || []).filter(i => i.id !== itemId);
+        await kvCommand("SET", `content:${email}`, JSON.stringify(items));
+        await kvCommand("DEL", `content-media:${email}:${itemId}`);
+        return res.status(200).json({ ok: true });
+      }
+
+      // ── Content: purchase (viewer buys streamer's content) ───────────────
+      if (action === "content-purchase") {
+        const { streamerEmail, itemId, price } = req.body;
+        const amt = Number(price) || 0;
+        if (!streamerEmail || !itemId) {
+          return res.status(400).json({ error: "Invalid purchase params" });
+        }
+
+        const viewerActKey = `activity:${email}`;
+        const { result: vaResult } = await kvCommand("GET", viewerActKey);
+        const viewerAct = parse(vaResult) || {};
+
+        // Already purchased — idempotent
+        viewerAct.purchasedContent = viewerAct.purchasedContent || [];
+        if (viewerAct.purchasedContent.includes(itemId)) {
+          return res.status(200).json({ ok: true, alreadyOwned: true, newBalance: viewerAct.tokenBalance || 0 });
+        }
+
+        const currentBal = viewerAct.tokenBalance || 0;
+        if (amt > 0 && currentBal < amt) {
+          return res.status(400).json({ error: "Insufficient tokens" });
+        }
+
+        // Deduct from viewer
+        if (amt > 0) viewerAct.tokenBalance = currentBal - amt;
+        viewerAct.purchasedContent.push(itemId);
+        await kvCommand("SET", viewerActKey, JSON.stringify(viewerAct));
+
+        // Credit streamer's earnings
+        if (amt > 0) {
+          const se        = streamerEmail.toLowerCase().trim();
+          const strActKey = `activity:${se}`;
+          const { result: saResult } = await kvCommand("GET", strActKey);
+          const strAct = parse(saResult) || {};
+          strAct.tokenBalance    = (strAct.tokenBalance    || 0) + amt;
+          strAct.availableTokens = (strAct.availableTokens || 0) + amt;
+          strAct.allTimeTokens   = (strAct.allTimeTokens   || 0) + amt;
+          strAct.todayTokens     = (strAct.todayTokens     || 0) + amt;
+          strAct.weekTokens      = (strAct.weekTokens      || 0) + amt;
+          strAct.monthTokens     = (strAct.monthTokens     || 0) + amt;
+          await kvCommand("SET", strActKey, JSON.stringify(strAct));
+        }
+
+        return res.status(200).json({ ok: true, newBalance: viewerAct.tokenBalance || 0 });
       }
 
       // ── Update profile fields ────────────────────────────────────────────
