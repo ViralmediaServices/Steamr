@@ -1609,7 +1609,6 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
           bannerColor: sp.bannerColor || "#1a0a2e",
         });
         setStreamerName(p.displayName || p.name || "Streamer");
-        setIsStreamerLive(data.activity?.isLive === true);
         if (sp.goalLabel && sp.goalTarget) {
           setGoal({ current: 0, target: sp.goalTarget, label: sp.goalLabel });
         }
@@ -1618,23 +1617,20 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     .catch(() => {});
   }, [selectedStreamerId]);
 
-  // ── Poll streamer live status every 30s — detect when stream ends/starts ──────
-  const [streamEnded,    setStreamEnded]    = useState(false);
-  const [isStreamerLive, setIsStreamerLive] = useState(false); // gates Agora join
+  // ── Poll streamer live status every 30s — detect when stream ends ────────────
+  const [streamEnded, setStreamEnded] = useState(false);
   useEffect(() => {
     if (!selectedStreamerId) return;
     const poll = () => {
       fetch(`/api/user-profile?publicId=${encodeURIComponent(selectedStreamerId)}`)
         .then(r => r.json())
         .then(data => {
-          if (!data.ok) return;
-          const live = data.activity?.isLive === true;
-          setIsStreamerLive(live);
-          setStreamEnded(!live);
+          if (data.ok && data.activity?.isLive === false) setStreamEnded(true);
+          else if (data.ok && data.activity?.isLive === true) setStreamEnded(false);
         })
         .catch(() => {});
     };
-    poll(); // run immediately so live status is accurate before the 30s tick
+    // Wait 30s before first poll — give time for stream to fully start
     const iv = setInterval(poll, 30_000);
     return () => clearInterval(iv);
   }, [selectedStreamerId]);
@@ -1732,9 +1728,9 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
     };
   }, [streamerProfile?.email]); // re-runs when email becomes available
 
-  // ── Agora: join ONLY when streamer is live — avoids audio-only billing in empty channels ──
+  // ── Agora: join channel as audience when streamer profile loads ─────────────
   useEffect(() => {
-    if (!streamerProfile?.email || !isStreamerLive) return;
+    if (!streamerProfile?.email) return;
     const channelName = (streamerProfile.email || "").toLowerCase().trim();
     let client = null;
     let cancelled = false;
@@ -1807,7 +1803,7 @@ function StreamRoomScreen({ onNavigate, addToast, addNotification, subscriptions
       if (client) client.leave().catch(() => {});
       agoraClientRef.current = null;
     };
-  }, [streamerProfile?.email, isStreamerLive, rejoinPublicTrigger]);
+  }, [streamerProfile?.email, rejoinPublicTrigger]);
 
   // ── Poll private show status — know when streamer goes private ──────────────
   useEffect(() => {
@@ -4894,6 +4890,11 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
   const [tipSent,         setTipSent]         = useState(false);
   const [tipError,        setTipError]        = useState("");
   const [viewerBalance,   setViewerBalance]   = useState(null);
+  // ── Content section state ───────────────────────────────────────────────
+  const [profileContent,   setProfileContent]   = useState([]);
+  const [purchasedContent, setPurchasedContent] = useState([]);
+  const [purchaseLoading,  setPurchaseLoading]  = useState(null);
+  const [purchaseError,    setPurchaseError]    = useState("");
 
   // Fetch viewer's own token balance for the tip section
   useEffect(() => {
@@ -4902,7 +4903,12 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
     if (!token) return;
     fetch("/api/user-profile", { headers: { "x-auth-token": token } })
       .then(r => r.json())
-      .then(d => { if (d.ok) setViewerBalance(d.activity?.tokenBalance ?? 0); })
+      .then(d => {
+        if (d.ok) {
+          setViewerBalance(d.activity?.tokenBalance ?? 0);
+          setPurchasedContent(d.activity?.purchasedContent || []);
+        }
+      })
       .catch(() => {});
   }, [isOwnProfile]);
 
@@ -4934,6 +4940,43 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
       }
     } catch { setTipError("Network error — try again."); }
     setTipSending(false);
+  };
+
+  // ── Load streamer's content items (public) ────────────────────────────────
+  useEffect(() => {
+    const streamerEmail = isOwnProfile ? profileData?.email : fetchedProfile?.email;
+    if (!streamerEmail) return;
+    fetch(`/api/user-profile?contentId=${encodeURIComponent(streamerEmail)}`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) setProfileContent(d.items || []); })
+      .catch(() => {});
+  }, [profileData?.email, fetchedProfile?.email, isOwnProfile]);
+
+  // ── Purchase content item ─────────────────────────────────────────────────
+  const purchaseContent = async (item) => {
+    const tok = localStorage.getItem("steamr_token");
+    if (!tok) { setPurchaseError("Log in to purchase content."); return; }
+    if (item.price > 0 && viewerBalance !== null && viewerBalance < item.price) {
+      setPurchaseError("Not enough tokens."); return;
+    }
+    setPurchaseLoading(item.id); setPurchaseError("");
+    try {
+      const streamerEmail = (profile.email || fetchedProfile?.email || "").toLowerCase().trim();
+      if (!streamerEmail) { setPurchaseError("Cannot identify streamer."); setPurchaseLoading(null); return; }
+      const res = await fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "Content-Type":"application/json", "x-auth-token": tok },
+        body:    JSON.stringify({ action:"content-purchase", streamerEmail, itemId:item.id, price:item.price }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setPurchasedContent(prev => [...new Set([...prev, item.id])]);
+        if (data.newBalance !== undefined) setViewerBalance(data.newBalance);
+      } else {
+        setPurchaseError(data.error || "Purchase failed.");
+      }
+    } catch { setPurchaseError("Network error — try again."); }
+    setPurchaseLoading(null);
   };
 
   // ── Agora: embed live feed on profile when streamer is live ────────────────
@@ -5218,6 +5261,112 @@ function ProfileScreen({ streamerId, profileData, isOwnProfile, onNavigate, foll
             </div>
           )}
 
+          {/* ── Content section ── */}
+          {profileContent.length > 0 && (
+            <div style={{ marginBottom:24 }}>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:14 }}>
+                📦 Content
+              </div>
+
+              {purchaseError && (
+                <div style={{ marginBottom:10, padding:"8px 12px", background:COLORS.accent+"18",
+                  border:`1px solid ${COLORS.accent}44`, borderRadius:8, fontSize:12, color:COLORS.accent }}>
+                  {purchaseError}
+                  <button onClick={() => setPurchaseError("")} style={{ float:"right", background:"none", border:"none", color:COLORS.accent, cursor:"pointer", fontSize:14 }}>×</button>
+                </div>
+              )}
+
+              {/* Subscriber banner */}
+              {currentSub && profileContent.length > 0 && (
+                <div style={{ marginBottom:12, padding:"8px 14px", background:COLORS.gold+"14",
+                  border:`1px solid ${COLORS.gold}33`, borderRadius:8, fontSize:11, color:COLORS.gold, textAlign:"center" }}>
+                  👑 As a <strong>{currentSub.tierName}</strong> subscriber you get access to all content for free!
+                </div>
+              )}
+
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(auto-fill,minmax(185px,1fr))", gap:12 }}>
+                {profileContent.map(item => {
+                  const hasPurchased = purchasedContent.includes(item.id);
+                  const isSubscribed = !!currentSub;
+                  const hasAccess    = hasPurchased || isSubscribed || isOwnProfile || item.price === 0;
+                  const isBuying     = purchaseLoading === item.id;
+
+                  return (
+                    <div key={item.id} style={{ background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:12, overflow:"hidden" }}>
+                      {/* Thumbnail */}
+                      <div style={{ position:"relative", height:120, background:COLORS.surface }}>
+                        {item.thumbnail
+                          ? <img src={item.thumbnail} alt={item.title} style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+                          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:40 }}>
+                              {item.type==="video"?"🎬":"📸"}
+                            </div>
+                        }
+                        {/* Lock overlay */}
+                        {!hasAccess && (
+                          <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.62)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            <span style={{ fontSize:26 }}>🔒</span>
+                          </div>
+                        )}
+                        {/* Unlocked badge */}
+                        {hasAccess && (
+                          <div style={{ position:"absolute", top:6, right:6, background:"rgba(0,229,160,0.88)", borderRadius:6, padding:"2px 8px", fontSize:10, fontWeight:800, color:"#000" }}>
+                            ✓ Unlocked
+                          </div>
+                        )}
+                        {/* Type badge */}
+                        <div style={{ position:"absolute", top:6, left:6, background:"rgba(0,0,0,0.6)", borderRadius:6, padding:"2px 8px", fontSize:10, color:"#fff", fontWeight:600 }}>
+                          {item.type==="video" ? "🎬" : "📸"}
+                        </div>
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ padding:"10px 12px" }}>
+                        <div style={{ fontWeight:700, fontSize:12, marginBottom:4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{item.title}</div>
+                        {item.desc && <div style={{ fontSize:11, color:COLORS.muted, marginBottom:6, lineHeight:1.4, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{item.desc}</div>}
+
+                        {hasAccess ? (
+                          <div style={{ fontSize:10, color:COLORS.green, fontWeight:700 }}>
+                            {item.price === 0 ? "✓ Free" : isSubscribed && !hasPurchased ? "✓ Included in sub" : "✓ Owned"}
+                          </div>
+                        ) : isOwnProfile ? null : (
+                          <div>
+                            <div style={{ fontWeight:800, color:COLORS.gold, fontSize:13, marginBottom:6 }}>
+                              {item.price === 0 ? "Free" : `🪙 ${item.price}`}
+                            </div>
+                            <button
+                              onClick={() => purchaseContent(item)}
+                              disabled={isBuying || (item.price > 0 && viewerBalance !== null && viewerBalance < item.price)}
+                              style={{
+                                width:"100%", padding:"7px", fontWeight:800, fontSize:12,
+                                cursor: isBuying ? "wait" : (item.price > 0 && viewerBalance !== null && viewerBalance < item.price) ? "not-allowed" : "pointer",
+                                background: (item.price > 0 && viewerBalance !== null && viewerBalance < item.price)
+                                  ? COLORS.surface
+                                  : `linear-gradient(135deg,${COLORS.accent},${COLORS.accentB})`,
+                                border:"none", borderRadius:8, color:"#fff",
+                                opacity: isBuying ? 0.6 : 1, transition:"all 0.15s",
+                              }}>
+                              {isBuying ? "…" : item.price === 0 ? "Get Free" : `Buy 🪙 ${item.price}`}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isOwnProfile && (
+                <div style={{ marginTop:10, textAlign:"center" }}>
+                  <button onClick={() => onNavigate("edit-profile")}
+                    style={{ background:"none", border:`1px solid ${COLORS.border}`, borderRadius:8,
+                      color:COLORS.muted, cursor:"pointer", fontSize:12, padding:"7px 16px" }}>
+                    ✏️ Manage Content in Edit Profile
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Stream history */}
           {(profile.streamHistory || []).length > 0 && (
             <Card>
@@ -5463,6 +5612,13 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
         if (sp.geoBlocking) {
           setGeoBlocking(sp.geoBlocking);
         }
+        // Load content library using the streamer's email
+        if (data.profile?.email) {
+          fetch(`/api/user-profile?contentId=${encodeURIComponent(data.profile.email)}`)
+            .then(r => r.json())
+            .then(cd => { if (cd.ok) setContent(cd.items || []); })
+            .catch(() => {});
+        }
       }
     }).catch(() => {});
   }, []);
@@ -5473,6 +5629,13 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
     profileData.geoBlocking || { enabled: false, blocked: [] }
   );
   const [geoInput, setGeoInput] = useState({ type: "country", value: "" });
+
+  // ── Content library state ─────────────────────────────────────────────────
+  const [content,         setContent]         = useState([]);
+  const [showContentForm, setShowContentForm] = useState(false);
+  const [contentForm,     setContentForm]     = useState({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null });
+  const [contentError,    setContentError]    = useState("");
+  const [contentUploading,setContentUploading]= useState(false);
 
   const addGeoBlock = () => {
     const val = geoInput.value.trim();
@@ -5489,6 +5652,52 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
   };
   const removeGeoBlock = (id) =>
     setGeoBlocking(g => ({ ...g, blocked: g.blocked.filter(b => b.id !== id) }));
+
+  const uploadContent = async () => {
+    if (!contentForm.title.trim()) { setContentError("Title is required."); return; }
+    if (!contentForm.thumbnail)    { setContentError("Cover image is required."); return; }
+    setContentUploading(true); setContentError("");
+    const tok = localStorage.getItem("steamr_token");
+    if (!tok) { setContentError("Not logged in."); setContentUploading(false); return; }
+    const item = {
+      id:        `c_${Date.now()}`,
+      type:      contentForm.type,
+      title:     contentForm.title.trim(),
+      desc:      contentForm.desc.trim(),
+      price:     Number(contentForm.price) || 0,
+      thumbnail: contentForm.thumbnail,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      const res  = await fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": tok, "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "content-upload", contentItem: item }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setContent(data.items || [item, ...content]);
+        setContentForm({ type:"photo-set", title:"", desc:"", price:100, thumbnail:null });
+        setShowContentForm(false);
+      } else {
+        setContentError(data.error || "Upload failed.");
+      }
+    } catch { setContentError("Network error — try again."); }
+    setContentUploading(false);
+  };
+
+  const deleteContent = async (itemId) => {
+    const tok = localStorage.getItem("steamr_token");
+    if (!tok) return;
+    setContent(c => c.filter(i => i.id !== itemId)); // optimistic
+    try {
+      await fetch("/api/user-profile", {
+        method:  "POST",
+        headers: { "x-auth-token": tok, "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "content-delete", itemId }),
+      });
+    } catch {}
+  };
 
   const addWishItem    = () => setWishlist(w => [...w, {id:Date.now(),emoji:"🎁",name:"",tokens:100,fulfilled:false,desc:""}]);
   const removeWishItem = (id) => setWishlist(w => w.filter(i => i.id !== id));
@@ -6102,6 +6311,150 @@ function EditProfileScreen({ profileData, onSave, onNavigate }) {
             </div>
           </div>
         ))}
+      </Card>
+
+      {/* ── Content Library ───────────────────────────────────────────────── */}
+      <Card style={{ marginBottom:20 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:COLORS.muted, marginBottom:4 }}>
+          📦 CONTENT LIBRARY
+        </div>
+        <div style={{ fontSize:12, color:COLORS.muted, marginBottom:16, lineHeight:1.5 }}>
+          Sell photo sets &amp; videos directly on your profile. Subscribers automatically get access while their subscription is active.
+        </div>
+
+        {/* Existing items list */}
+        {content.length > 0 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:14 }}>
+            {content.map(item => (
+              <div key={item.id} style={{ display:"flex", alignItems:"center", gap:12, background:COLORS.surface, borderRadius:12, padding:"10px 12px" }}>
+                {item.thumbnail
+                  ? <img src={item.thumbnail} alt={item.title} style={{ width:52, height:52, objectFit:"cover", borderRadius:8, flexShrink:0 }}/>
+                  : <div style={{ width:52, height:52, background:COLORS.card, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>{item.type==="video"?"🎬":"📸"}</div>
+                }
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:700, fontSize:13, marginBottom:4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{item.title}</div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    <Pill color={COLORS.gold}>🪙 {item.price === 0 ? "Free" : `${item.price} tokens`}</Pill>
+                    <Pill color={item.type==="video" ? COLORS.accentC : COLORS.accent}>{item.type==="video" ? "🎬 Video" : "📸 Photos"}</Pill>
+                  </div>
+                </div>
+                <button onClick={() => deleteContent(item.id)} style={{ background:"none", border:`1px solid ${COLORS.border}`, borderRadius:8, color:"#ff6666", cursor:"pointer", padding:"6px 10px", fontSize:12, fontWeight:600, flexShrink:0 }}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* New content upload form */}
+        {showContentForm ? (
+          <div style={{ background:COLORS.surface, borderRadius:12, padding:16, border:`1px solid ${COLORS.border}` }}>
+            <div style={{ fontSize:12, fontWeight:700, color:COLORS.muted, marginBottom:12, textTransform:"uppercase", letterSpacing:0.6 }}>Add New Content</div>
+
+            {/* Type toggle */}
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              {[{v:"photo-set",l:"📸 Photo Set"},{v:"video",l:"🎬 Video"}].map(({v,l}) => (
+                <button key={v} onClick={() => setContentForm(f => ({...f, type:v}))}
+                  style={{ flex:1, padding:"9px", fontWeight:700, fontSize:12, cursor:"pointer",
+                    background: contentForm.type===v ? COLORS.accent+"22" : COLORS.card,
+                    border:`2px solid ${contentForm.type===v ? COLORS.accent : COLORS.border}`,
+                    borderRadius:9, color: contentForm.type===v ? COLORS.accent : COLORS.muted,
+                    transition:"all 0.15s" }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Title */}
+            <input value={contentForm.title}
+              onChange={e => setContentForm(f => ({...f, title:e.target.value}))}
+              placeholder="Title (e.g. Summer Beach Set)…"
+              style={{ width:"100%", background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:9,
+                padding:"10px 12px", color:COLORS.text, fontSize:13, outline:"none",
+                boxSizing:"border-box", marginBottom:10 }}
+            />
+
+            {/* Description */}
+            <textarea value={contentForm.desc}
+              onChange={e => setContentForm(f => ({...f, desc:e.target.value}))}
+              rows={2} placeholder="Short description (optional)…"
+              style={{ width:"100%", background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:9,
+                padding:"10px 12px", color:COLORS.text, fontSize:13, outline:"none",
+                resize:"none", boxSizing:"border-box", fontFamily:"inherit", marginBottom:10 }}
+            />
+
+            {/* Price */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, flexShrink:0 }}>🪙 Price (tokens)</div>
+              <input type="number" min="0" max="99999" value={contentForm.price}
+                onChange={e => setContentForm(f => ({...f, price:Math.max(0, parseInt(e.target.value)||0)}))}
+                style={{ width:100, background:COLORS.card, border:`1px solid ${COLORS.border}`, borderRadius:9,
+                  padding:"9px 12px", color:COLORS.gold, fontSize:14, fontWeight:700,
+                  outline:"none", textAlign:"center" }}
+              />
+              <div style={{ fontSize:11, color:COLORS.muted }}>Set 0 for free</div>
+            </div>
+
+            {/* Cover image upload */}
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:12, color:COLORS.muted, fontWeight:600, marginBottom:8 }}>
+                {contentForm.type==="photo-set" ? "Cover / Preview Image *" : "Thumbnail *"}
+              </div>
+              {contentForm.thumbnail ? (
+                <div style={{ position:"relative", display:"inline-block" }}>
+                  <img src={contentForm.thumbnail} alt="preview"
+                    style={{ width:140, height:90, objectFit:"cover", borderRadius:8, display:"block" }}/>
+                  <button onClick={() => setContentForm(f => ({...f, thumbnail:null}))}
+                    style={{ position:"absolute", top:-7, right:-7, background:COLORS.accent, border:"none",
+                      borderRadius:"50%", width:22, height:22, color:"#fff", cursor:"pointer",
+                      fontSize:13, lineHeight:"22px", textAlign:"center", fontWeight:800 }}>×</button>
+                </div>
+              ) : (
+                <label style={{ display:"block", cursor:"pointer" }}>
+                  <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display:"none" }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = ev => setContentForm(f => ({...f, thumbnail:ev.target.result}));
+                      reader.readAsDataURL(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div style={{ border:`2px dashed ${COLORS.border}`, borderRadius:9, padding:"16px",
+                    textAlign:"center", cursor:"pointer", transition:"border-color 0.2s" }}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=COLORS.accent}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=COLORS.border}>
+                    <div style={{ fontSize:22, marginBottom:4 }}>📷</div>
+                    <div style={{ fontSize:12, color:COLORS.muted }}>Upload cover image</div>
+                  </div>
+                </label>
+              )}
+            </div>
+
+            {contentError && (
+              <div style={{ marginBottom:10, padding:"8px 12px", background:COLORS.accent+"18",
+                border:`1px solid ${COLORS.accent}44`, borderRadius:8, fontSize:12, color:COLORS.accent }}>
+                ⚠️ {contentError}
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:10 }}>
+              <Btn onClick={uploadContent} variant="primary" disabled={contentUploading}
+                style={{ flex:1, fontSize:13 }}>
+                {contentUploading ? "Saving…" : "✓ Add Content"}
+              </Btn>
+              <Btn onClick={() => { setShowContentForm(false); setContentError(""); }} variant="ghost"
+                style={{ fontSize:13 }}>
+                Cancel
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <Btn onClick={() => setShowContentForm(true)} variant="ghost" style={{ fontSize:13, padding:"9px 16px" }}>
+            + Add Content
+          </Btn>
+        )}
       </Card>
 
       {/* Social links */}
