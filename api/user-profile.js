@@ -939,7 +939,7 @@ export default async function handler(req, res) {
 
       // ── Content: upload ──────────────────────────────────────────────────
       if (action === "content-upload") {
-        const { contentItem } = req.body;
+        const { contentItem, mediaData } = req.body;
         if (!contentItem || !contentItem.id) {
           return res.status(400).json({ error: "Invalid content item" });
         }
@@ -949,6 +949,10 @@ export default async function handler(req, res) {
         const filtered = items.filter(i => i.id !== contentItem.id);
         filtered.unshift(contentItem);
         await kvCommand("SET", `content:${email}`, JSON.stringify(filtered));
+        // Store actual media (photos array or video src) in a separate key — keeps content list small
+        if (mediaData && contentItem.id) {
+          await kvCommand("SET", `content-media:${email}:${contentItem.id}`, JSON.stringify(mediaData));
+        }
         return res.status(200).json({ ok: true, items: filtered });
       }
 
