@@ -1053,7 +1053,7 @@ function SignupScreen({ role, onNavigate }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>{stepLabels.map((label, i) => <div key={label} style={{ flex: 1, fontSize: 11, color: i+1<=step ? COLORS.accent : COLORS.muted, fontWeight: 600 }}>{label}</div>)}</div>
       <Card>
         {step === 1 && (<>
-          <Input label="Full Name" value={form.name} onChange={update("name")} placeholder="Your name" />
+          <Input label="Create Username" value={form.name} onChange={update("name")} placeholder="Choose a username" />
           <Input label="Email" type="email" value={form.email} onChange={update("email")} placeholder="you@email.com" />
           <Input label="Password" type="password" value={form.password} onChange={update("password")} placeholder="Min. 8 characters" />
           <div style={{ marginBottom: 16 }}>
