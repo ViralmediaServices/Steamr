@@ -657,6 +657,9 @@ export default async function handler(req, res) {
                             : (activity.subscribers || 0),
           payoutHistory:  activity.payoutHistory  || [],
           streamHistory:  activity.streamHistory  || [],
+          // Content sales — recorded on each content-purchase action
+          contentPurchaseHistory: activity.contentPurchaseHistory || [],
+          contentRevenue:         activity.contentRevenue         || 0,
         },
       });
     } catch (err) {
@@ -995,20 +998,44 @@ export default async function handler(req, res) {
         viewerAct.purchasedContent.push(itemId);
         await kvCommand("SET", viewerActKey, JSON.stringify(viewerAct));
 
-        // Credit streamer's earnings
+        // Credit streamer's earnings + record purchase in their history
+        const se        = streamerEmail.toLowerCase().trim();
+        const strActKey = `activity:${se}`;
+        const { result: saResult } = await kvCommand("GET", strActKey);
+        const strAct = parse(saResult) || {};
+
         if (amt > 0) {
-          const se        = streamerEmail.toLowerCase().trim();
-          const strActKey = `activity:${se}`;
-          const { result: saResult } = await kvCommand("GET", strActKey);
-          const strAct = parse(saResult) || {};
           strAct.tokenBalance    = (strAct.tokenBalance    || 0) + amt;
           strAct.availableTokens = (strAct.availableTokens || 0) + amt;
           strAct.allTimeTokens   = (strAct.allTimeTokens   || 0) + amt;
           strAct.todayTokens     = (strAct.todayTokens     || 0) + amt;
           strAct.weekTokens      = (strAct.weekTokens      || 0) + amt;
           strAct.monthTokens     = (strAct.monthTokens     || 0) + amt;
-          await kvCommand("SET", strActKey, JSON.stringify(strAct));
+          strAct.contentRevenue  = (strAct.contentRevenue  || 0) + amt;
         }
+
+        // Look up item title from the content list so the dashboard can display it
+        let itemTitle = "Content";
+        let itemType  = "photo-set";
+        try {
+          const { result: cResult } = await kvCommand("GET", `content:${se}`);
+          const cList = parse(cResult) || [];
+          const found = cList.find(i => i.id === itemId);
+          if (found) { itemTitle = found.title; itemType = found.type || "photo-set"; }
+        } catch {}
+
+        // Prepend to streamer's purchase log (keeps last 200 entries)
+        strAct.contentPurchaseHistory = strAct.contentPurchaseHistory || [];
+        strAct.contentPurchaseHistory.unshift({
+          itemId,
+          itemTitle,
+          itemType,
+          amount: amt,
+          date:   new Date().toISOString(),
+        });
+        strAct.contentPurchaseHistory = strAct.contentPurchaseHistory.slice(0, 200);
+
+        await kvCommand("SET", strActKey, JSON.stringify(strAct));
 
         return res.status(200).json({ ok: true, newBalance: viewerAct.tokenBalance || 0 });
       }
