@@ -3752,6 +3752,151 @@ function StreamerDashboard({ onNavigate, addToast, addNotification }) {
           )}
         </Card>
       </div>
+
+      {/* ── Content Sales ──────────────────────────────────────────────────── */}
+      {(() => {
+        const history  = activity?.contentPurchaseHistory || [];
+        const revenue  = activity?.contentRevenue         || 0;
+
+        // Rolling 30-day and 7-day totals derived from purchase log
+        const now7d  = Date.now() - 7  * 24 * 60 * 60 * 1000;
+        const now30d = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const sales7d  = history.filter(p => new Date(p.date).getTime() > now7d);
+        const sales30d = history.filter(p => new Date(p.date).getTime() > now30d);
+        const tokens7d  = sales7d.reduce((s, p)  => s + (p.amount || 0), 0);
+        const tokens30d = sales30d.reduce((s, p) => s + (p.amount || 0), 0);
+
+        const fmtDate = (iso) => {
+          const d = new Date(iso);
+          const now = new Date();
+          const diffMs = now - d;
+          const diffM  = Math.floor(diffMs / 60000);
+          const diffH  = Math.floor(diffMs / 3600000);
+          const diffD  = Math.floor(diffMs / 86400000);
+          if (diffM  <  1) return "just now";
+          if (diffM  < 60) return `${diffM}m ago`;
+          if (diffH  < 24) return `${diffH}h ago`;
+          if (diffD  <  7) return `${diffD}d ago`;
+          return d.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+        };
+
+        return (
+          <Card style={{ marginTop:20 }}>
+            {/* Header row */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+              <div>
+                <h3 style={{ margin:"0 0 4px", fontSize:17, fontWeight:800 }}>📦 Content Sales</h3>
+                <div style={{ fontSize:12, color:COLORS.muted }}>
+                  Every time a viewer purchases one of your content items
+                </div>
+              </div>
+              {/* All-time summary pill */}
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <div style={{ background:COLORS.gold+"18", border:`1px solid ${COLORS.gold}33`, borderRadius:10,
+                  padding:"8px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:10, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.6 }}>All Time</div>
+                  <div style={{ fontSize:16, fontWeight:900, color:COLORS.gold }}>🪙 {revenue.toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:COLORS.green, fontWeight:700 }}>${fmtUSD(tokensToStreamerUSD(revenue))}</div>
+                </div>
+                <div style={{ background:COLORS.accent+"18", border:`1px solid ${COLORS.accent}33`, borderRadius:10,
+                  padding:"8px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:10, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.6 }}>Last 7 Days</div>
+                  <div style={{ fontSize:16, fontWeight:900, color:COLORS.accent }}>🪙 {tokens7d.toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted, fontWeight:600 }}>{sales7d.length} sale{sales7d.length !== 1 ? "s" : ""}</div>
+                </div>
+                <div style={{ background:COLORS.accentC+"18", border:`1px solid ${COLORS.accentC}33`, borderRadius:10,
+                  padding:"8px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:10, color:COLORS.muted, textTransform:"uppercase", letterSpacing:0.6 }}>Last 30 Days</div>
+                  <div style={{ fontSize:16, fontWeight:900, color:COLORS.accentC }}>🪙 {tokens30d.toLocaleString()}</div>
+                  <div style={{ fontSize:11, color:COLORS.muted, fontWeight:600 }}>{sales30d.length} sale{sales30d.length !== 1 ? "s" : ""}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Purchase log */}
+            {history.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"32px 0", color:COLORS.muted }}>
+                <div style={{ fontSize:36, marginBottom:10 }}>📭</div>
+                <div style={{ fontWeight:700, marginBottom:4 }}>No content sales yet</div>
+                <div style={{ fontSize:13 }}>
+                  Add content in{" "}
+                  <span onClick={() => onNavigate("edit-profile")} style={{ color:COLORS.accent, cursor:"pointer", fontWeight:700 }}>
+                    Edit Profile
+                  </span>
+                  {" "}and viewers can purchase it from your profile
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Column headers */}
+                <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 80px":"1fr 100px 100px 90px", gap:8,
+                  padding:"6px 12px", borderBottom:`1px solid ${COLORS.border}`,
+                  fontSize:10, color:COLORS.muted, fontWeight:700, textTransform:"uppercase", letterSpacing:0.6 }}>
+                  <span>Item</span>
+                  {!isMobile && <span style={{ textAlign:"right" }}>Type</span>}
+                  {!isMobile && <span style={{ textAlign:"right" }}>Amount</span>}
+                  <span style={{ textAlign:"right" }}>When</span>
+                </div>
+
+                {/* Rows */}
+                <div style={{ display:"flex", flexDirection:"column" }}>
+                  {history.slice(0, 25).map((p, i) => (
+                    <div key={i} style={{
+                      display:"grid",
+                      gridTemplateColumns:isMobile?"1fr 80px":"1fr 100px 100px 90px",
+                      gap:8, padding:"10px 12px",
+                      borderBottom: i < Math.min(history.length, 25) - 1 ? `1px solid ${COLORS.border}22` : "none",
+                      alignItems:"center",
+                      background: i % 2 === 0 ? "transparent" : COLORS.surface+"55",
+                    }}>
+                      {/* Item name */}
+                      <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                        <span style={{ fontSize:16, flexShrink:0 }}>
+                          {p.itemType === "video" ? "🎬" : "📸"}
+                        </span>
+                        <span style={{ fontWeight:700, fontSize:13, whiteSpace:"nowrap",
+                          overflow:"hidden", textOverflow:"ellipsis" }}>
+                          {p.itemTitle || "Content"}
+                        </span>
+                      </div>
+                      {/* Type */}
+                      {!isMobile && (
+                        <div style={{ textAlign:"right" }}>
+                          <Pill color={p.itemType === "video" ? COLORS.accentC : COLORS.accent} style={{ fontSize:9 }}>
+                            {p.itemType === "video" ? "Video" : "Photos"}
+                          </Pill>
+                        </div>
+                      )}
+                      {/* Amount */}
+                      {!isMobile && (
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontWeight:800, fontSize:13, color:COLORS.gold }}>🪙 {(p.amount || 0).toLocaleString()}</div>
+                          <div style={{ fontSize:10, color:COLORS.green }}>${fmtUSD(tokensToStreamerUSD(p.amount || 0))}</div>
+                        </div>
+                      )}
+                      {/* When */}
+                      <div style={{ textAlign:"right" }}>
+                        {isMobile && (
+                          <div style={{ fontSize:11, fontWeight:700, color:COLORS.gold, marginBottom:2 }}>
+                            🪙{(p.amount || 0).toLocaleString()}
+                          </div>
+                        )}
+                        <div style={{ fontSize:11, color:COLORS.muted }}>{fmtDate(p.date)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {history.length > 25 && (
+                  <div style={{ textAlign:"center", padding:"10px 0 4px", fontSize:12, color:COLORS.muted }}>
+                    Showing most recent 25 of {history.length} sales
+                  </div>
+                )}
+              </>
+            )}
+          </Card>
+        );
+      })()}
     </div>
   );
 }
